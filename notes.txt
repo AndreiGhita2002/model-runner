@@ -1,0 +1,16 @@
+
+Architecture:
+
+- Frontend sends user requests (duh) and flask handles the backend API
+
+- the ModelLogger class will store model logs
+
+- the Main class will start model execution when it receives requests from flask
+ - startup:
+  - load up the model: what does this actually entail?
+  - patch models with ModelLogger hooks
+  - start flask app
+ - running:
+  - wait for API calls
+  - when the user requests a model output, main should execute that model and output the result
+  - collect time logging data and maybe make a decision based on it

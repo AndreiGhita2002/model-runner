@@ -58,7 +58,10 @@ class ModelLogger:
         return self.time_logs
 
 
-# not used anymore
+LOGGER = ModelLogger()
+
+
+# not used any more
 # alternative way of measuring time: decorating the forward function
 def patch_forward_func(forward_func, times):
     def wrapped(*args, **kwargs):

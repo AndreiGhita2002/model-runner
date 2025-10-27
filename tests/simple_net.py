@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from src.logger import ModelLogger
+from src.logger import ModelLogger, LOGGER
 
 
 class SimpleNet(nn.Module):
@@ -23,18 +23,13 @@ class SimpleNet(nn.Module):
 
 def simple_net_run():
     model = SimpleNet()
-    logger = ModelLogger()
-    logger.patch_module(model, name='SimpleNet')
+    LOGGER.patch_module(model, name='SimpleNet')
 
     input_tensor = torch.randn(1, 1, 16, 16)
     output = model(input_tensor)
     print("Model Output 1:", output)
 
-    input_tensor = torch.randn(1, 1, 16, 16)
-    output = model(input_tensor)
-    print("Model Output 2:", output)
-
-    return logger.to_json()
+    return LOGGER.to_json()
 
 if __name__ == '__main__':
     print(simple_net_run())

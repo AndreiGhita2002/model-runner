@@ -31,6 +31,8 @@ interface ModuleDisplayArgs {
 }
 
 export function ModuleDisplay({ module_data, depth }: ModuleDisplayArgs) {
+    // todo support multiple times in the frontend
+
     return (
         <div class='ModuleDisplay' style={{ border: getModuleBorderStyle(depth) }}>
 
