@@ -1,38 +1,28 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 
+from src.main import MainService
 
 flask_app = Flask(__name__)
 CORS(flask_app)
+
+main_service = MainService
 
 @flask_app.route('/api/ping', methods=['GET'])
 def ping():
     return jsonify({"message": "Hello from Python!"})
 
-simple_net_output = None
+@flask_app.route('/api/run-model/<model_name>', methods=['POST'])
+def run_model(model_name):
 
-@flask_app.route('/api/simple-net-test/', methods=['GET'])
-def simple_net_test():
-    global simple_net_output
+    model_output = main_service.run_model(model_name, x=None, randomise_input=True)
 
-    if simple_net_output is None:
-        from tests.simple_net import simple_net_run
-        simple_net_output = simple_net_run()
+    return jsonify(model_output)
 
-    return jsonify(simple_net_output)
-
-conv_net_output = None
-
-@flask_app.route('/api/conv-net-test/', methods=['GET'])
-def mnist_test():
-    global conv_net_output
-
-    if conv_net_output is None:
-        from tests.conv_next import conv_next_run
-        conv_net_output = conv_next_run()
-
-    return jsonify(conv_net_output)
+@flask_app.route('/api/times', methods=['GET'])
+def get_time_logs():
+    return jsonify(main_service.logger.to_dict())
 
 
-def run_flask_app(debug=False):
-    flask_app.run(debug=debug)
+if __name__ == '__main__':
+    flask_app.run(debug=True)

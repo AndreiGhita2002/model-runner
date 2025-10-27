@@ -53,7 +53,7 @@ class ModelLogger:
                 modules_patched[id(child)] = True
                 self.patch_module(child, logs=logs['children'][-1], name=name)
 
-    def to_json(self):
+    def to_dict(self):
         # TODO output model information
         return self.time_logs
 

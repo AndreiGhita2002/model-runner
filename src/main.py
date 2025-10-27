@@ -1,23 +1,36 @@
-from src import flask_app
-from src.flask_app import run_flask_app
-from tests.conv_next import conv_next_run
-from tests.simple_net import simple_net_run
+from typing import Any
+
+from src.logger import ModelLogger
+from src.model_wrapper import ModelWrapper
+from tests.conv_next import ConvNextWrapper
+from tests.simple_net import SimpleNet
 
 
 class MainService:
-    model_endpoint = {}
+    logger = ModelLogger()
+    models: dict[str, ModelWrapper] = {}
 
     def __init__(self):
         # initialise models
-        self.model_endpoint['simple-net-test'] = simple_net_run
-        self.model_endpoint['conv-net-test'] = conv_next_run
+        self.models['simple-net'] = SimpleNet(self.logger)
+        self.models['conv-next'] = ConvNextWrapper(self.logger)
 
-        # open up the API endpoints
-        run_flask_app(debug=True)
+    def run_model(self, model_name: str, x: Any, randomise_input=False):
+        model = self.models.get(model_name, None)
 
+        if model is None:
+            print("MainService.run_model: provided model_name does not correspond to any known model!\n"
+                  " provided model_name: ", model_name)
+            return None
 
-    def model_run(self, slug: str):
-        return self.model_endpoint[slug]()
+        if randomise_input:
+            ri = model.rand_inputs()
+            return model.forward(ri)
+
+        if x is None:
+            print("MainService.run_model: provided input is None!")
+
+        return model.forward(x)
 
 
 if __name__ == '__main__':

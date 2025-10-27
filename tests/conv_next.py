@@ -1,38 +1,30 @@
 import torchvision.models as models
-from torchvision.models import ConvNeXt_Small_Weights
+from torchvision.models import ConvNeXt_Small_Weights, ConvNeXt
 import torch
 
-from src.logger import ModelLogger, LOGGER
+from src.logger import ModelLogger
+from src.model_wrapper import ModelWrapper
 
 
-def conv_next_run():
-    # Load model with the new weights API
-    weights = ConvNeXt_Small_Weights.IMAGENET1K_V1
-    model = models.convnext_small(weights=weights)
-    model.eval()
+class ConvNextWrapper(ModelWrapper):
+    model: ConvNeXt
 
-    print("Model ConvNeXt_Small_Weights loaded.")
+    def __init__(self, logger: ModelLogger):
+        weights = ConvNeXt_Small_Weights.IMAGENET1K_V1
+        self.model = models.convnext_small(weights=weights)
+        self.model.eval()
 
-    print("Model patched with logger")
-    LOGGER.patch_module(model)
+        logger.patch_module(self.model)
 
-    print(torch.accelerator.is_available())
-    device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
-    model.to(device)
-    print(f"Using {device} device")
+        self.device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+        self.model.to(self.device)
 
-    # random input
-    random_input = torch.randn(1, 3, 224, 224).to(device)
+    def rand_inputs(self):
+        return torch.randn(1, 3, 224, 224).to(self.device)
 
-    # Run inference
-    print("Running inference..")
-    with torch.no_grad():
-        output = model(random_input)
+    def forward(self, x):
+        # with torch.no_grad():
+        output = self.model(x)
         predicted_class = output.argmax(dim=1)
-        print("Result:", predicted_class)
+        print(predicted_class)
 
-    return LOGGER.to_json()
-
-
-if __name__ == '__main__':
-    print(conv_next_run())
