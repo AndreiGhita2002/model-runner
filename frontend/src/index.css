@@ -1,0 +1,16 @@
+body {
+    /*background: rgb(40, 40, 40);*/
+    /*color: azure;*/
+}
+
+.ModuleDisplay {
+    display: inline-block;
+    flex-flow: row;
+    /*width: 25em;*/
+    padding: 0.2em;
+    justify-content: center;
+    margin: 0.1em;
+
+    /* Border gets overwritten in component. */
+    /*border: 2mm ridge rgb(211 220 50 / 0.6);*/
+}
