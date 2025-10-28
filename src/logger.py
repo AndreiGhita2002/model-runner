@@ -68,7 +68,6 @@ class ModelLogger:  # maybe rename to ModelProfiler?
         module.register_forward_pre_hook(hook_pre)
 
         if parent_logs is None:
-            print("top!")
             hook_post = lambda m, args, out: post_hook_top_level(m, args, out, logs, logger=self)
             module.register_forward_hook(hook_post)
         else:
