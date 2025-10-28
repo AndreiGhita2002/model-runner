@@ -1,6 +1,6 @@
 {
-  "short_name": "ModelLogger",
-  "name": "Model Logger Frontend",
+  "short_name": "ModelRunner",
+  "name": "Model Runner Frontend",
   "icons": [],
   "start_url": ".",
   "display": "standalone",
