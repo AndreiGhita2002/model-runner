@@ -17,6 +17,9 @@ def run_model(model_name: str):
 
     model_output = main_service.run_model(model_name, None, randomise_input=True)
 
+    if model_output is None:
+        return jsonify({'output': 'null'})
+
     json_ready = model_output.detach().cpu().tolist()
 
     return jsonify({'output': json_ready})

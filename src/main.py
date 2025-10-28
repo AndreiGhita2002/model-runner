@@ -28,13 +28,13 @@ class MainService:
         if randomise_input:
             ri = model.rand_inputs()
             with torch.no_grad():
-                return model.forward(ri)
+                return model(ri)
 
         if x is None:
             print("MainService.run_model: provided input is None!")
 
         with torch.no_grad():
-            return model.forward(x)
+            return model(x)
 
     def get_logs(self):
         return self.logger.to_dict()

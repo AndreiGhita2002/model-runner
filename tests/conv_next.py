@@ -14,7 +14,7 @@ class ConvNextWrapper(ModelWrapper):
         self.model = models.convnext_small(weights=weights)
         self.model.eval()
 
-        logger.patch_module(self.model)
+        logger.patch_module(self.model, module_name='conv-next')
 
         self.device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
         self.model.to(self.device)
@@ -22,8 +22,6 @@ class ConvNextWrapper(ModelWrapper):
     def rand_inputs(self):
         return torch.randn(1, 3, 224, 224).to(self.device)
 
-    def forward(self, x):
-        output = self.model(x)
-        predicted_class = output.argmax(dim=1)
-        return predicted_class
+    def __call__(self, *args, **kwargs):
+        return self.model(*args, **kwargs)
 

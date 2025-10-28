@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as f
 
-from src.logger import ModelLogger, LOGGER
+from src.logger import ModelLogger
 from src.model_wrapper import ModelWrapper
 
 
@@ -14,7 +14,7 @@ class SimpleNet(nn.Module, ModelWrapper):
         self.fc1 = nn.Linear(9216, 128)
         self.fc2 = nn.Linear(128, 10)
 
-        logger.patch_module(self, name='SimpleNet')
+        logger.patch_module(self, module_name='simple-net')
 
         self.device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
         self.to(self.device)
@@ -23,10 +23,10 @@ class SimpleNet(nn.Module, ModelWrapper):
         return torch.randn(1, 1, 16, 16).to(self.device)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
+        x = f.relu(self.conv1(x))
+        x = f.relu(self.conv2(x))
         x = torch.flatten(x, 1)
-        x = F.relu(self.fc1(x))
+        x = f.relu(self.fc1(x))
         x = self.fc2(x)
         return x
 
