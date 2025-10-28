@@ -6,22 +6,22 @@ from src.main import MainService
 flask_app = Flask(__name__)
 CORS(flask_app)
 
-main_service = MainService
+main_service = MainService()
 
 @flask_app.route('/api/ping', methods=['GET'])
 def ping():
     return jsonify({"message": "Hello from Python!"})
 
 @flask_app.route('/api/run-model/<model_name>', methods=['POST'])
-def run_model(model_name):
+def run_model(model_name: str):
 
-    model_output = main_service.run_model(model_name, x=None, randomise_input=True)
+    model_output = main_service.run_model(model_name, None, randomise_input=True)
 
     return jsonify(model_output)
 
 @flask_app.route('/api/times', methods=['GET'])
 def get_time_logs():
-    return jsonify(main_service.logger.to_dict())
+    return jsonify(main_service.get_logs())
 
 
 if __name__ == '__main__':

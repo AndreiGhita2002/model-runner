@@ -32,6 +32,9 @@ class MainService:
 
         return model.forward(x)
 
+    def get_logs(self):
+        return self.logger.to_dict()
+
 
 if __name__ == '__main__':
     _main = MainService()
