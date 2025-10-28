@@ -23,8 +23,7 @@ class ConvNextWrapper(ModelWrapper):
         return torch.randn(1, 3, 224, 224).to(self.device)
 
     def forward(self, x):
-        # with torch.no_grad():
         output = self.model(x)
         predicted_class = output.argmax(dim=1)
-        print(predicted_class)
+        return predicted_class
 

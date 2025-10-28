@@ -17,11 +17,17 @@ def run_model(model_name: str):
 
     model_output = main_service.run_model(model_name, None, randomise_input=True)
 
-    return jsonify(model_output)
+    json_ready = model_output.detach().cpu().tolist()
+
+    return jsonify({'output': json_ready})
 
 @flask_app.route('/api/times', methods=['GET'])
 def get_time_logs():
     return jsonify(main_service.get_logs())
+
+@flask_app.route('/api/models', methods=['GET'])
+def get_models():
+    return jsonify(main_service.get_model_names())
 
 
 if __name__ == '__main__':

@@ -1,5 +1,7 @@
 from typing import Any
 
+import torch
+
 from src.logger import ModelLogger
 from src.model_wrapper import ModelWrapper
 from tests.conv_next import ConvNextWrapper
@@ -25,15 +27,20 @@ class MainService:
 
         if randomise_input:
             ri = model.rand_inputs()
-            return model.forward(ri)
+            with torch.no_grad():
+                return model.forward(ri)
 
         if x is None:
             print("MainService.run_model: provided input is None!")
 
-        return model.forward(x)
+        with torch.no_grad():
+            return model.forward(x)
 
     def get_logs(self):
         return self.logger.to_dict()
+
+    def get_model_names(self):
+        return self.models.keys()
 
 
 if __name__ == '__main__':
