@@ -1,24 +1,60 @@
 import uuid
+import torch
 import torch.nn as nn
-import time
 
+
+# TODO what if you have one model running in parallel
+
+# TODO use CUDA events
 
 def pre_hook(_module: nn.Module, _args, logs):
-    logs['times']['start'] = time.time_ns()
+    start_event = logs['times']['start']
+    start_event.record()
+    # torch.mps.Event.record(start_event)
+    # torch._C._mps_recordEvent(start_event.__eventId)
+
 
 def post_hook(_module: nn.Module, _args, _output, logs):
-    logs['times']['end'] = time.time_ns()
-    elapsed = logs['times']['end'] - logs['times']['start']
-    logs['times']['elapsed'] = elapsed
+    end_event = logs['times']['end']
+    end_event.record()
 
 def post_hook_top_level(module: nn.Module, args, output, logs, logger):
     post_hook(module, args, output, logs)
     logger.save_logs(logs)
 
 
+def get_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")
+
+def create_device_event() -> torch.cuda.Event | torch.mps.Event | None:
+    """
+    Creates a device-specific event object. Supports CUDA and MPS currently.
+    """
+    if torch.cuda.is_available():
+        return torch.cuda.Event(enable_timing=True)
+    elif torch.backends.mps.is_available():
+        return torch.mps.Event(enable_timing=True)
+    else:
+        return None # TODO implement logging for CPU
+
+def syncronise_device():
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    elif torch.backends.mps.is_available():
+        torch.mps.synchronize()
+    # Nothing required for CPU
+
+
 class ModelLogger:  # maybe rename to ModelProfiler?
     time_logs = {}
     """
+    Model Profiler.
+    
     Time logs format:
     { 
         <unique execution id>: {
@@ -37,10 +73,35 @@ class ModelLogger:  # maybe rename to ModelProfiler?
     # TODO: add function for removing hooks
 
 
+    def _process_times(self, log_node):
+        """
+        Recursively walks the log tree and calculates elapsed times
+        from the recorded CUDA events.
+        """
+        if 'start' in log_node['times'] and 'end' in log_node['times']:
+            # This is the actual time calculation
+            start_event = log_node['times']['start']
+            end_event = log_node['times']['end']
+
+            # Calculate time (in ms) and convert to nanoseconds
+            elapsed_ms = start_event.elapsed_time(end_event)
+            log_node['times']['elapsed'] = elapsed_ms * 1_000_000
+
+        # Recurse for children
+        for child in log_node.get('children', []):
+            self._process_times(child)
+
+
     def save_logs(self, logs):
+        # Synchronise only once per forward pass:
+        syncronise_device()
+
+        # Calculate the elapsed times
+        self._process_times(logs)
+
+        # Save the logs
         session_id = uuid.uuid4()
         self.time_logs[session_id] = logs
-
 
     def patch_module(self, module: nn.Module, parent_logs=None, module_name=None):
         # print(f"Patching: { id(module) } or type: { type(module) }")
@@ -53,8 +114,8 @@ class ModelLogger:  # maybe rename to ModelProfiler?
         logs = {
             'module_name': module_name,
             'times': {
-                'start': 0,
-                'end': 0,
+                'start': create_device_event(),
+                'end': create_device_event(),
                 'elapsed': 0,
             },
             'children': [],
