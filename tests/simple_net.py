@@ -2,19 +2,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as f
 
-from src.logger import ModelLogger
-from src.model_wrapper import ModelWrapper
 
-
-class SimpleNet(nn.Module, ModelWrapper):
-    def __init__(self, logger: ModelLogger):
+class SimpleNet(nn.Module):
+    def __init__(self):
         super(SimpleNet, self).__init__()
         self.conv1 = nn.Conv2d(1, 32, 3, 1)
         self.conv2 = nn.Conv2d(32, 64, 3, 1)
         self.fc1 = nn.Linear(9216, 128)
         self.fc2 = nn.Linear(128, 10)
-
-        logger.patch_module(self, module_name='simple-net')
 
         self.device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
         self.to(self.device)

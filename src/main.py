@@ -2,20 +2,20 @@ from typing import Any
 
 import torch
 
-from src.logger import ModelLogger
-from src.model_wrapper import ModelWrapper
-from tests.conv_next import ConvNextWrapper
+# from src.logger import ModelLogger
+from src.timer_wrapper import TimerWrapper
+from tests.conv_next import ConvNext
 from tests.simple_net import SimpleNet
 
 
 class MainService:
-    logger = ModelLogger()
-    models: dict[str, ModelWrapper] = {}
+    # logger = ModelLogger()
+    models: dict[str, TimerWrapper] = {}
 
     def __init__(self):
         # initialise models
-        self.models['simple-net'] = SimpleNet(self.logger)
-        self.models['conv-next'] = ConvNextWrapper(self.logger)
+        self.models['simple-net'] = TimerWrapper(SimpleNet())
+        self.models['conv-next'] = TimerWrapper(ConvNext())
 
     def run_model(self, model_name: str, x: Any, randomise_input=False):
         model = self.models.get(model_name, None)
@@ -25,10 +25,10 @@ class MainService:
                   " provided model_name: ", model_name)
             return None
 
-        if randomise_input:
-            ri = model.rand_inputs()
-            with torch.no_grad():
-                return model(ri)
+        if randomise_input or x is None:
+            x = model.rand_inputs()
+            if x is None:
+                return {'error': 'Input was not provided, or the model does not define rand_inputs function!'}
 
         if x is None:
             print("MainService.run_model: provided input is None!")
@@ -37,7 +37,9 @@ class MainService:
             return model(x)
 
     def get_logs(self):
-        return self.logger.to_dict()
+        #todo
+        # return self.logger.to_dict()
+        return {}
 
     def get_model_names(self):
         return self.models.keys()

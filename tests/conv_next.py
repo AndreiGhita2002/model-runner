@@ -3,18 +3,15 @@ from torchvision.models import ConvNeXt_Small_Weights, ConvNeXt
 import torch
 
 from src.logger import ModelLogger
-from src.model_wrapper import ModelWrapper
 
 
-class ConvNextWrapper(ModelWrapper):
+class ConvNext():
     model: ConvNeXt
 
-    def __init__(self, logger: ModelLogger):
+    def __init__(self):
         weights = ConvNeXt_Small_Weights.IMAGENET1K_V1
         self.model = models.convnext_small(weights=weights)
         self.model.eval()
-
-        logger.patch_module(self.model, module_name='conv-next')
 
         self.device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
         self.model.to(self.device)
