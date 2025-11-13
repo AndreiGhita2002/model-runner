@@ -26,8 +26,9 @@ class MainService:
             return None
 
         if randomise_input or x is None:
-            x = model.rand_inputs()
-            if x is None:
+            if callable(model.rand_inputs):
+                x = model.rand_inputs()
+            if x is None or not callable(model.rand_inputs):
                 return {'error': 'Input was not provided, or the model does not define rand_inputs function!'}
 
         if x is None:
