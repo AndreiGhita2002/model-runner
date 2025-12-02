@@ -4,14 +4,14 @@ import torch.nn.functional as f
 
 
 class SimpleNet(nn.Module):
-    def __init__(self):
+    def __init__(self, device):
         super(SimpleNet, self).__init__()
         self.conv1 = nn.Conv2d(1, 32, 3, 1)
         self.conv2 = nn.Conv2d(32, 64, 3, 1)
         self.fc1 = nn.Linear(9216, 128)
         self.fc2 = nn.Linear(128, 10)
 
-        self.device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+        self.device = device
         self.to(self.device)
 
     def rand_inputs(self):

@@ -8,12 +8,12 @@ from src.logger import ModelLogger
 class ConvNext():
     model: ConvNeXt
 
-    def __init__(self):
+    def __init__(self, device):
         weights = ConvNeXt_Small_Weights.IMAGENET1K_V1
         self.model = models.convnext_small(weights=weights)
         self.model.eval()
 
-        self.device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+        self.device = device
         self.model.to(self.device)
 
     def rand_inputs(self):
