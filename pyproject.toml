@@ -8,10 +8,10 @@ requires-python = ">=3.12"
 # -------- Dependencies --------
 dependencies = [
     # Platform‑specific torch
-    "torch>=2.8.0; sys_platform=='linux' and platform_machine=='x86_64'",
-    "torch>=2.8.0; sys_platform=='darwin' and platform_machine=='arm64'",
+    "torch>=2.2.0; sys_platform=='linux' and platform_machine=='x86_64'",
+    "torch>=2.2.0; sys_platform=='darwin' and platform_machine=='arm64'",
     # Common dependencies
-    "torchvision>=0.22.0",
+    "torchvision>=0.17.0",
     "flask>=3.1.2",
     "flask-cors>=6.0.1",
     "setuptools>=80.9.0",
@@ -22,7 +22,7 @@ dependencies = [
 requires = [
     "setuptools>=42",
     "wheel",
-    "torch>=2.8.0",
+    "torch>=2.2.0",
     "torchvision>=0.22.0",
 ]
 build-backend = "setuptools.build_meta"
