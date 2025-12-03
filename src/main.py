@@ -1,9 +1,8 @@
-import sys
+import pprint
 from typing import Any
 
 import torch
 from torch import nn
-from torch.distributed.pipelining import pipeline, SplitPoint, Pipe
 
 # from src.logger import ModelLogger
 from src.timed_module import TimedModule, make_module_timed
@@ -69,12 +68,19 @@ class MainService:
 if __name__ == '__main__':
     main = MainService()
 
+    RESULT_FILE = "results.txt"
+
     a = main.run_model("simple-net", None, randomise_input=True)
-
-    print("Result: ", a)
-
-    # (Optional pretty‑print
-    import json, pprint
     logs = main.get_logs()
-    print("main.get_logs():")
-    pprint.pprint(json.loads(json.dumps(logs)))
+    pretty_logs1 = pprint.pformat(logs)
+    b = main.run_model("simple-net", None, randomise_input=True)
+    logs = main.get_logs()
+    pretty_logs2 = pprint.pformat(logs)
+
+    with open(RESULT_FILE, "w") as f:
+        f.write(f"Result a: {a}\n")
+        f.write(f"Result b: {b}\n")
+        f.write("Logs 1:\n")
+        f.write(pretty_logs1)
+        f.write("Logs 2:\n")
+        f.write(pretty_logs2)

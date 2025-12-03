@@ -43,6 +43,7 @@ class CUDATimedModule(TimedModule):
 
     def __init__(self, module: nn.Module, device, depth=1):
         super().__init__(module, device, depth)
+        print("Creating CUDATimedModule")
 
         if gpu_timer_cpp is None:
             raise ImportError("CUDA extension 'gpu_timer_cpp' is not built.")
