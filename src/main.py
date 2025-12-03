@@ -15,7 +15,12 @@ class MainService:
     models: dict[str, nn.Module] = {}
 
     def __init__(self, depth=2):
-        self.device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"
+        if torch.cuda.is_available():
+            self.device = "cuda"
+        elif torch.backends.mps.is_available():  # Apple Silicon (macOS)
+            self.device = "mps"
+        else:
+            self.device = "cpu"
         self.depth = depth
 
         # initialise models

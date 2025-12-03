@@ -235,17 +235,15 @@ class CPUTimedModule(TimedModule):
 
 
 def make_module_timed(module: nn.Module, device=None, depth=10) -> TimedModule:
-    is_cuda = False
     if device is None:
         if torch.cuda.is_available():
-            is_cuda = True
-            device = torch.device("cuda:0")
+            device = "cuda"
         elif torch.backends.mps.is_available():
-            device = torch.device("mps")
+            device = "mps"
         else:
-            device = torch.device("cpu")
+            device = "cpu"
 
-    if is_cuda:
+    if device == "cuda":
         return CUDATimedModule(module, device, depth=depth)
     else:
         return CPUTimedModule(module, device, depth=depth)
