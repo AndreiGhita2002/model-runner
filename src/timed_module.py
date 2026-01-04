@@ -52,6 +52,7 @@ class CUDATimedModule(TimedModule):
 
         self.time_buffer = torch.zeros(1, dtype=torch.int64, device=device)
         self.last_elapsed_cycles = 0
+        self.timing_depth = depth
 
         # Wrap children as well
         if depth > 0:

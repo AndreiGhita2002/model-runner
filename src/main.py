@@ -1,8 +1,3 @@
-"""
-MainService using PyTorch 2.x built-in pipeline API (torch.distributed.pipelining).
-PiPPy is now integrated into PyTorch core, no separate installation needed!
-"""
-
 import pprint
 from typing import Any, List, Dict, Optional
 import time
@@ -133,7 +128,7 @@ class MainService:
         self.num_stages = self.device_manager.num_devices()
         self.splitter = ModelSplitter(
             num_stages=self.num_stages,
-            strategy=split_strategy
+            distribution_strategy=split_strategy
         )
 
         self.timing_profiles: Dict[str, Dict[str, float]] = {}
@@ -230,7 +225,7 @@ class MainService:
         )
 
         print(f"  Split specification:")
-        print(self.splitter.get_split_info(split_spec))
+        print(self.splitter.pretty_split_info_str(split_spec))
 
         try:
             devices = self.device_manager.get_all_devices()

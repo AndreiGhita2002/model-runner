@@ -1,9 +1,3 @@
-"""
-Automatic model splitting for PyTorch 2.x.
-This version doesn't depend on deprecated pipeline APIs.
-Instead, it provides split specifications that can be used with PiPPy or manual device placement.
-"""
-
 from typing import List, Dict, Tuple, Optional
 
 import torch
@@ -13,27 +7,58 @@ import torch.nn as nn
 class ModelSplitter:
     """
     Automatically analyses and splits a model into pipeline stages.
-    Compatible with PyTorch 2.x - generates split information without deprecated APIs.
 
-    Strategies:
+    Split Strategy: What are we splitting?
+    1. Natural guess: Split at modules that would be 'natural' split points. This is opinionated.
+    2. Depth: split at depth N  #TODO: do we want this?
+    3. All: Split at all the child modules of the model.
+
+    Distribution Strategies: How are we splitting?
     1. Layer-based: Split at sequential container boundaries (Conv blocks, Transformer layers)
     2. Computation-based: Use timing profiles to create balanced stages
     3. Memory-based: Split to balance memory usage across devices
     """
 
-    def __init__(self, num_stages: int = 2, strategy: str = "layer_based"):
+    def __init__(self,
+                 num_stages: int = 2,
+                 split_strategy: str = "natural",
+                 distribution_strategy: str = "layer_based"):
         """
         Args:
             num_stages: Number of pipeline stages to create (should match # of devices)
-            strategy: "layer_based", "computation_based", or "memory_based"
+            split_strategy: "natural", "depth N" (where N is an integer), or "all"
+            distribution_strategy: "layer_based", "computation_based", or "memory_based"
         """
         self.num_stages = num_stages
-        self.strategy = strategy
+        self.split_strategy = split_strategy
+        self.distribution_strategy = distribution_strategy
 
-    def analyze_model_structure(self, model: nn.Module) -> List[Tuple[str, nn.Module]]:
+    def find_split_candidates(self, model: nn.Module) -> List[Tuple[str, nn.Module]]:
         """
-        Analyse the model structure to find natural split points.
+        Find split candidates based on the configured split_strategy.
+
+        Args:
+            model: The model to analyse
+
+        Returns:
+            List of (name, module) tuples representing split candidates
+        """
+        if self.split_strategy == "natural":
+            return self.natural_split_candidates(model)
+        elif self.split_strategy == "all":
+            return self.all_candidates(model)
+        elif self.split_strategy.startswith("depth"):
+            # Extract depth value from "depth N" format
+            return self.depth_based_candidates(model)
+        else:
+            raise ValueError(f"Unknown split_strategy: {self.split_strategy}")
+
+    def natural_split_candidates(self, model: nn.Module) -> List[Tuple[str, nn.Module]]:
+        """
+        Analyse the model structure to find 'natural' split points.
         Returns a list of (name, module) tuples representing potential split boundaries.
+
+        This function makes assumptions about what is a 'natural' split point.
         """
         split_candidates = []
 
@@ -43,6 +68,8 @@ class ModelSplitter:
             for name, module in model.named_children():
                 split_candidates.append((name, module))
         else:
+            # TODO some recursion might be good here
+
             # For other models, look for common patterns
             for name, module in model.named_children():
                 # Look for sequential containers, layer lists, or major blocks
@@ -57,11 +84,76 @@ class ModelSplitter:
 
         return split_candidates
 
+    def depth_based_candidates(self, model: nn.Module) -> List[Tuple[str, nn.Module]]:
+        """
+        Find split candidates at a specific depth in the module hierarchy.
+
+        For models wrapped by TimedModule, use the timing_depth field if available.
+        Otherwise, extracts depth from the split_strategy string ("depth N").
+
+        Args:
+            model: The model to analyze
+
+        Returns:
+            List of (name, module) tuples at the specified depth
+        """
+        # Determine target depth
+        if hasattr(model, 'timing_depth'):
+            # Use timing_depth from the TimedModule wrapper
+            target_depth = model.timing_depth
+        else:
+            # Extract from split_strategy string "depth N"
+            try:
+                parts = self.split_strategy.split()
+                if len(parts) == 2 and parts[0] == "depth":
+                    target_depth = int(parts[1])
+                else:
+                    raise ValueError(f"Invalid depth format: {self.split_strategy}")
+            except (ValueError, IndexError):
+                raise ValueError(f"split_strategy must be 'depth N' where N is an integer, got: {self.split_strategy}")
+
+        split_candidates = []
+
+        def _collect_at_depth(module: nn.Module, name: str, current_depth: int):
+            """Recursively collect modules at target depth."""
+            if current_depth == target_depth:
+                split_candidates.append((name, module))
+                return
+
+            # Recurse into children
+            for child_name, child_module in module.named_children():
+                full_name = f"{name}.{child_name}" if name else child_name
+                _collect_at_depth(child_module, full_name, current_depth + 1)
+
+        # Start recursion from depth 0
+        _collect_at_depth(model, "", 0)
+
+        return split_candidates
+
+    def all_candidates(self, model: nn.Module) -> List[Tuple[str, nn.Module]]:
+        """
+        Return all child modules as split candidates.
+
+        This includes every direct child of the model without any filtering.
+
+        Args:
+            model: The model to analyse
+
+        Returns:
+            List of (name, module) tuples for all children
+        """
+        split_candidates = []
+
+        for name, module in model.named_children():
+            split_candidates.append((name, module))
+
+        return split_candidates
+
     def _is_block_module(self, module: nn.Module) -> bool:
         """
         Determine if a module is a 'block' that should be kept together.
         """
-        # TODO: justify this
+        # TODO: justify the block types defined in `_is_block_module`
         # Common block patterns in CNNs and Transformers
         block_types = (
             nn.Conv2d, nn.Conv1d, nn.Conv3d,
@@ -70,28 +162,29 @@ class ModelSplitter:
         )
 
         # Check if the module contains these types
-        has_significant_ops = False
         for child in module.children():
             if isinstance(child, block_types):
-                has_significant_ops = True
-                break
+                return True
 
         # Also check the class name for common patterns
         class_name = module.__class__.__name__.lower()
         block_patterns = ['block', 'layer', 'stage', 'encoder', 'decoder', 'attention']
         has_block_pattern = any(pattern in class_name for pattern in block_patterns)
 
-        return has_significant_ops or has_block_pattern
+        return has_block_pattern
 
-    def split_layer_based(self, model: nn.Module) -> Dict[str, int]:
+    def split_layer_based(self, candidates: List[Tuple[str, nn.Module]]) -> Dict[str, int]:
         """
         Create split specification based on model layer structure.
         Tries to evenly distribute layers across stages.
 
-        Returns dict mapping layer names to stage indices.
+        Args:
+            candidates: List of (name, module) tuples to distribute
+
+        Returns:
+            Dict mapping layer names to stage indices.
         """
         split_spec = {}
-        candidates = self.analyze_model_structure(model)
 
         if not candidates:
             print("Warning: No split candidates found. Model may not be splittable.")
@@ -110,7 +203,7 @@ class ModelSplitter:
 
     def split_computation_based(
         self,
-        model: nn.Module,
+        candidates: List[Tuple[str, nn.Module]],
         timing_profile: Optional[Dict[str, float]] = None
     ) -> Dict[str, int]:
         """
@@ -118,7 +211,7 @@ class ModelSplitter:
         Tries to balance computation across stages using timing data.
 
         Args:
-            model: The model to split
+            candidates: List of (name, module) tuples to distribute
             timing_profile: Dict mapping layer names to execution times
 
         Returns:
@@ -126,10 +219,9 @@ class ModelSplitter:
         """
         if timing_profile is None:
             print("Warning: No timing profile provided. Falling back to layer-based split.")
-            return self.split_layer_based(model)
+            return self.split_layer_based(candidates)
 
         split_spec = {}
-        candidates = self.analyze_model_structure(model)
 
         if not candidates:
             return split_spec
@@ -150,7 +242,7 @@ class ModelSplitter:
         total_time = sum(t for _, t in layer_times)
         if total_time == 0:
             print("Warning: Total time is zero. Falling back to layer-based split.")
-            return self.split_layer_based(model)
+            return self.split_layer_based(candidates)
 
         target_time_per_stage = total_time / self.num_stages
 
@@ -174,7 +266,7 @@ class ModelSplitter:
 
     def split_memory_based(
         self,
-        model: nn.Module,
+        candidates: List[Tuple[str, nn.Module]],
         memory_profile: Optional[Dict[str, int]] = None
     ) -> Dict[str, int]:
         """
@@ -182,22 +274,22 @@ class ModelSplitter:
         Tries to balance memory consumption across stages.
 
         Args:
-            model: The model to split
+            candidates: List of (name, module) tuples to distribute
             memory_profile: Dict mapping layer names to memory usage in bytes
 
         Returns:
             Dict mapping layer names to stage indices
         """
         if memory_profile is None:
-            # Estimate memory based on parameters
+            # Estimate memory based on parameters from candidates
             memory_profile = {}
-            for name, module in model.named_modules():
+            for name, module in candidates:
                 param_memory = sum(p.numel() * p.element_size() for p in module.parameters())
                 if param_memory > 0:
                     memory_profile[name] = param_memory
 
         # Use the same logic as computation-based but with memory instead of time
-        return self.split_computation_based(model, memory_profile)
+        return self.split_computation_based(candidates, memory_profile)
 
     def create_split_spec(
         self,
@@ -211,16 +303,20 @@ class ModelSplitter:
         Returns:
             Dict mapping layer names to stage indices (0 to num_stages-1)
         """
-        if self.strategy == "layer_based":
-            return self.split_layer_based(model)
-        elif self.strategy == "computation_based":
-            return self.split_computation_based(model, timing_profile)
-        elif self.strategy == "memory_based":
-            return self.split_memory_based(model, memory_profile)
-        else:
-            raise ValueError(f"Unknown strategy: {self.strategy}")
+        # Get candidates using the split_strategy
+        candidates = self.find_split_candidates(model)
 
-    def get_split_info(self, split_spec: Dict[str, int]) -> str:
+        # Apply distribution strategy to the candidates
+        if self.distribution_strategy == "layer_based":
+            return self.split_layer_based(candidates)
+        elif self.distribution_strategy == "computation_based":
+            return self.split_computation_based(candidates, timing_profile)
+        elif self.distribution_strategy == "memory_based":
+            return self.split_memory_based(candidates, memory_profile)
+        else:
+            raise ValueError(f"Unknown distribution_strategy: {self.distribution_strategy}")
+
+    def pretty_split_info_str(self, split_spec: Dict[str, int]) -> str:
         """
         Return a human-readable description of the split.
         """
@@ -336,9 +432,9 @@ if __name__ == "__main__":
     print("=" * 80)
     print("Testing Layer-Based Splitting")
     print("=" * 80)
-    splitter = ModelSplitter(num_stages=3, strategy="layer_based")
+    splitter = ModelSplitter(num_stages=3, distribution_strategy="layer_based")
     split_spec = splitter.create_split_spec(test_model)
-    print(splitter.get_split_info(split_spec))
+    print(splitter.pretty_split_info_str(split_spec))
     print("\nSplit spec:", split_spec)
 
     # Test computation-based splitting with mock timing data
@@ -357,9 +453,9 @@ if __name__ == "__main__":
         '8': 15.0,  # Linear
     }
 
-    splitter = ModelSplitter(num_stages=3, strategy="computation_based")
+    splitter = ModelSplitter(num_stages=3, distribution_strategy="computation_based")
     split_spec = splitter.create_split_spec(test_model, timing_profile=timing_profile)
-    print(splitter.get_split_info(split_spec))
+    print(splitter.pretty_split_info_str(split_spec))
     print("\nSplit spec:", split_spec)
 
     # Test device placement
@@ -380,7 +476,7 @@ if __name__ == "__main__":
             nn.ReLU(),
         )
 
-        splitter = ModelSplitter(num_stages=len(devices), strategy="layer_based")
+        splitter = ModelSplitter(num_stages=len(devices), distribution_strategy="layer_based")
         split_spec = splitter.create_split_spec(test_model_2)
         test_model_2 = splitter.apply_split_to_devices(test_model_2, split_spec, devices)
         print("\nDevice placement complete!")
