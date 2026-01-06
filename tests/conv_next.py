@@ -2,10 +2,8 @@ import torchvision.models as models
 from torchvision.models import ConvNeXt_Small_Weights, ConvNeXt
 import torch
 
-from src.logger import ModelLogger
 
-
-class ConvNext():
+class ConvNext:
     model: ConvNeXt
 
     def __init__(self, device):

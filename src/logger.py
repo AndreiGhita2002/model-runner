@@ -1,3 +1,10 @@
+# logger.py
+# WARNING: This file has been deprecated! It probably does not work with the rest of the project
+# Implements the ModelLogger class, which can profile pytorch modules.
+
+import warnings
+warnings.warn("deprecated", DeprecationWarning)
+
 import uuid
 import torch
 import torch.nn as nn

@@ -6,8 +6,6 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
 
-from src.logger import patch_module
-
 
 class Net(nn.Module):
     def __init__(self):
