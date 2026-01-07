@@ -8,17 +8,15 @@ if is_cuda_available():
     print("CUDA available. Building CUDA extension 'gpu_timer_cpp'.")
     ext_modules.append(
         CUDAExtension('gpu_timer_cpp', [
-            'gpu_timer_binding.cpp',
-            'gpu_timer_kernels.cu',
+            'src/gpu_timer/gpu_timer_binding.cpp',
+            'src/gpu_timer/gpu_timer_kernels.cu',
         ])
     )
 else:
     print("CUDA not available. Skipping build of 'gpu_timer_cpp'.")
-    print("The 'gpu_timer_cpp' module will not be available.")
 
 setup(
     name='gpu_timer_cpp',
     ext_modules=ext_modules,
-    cmdclass={
-        'build_ext': BuildExtension
-    })
+    cmdclass={'build_ext': BuildExtension}
+)

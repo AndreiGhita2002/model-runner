@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # run_project.sh
 # Build editable, then run the app from the project root
 
