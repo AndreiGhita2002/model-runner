@@ -3,8 +3,6 @@ from typing import List, Dict, Tuple, Optional
 import torch
 import torch.nn as nn
 
-from tests.test_splitter import test_model_splitter
-
 
 class ModelSplitter:
     """
@@ -413,7 +411,3 @@ def extract_timing_profile_from_logs(logs: Dict) -> Dict[str, float]:
 
     _extract_recursive(logs)
     return profile
-
-
-if __name__ == "__main__":
-    test_model_splitter()

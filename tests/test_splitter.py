@@ -70,3 +70,6 @@ def test_model_splitter():
         split_spec = splitter.create_split_spec(test_model_2)
         test_model_2 = splitter.apply_split_to_devices(test_model_2, split_spec, devices)
         print("\nDevice placement complete!")
+
+if __name__ == '__main__':
+    test_model_splitter()

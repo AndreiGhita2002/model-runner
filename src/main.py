@@ -1,15 +1,12 @@
-import pprint
 from typing import Any, List, Dict, Optional
-import time
 
 import torch
 from torch import nn
 
-from src.timed_module import TimedModule, make_module_timed
 from model_splitter import ModelSplitter, extract_timing_profile_from_logs
+from src.timed_module import TimedModule, make_module_timed
 from tests.conv_next import ConvNext
 from tests.simple_net import SimpleNet
-from tests.test_main import test_main_service
 
 
 class DeviceManager:
@@ -82,6 +79,8 @@ class MultiDeviceWrapper(nn.Module):
     def forward(self, x):
         """Forward pass with automatic device transfers."""
         current_device = x.device
+
+        # TODO something here looks fishy
 
         # For Sequential models, iterate through children
         if isinstance(self.model, nn.Sequential):
@@ -156,6 +155,20 @@ class MainService:
         )
 
         print(f"Initialized {len(self.models)} models")
+
+    def run(self):
+        #TODO
+
+        #
+
+        #main loop
+        while True:
+            #check queue
+            #run models?
+            self.run_model()
+            pass
+
+        pass
 
     def profile_model(self, model_name: str, num_warmup: int = 2, num_profile: int = 5) -> Dict[str, float]:
         """Profile a model to get timing information for each layer."""
@@ -248,9 +261,14 @@ class MainService:
             traceback.print_exc()
             return None
 
-    def run_model(self, model_name: str, x: Any = None, randomise_input: bool = False,
+    def run_model(self,
+                  model_name: str,
+                  x: Any = None,
+                  randomise_input: bool = False,
                   use_multi_device: Optional[bool] = None):
-        """Run a model with optional multi-device execution."""
+        """
+        Run a model with optional multi-device execution.
+        """
         use_md = self.use_multi_device if use_multi_device is None else use_multi_device
 
         model = self.models.get(model_name, None)
@@ -273,17 +291,23 @@ class MainService:
                 md_model = self.multi_device_models[model_name]
                 try:
                     with torch.no_grad():
+                        # TODO: why does this only send x to the first device?
+                        #  surely it should be a device of the model
+                        #  MultiDeviceWrapper.forward seems to move x to the correct device
                         first_device = self.device_manager.get_device(0)
+                        # send data to the first device
                         if x.device != first_device:
                             x = x.to(first_device)
                         output = md_model(x)
                     return output
+
                 except Exception as e:
                     print(f"Multi-device execution failed: {e}")
                     print("Falling back to standard execution")
                     import traceback
                     traceback.print_exc()
 
+        # Run on a single device
         return model.run(x)
 
     def get_logs(self) -> Dict[str, Any]:
@@ -340,6 +364,3 @@ class MainService:
             has_multi_device = name in self.multi_device_models
             print(f"  {name}: profiled={has_profile}, multi_device={has_multi_device}")
 
-
-if __name__ == '__main__':
-    test_main_service()

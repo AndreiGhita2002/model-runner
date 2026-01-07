@@ -3,7 +3,7 @@ import time
 
 from main import MainService
 
-
+# TODO: improve this test to call all MainService functions
 def test_main_service():
     """Test function for MainService."""
     N_RUNS = 5
@@ -140,3 +140,6 @@ def test_main_service():
 
     print(f"Results written to {RESULT_FILE}")
     print("Testing complete!")
+
+if __name__ == '__main__':
+    test_main_service()
