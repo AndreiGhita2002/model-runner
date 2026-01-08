@@ -1,9 +1,11 @@
 import pprint
+import queue
 import time
-from typing import Any, List, Dict, Optional
+from typing import Any, List, Dict, Optional, Tuple
 
 import torch
 from torch import nn
+from torch.multiprocessing.queue import Queue
 
 from src.model_splitter import ModelSplitter, extract_timing_profile_from_logs
 from src.timed_module import TimedModule, make_module_timed
@@ -112,6 +114,10 @@ class MainService:
 
     models: Dict[str, nn.Module] = {}
     multi_device_models: Dict[str, MultiDeviceWrapper] = {}
+    # Work Queue: (request ID, model name, input data)
+    work_queue: Queue[Tuple[int, str, Any]] = queue.Queue()
+    # Model Outputs: request ID -> output # TODO: make sure this Dict is multi thread safe
+    model_outputs: Dict[int, Any] = {}
 
     def __init__(self, depth=2, use_multi_device=True, split_strategy="computation_based"):
         """
@@ -159,21 +165,33 @@ class MainService:
         print(f"Initialized {len(self.models)} models")
 
     def run(self):
-        #TODO
 
-        #
-
-        #main loop
+        # main loop
         while True:
             #check queue
-            #run models?
-            self.run_model()
-            pass
+            if not self.work_queue.empty():
+                #run models?
+                tup = self.work_queue.get(block=True)
+                (req_id, model_name, work) = tup
 
-        pass
+                output = self.run_model(model_name=model_name, x=work)
+
+                # output the output
+                self.model_outputs[req_id] = output
+
+                # rebalance the models?
+            else:
+                # sleep for a bit
+                # until the user requests another workload
+                # or perhaps exit
+                pass
+
+            # exit condition?
 
     def profile_model(self, model_name: str, num_warmup: int = 2, num_profile: int = 5) -> Dict[str, float]:
-        """Profile a model to get timing information for each layer."""
+        """
+        Profile a model with junk data to get timing information for each layer.
+        """
         model = self.models.get(model_name)
         if model is None:
             raise ValueError(f"Model {model_name} not found")
