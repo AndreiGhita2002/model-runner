@@ -15,12 +15,20 @@ dependencies = [
 ]
 
 [build-system]
-requires = [
-    "setuptools>=42",
-    "wheel",
-    "torch>=2.5.1",
-]
+requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+# CUDA index for Linux
+[[tool.uv.index]]
+name = "pytorch-cuda"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+# Use PyTorch CUDA wheels only on Linux x86_64
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cuda", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
+]
+torchvision = [
+    { index = "pytorch-cuda", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
+]
