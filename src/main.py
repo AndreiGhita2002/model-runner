@@ -71,9 +71,9 @@ class MultiDeviceWrapper(nn.Module):
         self.model = model
         self.split_spec = split_spec
         self.devices = devices
-        self.layer_devices = self._build_layer_device_map()
+        self.layer_devices = self.build_layer_device_map()
 
-    def _build_layer_device_map(self) -> Dict[str, torch.device]:
+    def build_layer_device_map(self) -> Dict[str, torch.device]:
         """Build mapping of layer names to devices."""
         layer_devices = {}
         for name, stage_idx in self.split_spec.items():
@@ -118,6 +118,8 @@ class MainService:
     work_queue: Queue[Tuple[int, str, Any]] = queue.Queue()
     # Model Outputs: request ID -> output # TODO: make sure this Dict is multi thread safe
     model_outputs: Dict[int, Any] = {}
+    # Threshold equal to the minimum change in a models performance that triggers rebalancing
+    rebalance_threshold = 0.10
 
     def __init__(self, depth=2, use_multi_device=True, split_strategy="computation_based"):
         """
@@ -164,29 +166,143 @@ class MainService:
 
         print(f"Initialized {len(self.models)} models")
 
-    def run(self):
-
+    def run(self, exit_when_done = False):
         # main loop
         while True:
-            #check queue
+            # check queue
             if not self.work_queue.empty():
-                #run models?
-                tup = self.work_queue.get(block=True)
-                (req_id, model_name, work) = tup
+                #run models
+                (req_id, model_name, work) = self.work_queue.get(block=True)
 
                 output = self.run_model(model_name=model_name, x=work)
 
                 # output the output
                 self.model_outputs[req_id] = output
 
-                # rebalance the models?
+                # rebalance the models
+                self.rebalance_models()
             else:
+                #TODO: make MainService.run more like a service
                 # sleep for a bit
                 # until the user requests another workload
                 # or perhaps exit
-                pass
 
-            # exit condition?
+                # For now, we exit when the queue is done
+                if exit_when_done:
+                    return
+
+    def rebalance_models(self):
+        """
+        Rebalances the models in regard to timing data.
+
+        This method collects timing information from the most recent model runs
+        and re-distributes model layers across devices if the timing profile
+        has changed significantly.
+
+        Assumptions:
+        - Models are wrapped in TimedModule and provide timing logs via get_logs()
+        - Only CUDA devices are supported for multi-device distribution
+        - Timing information from the most recent run is representative of future runs
+        - Rebalancing is only performed for models that already have multi-device wrappers
+        - A threshold of 10% change in timing distribution triggers rebalancing
+        """
+        #TODO record how long rebalancing takes
+
+        if self.num_stages < 2:
+            # No rebalancing needed with only one device
+            return
+
+        for model_name, model in self.models.items():
+            # Skip models that don't have multi-device wrappers yet
+            if model_name not in self.multi_device_models:
+                continue
+
+            # Extract timing information from the model's most recent run
+            if not isinstance(model, TimedModule):
+                continue
+
+            logs = model.get_logs()
+            if logs is None:
+                continue
+
+            new_profile = extract_timing_profile_from_logs(logs)
+            if not new_profile:
+                continue
+
+            # Check if the timing profile has changed significantly
+            old_profile = self.timing_profiles.get(model_name, {})
+            if not self._should_rebalance(old_profile, new_profile):
+                continue
+
+            # Update the stored timing profile
+            self.timing_profiles[model_name] = new_profile
+
+            # Get the inner model from the existing wrapper
+            wrapper = self.multi_device_models[model_name]
+            inner_model = wrapper.model
+
+            # Create a new split specification based on updated timing
+            new_split_spec = self.splitter.create_split_spec(
+                inner_model,
+                timing_profile=new_profile
+            )
+
+            # Check if the split specification actually changed
+            if new_split_spec == wrapper.split_spec:
+                continue
+
+            print(f"Rebalancing model: {model_name}")
+            print(f"  Old split: {wrapper.split_spec}")
+            print(f"  New split: {new_split_spec}")
+
+            # Apply the new split to devices
+            devices = self.device_manager.get_all_devices()
+            inner_model = self.splitter.apply_split_to_devices(
+                inner_model, new_split_spec, devices
+            )
+
+            # Update the wrapper with new split specification
+            wrapper.split_spec = new_split_spec
+            wrapper.layer_devices = wrapper.build_layer_device_map()
+
+    def _should_rebalance(self, old_profile: Dict[str, float], new_profile: Dict[str, float]) -> bool:
+        """
+        Determine if rebalancing is needed based on timing profile changes.
+
+        Returns True if timing distribution has changed by more than the threshold.
+
+        Assumptions:
+        - A 10% relative change in total layer time distribution warrants rebalancing
+        - If no old profile exists, rebalancing should occur
+        - Only layers present in both profiles are compared
+        """
+        threshold = self.rebalance_threshold
+
+        if not old_profile:
+            return True
+
+        # Find common layers
+        common_layers = set(old_profile.keys()) & set(new_profile.keys())
+        if not common_layers:
+            return True
+
+        # Calculate total time for normalisation
+        old_total = sum(old_profile.get(layer, 0) for layer in common_layers)
+        new_total = sum(new_profile.get(layer, 0) for layer in common_layers)
+
+        if old_total == 0 or new_total == 0:
+            return True
+
+        # Compare normalised timing distributions
+        max_change = 0.0
+
+        for layer in common_layers:
+            old_ratio = old_profile.get(layer, 0) / old_total
+            new_ratio = new_profile.get(layer, 0) / new_total
+            change = abs(new_ratio - old_ratio)
+            max_change = max(max_change, change)
+
+        return max_change > threshold
 
     def profile_model(self, model_name: str, num_warmup: int = 2, num_profile: int = 5) -> Dict[str, float]:
         """
