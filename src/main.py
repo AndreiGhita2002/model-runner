@@ -121,6 +121,9 @@ class MainService:
     model_outputs: Dict[int, Any] = {}
     # Threshold equal to the minimum change in a models performance that triggers rebalancing
     rebalance_threshold = 0.10
+    # Timing data for rebalancing operations (in nanoseconds)
+    # Structure: model_name -> {'total': [...], 'split_spec': [...], 'apply_split': [...]}
+    rebalance_timings: Dict[str, Dict[str, List[int]]] = {}
 
     def __init__(self, depth=2, use_multi_device=True, split_strategy="computation_based"):
         """
@@ -207,7 +210,7 @@ class MainService:
         - Rebalancing is only performed for models that already have multi-device wrappers
         - A threshold of 10% change in timing distribution triggers rebalancing
         """
-        #TODO record how long rebalancing takes
+        func_start_ns = time.time_ns()
 
         if self.num_stages < 2:
             # No rebalancing needed with only one device
@@ -243,10 +246,12 @@ class MainService:
             inner_model = wrapper.model
 
             # Create a new split specification based on updated timing
+            split_spec_start_ns = time.time_ns()
             new_split_spec = self.splitter.create_split_spec(
                 inner_model,
                 timing_profile=new_profile
             )
+            split_spec_elapsed_ns = time.time_ns() - split_spec_start_ns
 
             # Check if the split specification actually changed
             if new_split_spec == wrapper.split_spec:
@@ -257,14 +262,28 @@ class MainService:
             print(f"  New split: {new_split_spec}")
 
             # Apply the new split to devices
+            apply_split_start_ns = time.time_ns()
             devices = self.device_manager.get_all_devices()
             inner_model = self.splitter.apply_split_to_devices(
                 inner_model, new_split_spec, devices
             )
+            apply_split_elapsed_ns = time.time_ns() - apply_split_start_ns
 
             # Update the wrapper with new split specification
             wrapper.split_spec = new_split_spec
             wrapper.layer_devices = wrapper.build_layer_device_map()
+
+            # Record timing data for this rebalancing operation
+            func_elapsed_ns = time.time_ns() - func_start_ns
+            if model_name not in self.rebalance_timings:
+                self.rebalance_timings[model_name] = {
+                    'total': [],
+                    'split_spec': [],
+                    'apply_split': []
+                }
+            self.rebalance_timings[model_name]['total'].append(func_elapsed_ns)
+            self.rebalance_timings[model_name]['split_spec'].append(split_spec_elapsed_ns)
+            self.rebalance_timings[model_name]['apply_split'].append(apply_split_elapsed_ns)
 
     def _should_rebalance(self, old_profile: Dict[str, float], new_profile: Dict[str, float]) -> bool:
         """
