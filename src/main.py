@@ -19,7 +19,6 @@ class DeviceManager:
     def __init__(self):
         self.devices: List[torch.device] = []
         self._initialize_devices()
-        print(self.devices)
 
     def _initialize_devices(self):
         """Detect and initialize all available CUDA devices."""
@@ -35,6 +34,7 @@ class DeviceManager:
             print(f"  Device {i}: {props.name}")
             print(f"    Total memory: {props.total_memory / 1e9:.2f} GB")
             print(f"    Compute capability: {props.major}.{props.minor}")
+            print(f"    PyTorch name: {str(device)}")
             self.devices.append(device)
 
     def get_device(self, index: int = 0) -> torch.device:

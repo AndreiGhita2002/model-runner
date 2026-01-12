@@ -59,7 +59,6 @@ class CUDATimedModule(TimedModule):
 
     def __init__(self, module: nn.Module, device, depth=1):
         super().__init__(module, device, depth)
-        print("Creating CUDATimedModule")
 
         if gpu_timer is None:
             raise ImportError("CUDA extension 'gpu_timer' is not built.")
@@ -208,7 +207,7 @@ class CPUTimedModule(TimedModule):
     def __init__(self, module: nn.Module, device, depth=10):
         super().__init__(module, device, depth)
 
-        print("WARNING: CPUTimedModule does not have logging working!")
+        raise UserWarning("CPUTimedModule does not have logging working!")
         #TODO finish CPUTimedModule. Remaining issues:
         # 1. torch.compile mangles all the module names
         # 2. self.profiler.key_averages does not give us the stack events, despite doing everything it wanted of me
