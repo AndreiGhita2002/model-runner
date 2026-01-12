@@ -19,6 +19,7 @@ class DeviceManager:
     def __init__(self):
         self.devices: List[torch.device] = []
         self._initialize_devices()
+        print(self.devices)
 
     def _initialize_devices(self):
         """Detect and initialize all available CUDA devices."""
@@ -112,7 +113,7 @@ class MainService:
     Uses PyTorch 2.x built-in pipelining (torch.distributed.pipelining) when available.
     """
 
-    models: Dict[str, nn.Module] = {}
+    models: Dict[str, nn.Module | TimedModule] = {}
     multi_device_models: Dict[str, MultiDeviceWrapper] = {}
     # Work Queue: (request ID, model name, input data): Tuple[int, str, Any]
     work_queue: Queue = queue.Queue()
@@ -514,6 +515,8 @@ def test_main_service():
     )
 
     main.print_status()
+
+    return
 
     print("\n" + "=" * 80)
     print("PyTorch Model Load Balancer - Testing Suite")

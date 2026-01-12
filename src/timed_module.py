@@ -16,17 +16,28 @@ except ImportError:
     gpu_timer = None
 
 
-class TimedModule:
-    def __init__(self, module: nn.Module, device, depth=10):
+class TimedModule(nn.Module):
+    def __init__(self, module: nn.Module, device, depth=10, wrapping_a_wrapper=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.inner = module
         self.device = device
         self.depth = depth
+        if wrapping_a_wrapper is not None:
+            self.wrapping_a_wrapper = wrapping_a_wrapper
+        else:
+            self.wrapping_a_wrapper = not isinstance(module, nn.Module)
 
     def run(self, x=None):
         pass
 
     def get_logs(self):
         pass
+
+    def _inner(self) -> nn.Module:
+        if not self.wrapping_a_wrapper:
+            return self.inner
+        else:
+            return self.inner.model
 
     def rand_inputs(self) -> Any:
         if callable(self.inner.rand_inputs):
@@ -36,6 +47,9 @@ class TimedModule:
             return None
 
 
+#==================
+# CUDA GPU Timed Module
+#==================
 class CUDATimedModule(TimedModule):
     """
     A wrapper that times the forward pass of a module using on-device clock64() CUDA kernels.
@@ -47,10 +61,10 @@ class CUDATimedModule(TimedModule):
         super().__init__(module, device, depth)
         print("Creating CUDATimedModule")
 
-        if gpu_timer_cpp is None:
-            raise ImportError("CUDA extension 'gpu_timer_cpp' is not built.")
+        if gpu_timer is None:
+            raise ImportError("CUDA extension 'gpu_timer' is not built.")
 
-        self.inner.to(device)
+        self._inner().to(device)
 
         self.time_buffer = torch.zeros(1, dtype=torch.int64, device=device)
         self.last_elapsed_cycles = 0
@@ -58,19 +72,19 @@ class CUDATimedModule(TimedModule):
 
         # Wrap children as well
         if depth > 0:
-            for child_name, child in list(module.named_children()):
+            for child_name, child in list(self._inner().named_children()):
                 # Decrement the depth when we go deeper in the tree
                 wrapped_child = CUDATimedModule(child, device, depth=depth - 1)
-                setattr(module, child_name, wrapped_child)
+                setattr(self._inner(), child_name, wrapped_child)
                 # TODO: test this
 
     def forward(self, *args, **kwargs):
         # 1. Start the timer
-        gpu_timer_cpp.start(self.time_buffer)
+        gpu_timer.start(self.time_buffer)
         # 2. Run the inner module
         output = self.inner(*args, **kwargs)
         # 3. End the timer
-        gpu_timer_cpp.end(self.time_buffer)
+        gpu_timer.end(self.time_buffer)
 
         return output
 
@@ -94,7 +108,7 @@ class CUDATimedModule(TimedModule):
         }
 
         if self.depth > 0:
-            for child_name, child in list(self.inner.named_children()):
+            for child_name, child in list(self._inner().named_children()):
                 if isinstance(child, TimedModule):
                     logs['children'][child_name] = child.get_logs()
 
@@ -106,6 +120,9 @@ class CUDATimedModule(TimedModule):
             self.forward(x)
 
 
+#==================
+# CPU Timed Module
+#==================
 def _recursive_profiler_logs(prof_times: dict[str, Any], module: nn.Module, depth):
     module_name = module._get_name()
     logs = {
@@ -237,6 +254,7 @@ class CPUTimedModule(TimedModule):
         return model_output
 
 
+#==================
 def make_module_timed(module: nn.Module, device=None, depth=10) -> TimedModule:
     if device is None:
         if torch.cuda.is_available():
@@ -246,7 +264,7 @@ def make_module_timed(module: nn.Module, device=None, depth=10) -> TimedModule:
         else:
             device = "cpu"
 
-    if device == "cuda":
+    if device == "cuda" or "cuda" in str(device):
         return CUDATimedModule(module, device, depth=depth)
     else:
         return CPUTimedModule(module, device, depth=depth)
