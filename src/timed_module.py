@@ -7,11 +7,13 @@ from torch.autograd.profiler_util import FunctionEventAvg
 from torch.profiler import profile, record_function, ProfilerActivity
 
 try:
-    import gpu_timer_cpp
+    import gpu_timer
+    print("gpu_timer imported successfully!")
 except ImportError:
     print("Error: 'gpu_timer_cpp' module not found.")
-    print("Please build the extension first by running: pip install .")
-    gpu_timer_cpp = None
+    # print("Please build the extension first by running: pip install .")
+    # TODO: ^^ this print is outdated
+    gpu_timer = None
 
 
 class TimedModule:

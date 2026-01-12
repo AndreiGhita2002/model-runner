@@ -1,14 +1,14 @@
 import pprint
 import queue
 import time
-from typing import Any, List, Dict, Optional, Tuple
+from typing import Any, List, Dict, Optional
 
 import torch
 from torch import nn
 from torch.multiprocessing.queue import Queue
 
-from src.model_splitter import ModelSplitter, extract_timing_profile_from_logs
-from src.timed_module import TimedModule, make_module_timed
+from model_splitter import ModelSplitter, extract_timing_profile_from_logs
+from timed_module import TimedModule, make_module_timed
 from tests.conv_next import ConvNext
 from tests.simple_net import SimpleNet
 
@@ -114,8 +114,8 @@ class MainService:
 
     models: Dict[str, nn.Module] = {}
     multi_device_models: Dict[str, MultiDeviceWrapper] = {}
-    # Work Queue: (request ID, model name, input data)
-    work_queue: Queue[Tuple[int, str, Any]] = queue.Queue()
+    # Work Queue: (request ID, model name, input data): Tuple[int, str, Any]
+    work_queue: Queue = queue.Queue()
     # Model Outputs: request ID -> output # TODO: make sure this Dict is multi thread safe
     model_outputs: Dict[int, Any] = {}
     # Threshold equal to the minimum change in a models performance that triggers rebalancing

@@ -11,7 +11,8 @@ dependencies = [
     "numpy>=1.24,<2.5",
     "flask>=3.1.2",
     "flask-cors>=6.0.1",
-    "setuptools>=80.9.0",
+    "setuptools<=70.2.0",
+    "ninja",
 ]
 
 [build-system]
@@ -24,11 +25,6 @@ name = "pytorch-cuda"
 url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
-# Use PyTorch CUDA wheels only on Linux x86_64
 [tool.uv.sources]
-torch = [
-    { index = "pytorch-cuda", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
-]
-torchvision = [
-    { index = "pytorch-cuda", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
-]
+torch = { index = "pytorch-cuda" }
+torchvision = { index = "pytorch-cuda" }
