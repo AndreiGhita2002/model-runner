@@ -1,4 +1,3 @@
-import pprint
 import queue
 import time
 from typing import Any, List, Dict, Optional
@@ -9,8 +8,6 @@ from torch.multiprocessing.queue import Queue
 
 from model_splitter import ModelSplitter, extract_timing_profile_from_logs
 from timed_module import TimedModule, make_module_timed
-from tests.conv_next import ConvNext
-from tests.simple_net import SimpleNet
 
 
 class DeviceManager:
@@ -147,34 +144,23 @@ class MainService:
 
         self.timing_profiles: Dict[str, Dict[str, float]] = {}
 
-        print("Initializing MainService...")
-        self._initialize_test_models()
+    def add_model(self, model_name: str, model: nn.Module, device=None, depth: int | None=None):
+        if device is None:
+            device = str(self.primary_device)
 
-    def _initialize_test_models(self):
-        """Initialize test models."""
-        print(f"Creating models on primary device: {self.primary_device}")
+        depth = depth or self.depth
 
-        simple_net = SimpleNet(str(self.primary_device))
-        conv_next = ConvNext(str(self.primary_device))
-
-        self.models['simple-net'] = make_module_timed(
-            simple_net,
-            device=str(self.primary_device),
-            depth=self.depth
+        self.models[model_name] = make_module_timed(
+            model,
+            device=device,
+            depth=depth
         )
-        self.models['conv-next'] = make_module_timed(
-            conv_next,
-            device=str(self.primary_device),
-            depth=self.depth
-        )
-
-        print(f"Initialized {len(self.models)} models")
 
     def queue_work(self, model_name: str, x: Any, request_id: int):
         self.work_queue.put((request_id, model_name, x))
 
-    def get_work_results(self, request_id: int) -> Any:
-        return self.model_outputs[request_id]
+    def get_work_results(self, request_id: int) -> Any | None:
+        return self.model_outputs.get(request_id, None)
 
     def run(self, exit_when_done = False):
         # main loop
@@ -525,25 +511,3 @@ class MainService:
             has_profile = name in self.timing_profiles
             has_multi_device = name in self.multi_device_models
             print(f"  {name}: profiled={has_profile}, multi_device={has_multi_device}")
-
-#TODO this should be in test_main.py
-# it was temporarily moved here
-def test_main_service():
-    N_RUNS = 5
-    RESULT_FILE = "results.txt"
-
-    main = MainService(
-        depth=2,
-        use_multi_device=True,
-        split_strategy="computation_based"
-    )
-
-    main.print_status()
-
-    for i in range(N_RUNS):
-        for j, model_name in enumerate(main.models.keys()):
-            main.queue_work(model_name, None, j)
-            #TODO(you were here): finish the main test
-
-if __name__ == '__main__':
-    test_main_service()

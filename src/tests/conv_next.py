@@ -4,6 +4,7 @@ import torch
 
 
 class ConvNext:
+    # TODO: Why is this wrapper necessary?
     model: ConvNeXt
 
     def __init__(self, device):
