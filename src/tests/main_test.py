@@ -51,9 +51,9 @@ def test_main_service():
             req = j + i * len(main.models)
             res = main.get_work_results(req)
             if res is None:
-                print(f"[req:{req} ERR] Work results for {model_name}, run {j} failed!")
+                print(f"[req:{req} ERR] Work results for {model_name}, run {i} failed!")
             else:
-                print(f"[req:{req} OK] Work results for {model_name}, run {j} succeeded!")
+                print(f"[req:{req} OK] Work results for {model_name}, run {i} succeeded!")
 
     # Print outputs:
     # pprint.pprint(main.model_outputs)
