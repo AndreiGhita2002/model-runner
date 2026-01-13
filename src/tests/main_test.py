@@ -55,7 +55,8 @@ def test_main_service():
             else:
                 print(f"[req:{req} OK] Work results for {model_name}, run {j} succeeded!")
 
-    pprint.pprint(main.model_outputs)
+    # Print outputs:
+    # pprint.pprint(main.model_outputs)
 
 
 if __name__ == '__main__':

@@ -111,12 +111,12 @@ class CUDATimedModule(TimedModule):
                 if isinstance(child, TimedModule):
                     logs['children'][child_name] = child.get_logs()
 
-    def run(self, x=None):
+    def run(self, x=None) -> Any:
         if x is None:
             x = self.rand_inputs()
 
         with torch.no_grad():
-            self.forward(x)
+            return self(x)
 
 
 #==================

@@ -424,7 +424,7 @@ class MainService:
             print(f"MainService.run_model: model '{model_name}' not found!")
             return None
 
-        if randomise_input or x is None: #TODO: maybe make it so it's random if x is None
+        if randomise_input or x is None:
             if callable(model.rand_inputs):
                 x = model.rand_inputs()
             if x is None:
