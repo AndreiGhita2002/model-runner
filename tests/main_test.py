@@ -5,9 +5,9 @@ from typing import Dict, List, Any
 import torch
 from torch import nn
 
-from main import MainService, DeviceManager, MultiDeviceWrapper
-from model_splitter import ModelSplitter
-from timed_module import TimedModule
+from model_runner.main import MainService, DeviceManager, MultiDeviceWrapper
+from model_runner.model_splitter import ModelSplitter
+from model_runner.timed_module import TimedModule
 from tests.conv_next import ConvNext
 from tests.simple_net import SimpleNet
 
@@ -64,7 +64,8 @@ class MockTimedModule(TimedModule):
     Used to simulate different model execution times for testing rebalancing.
     """
     def __init__(self, module: nn.Module, timing_profile: Dict[str, float]):
-        # Don't call super().__init__ to avoid device issues
+        # Call nn.Module.__init__ directly to avoid TimedModule's device setup
+        nn.Module.__init__(self)
         self.inner = module
         self.device = 'cpu'
         self.depth = 1

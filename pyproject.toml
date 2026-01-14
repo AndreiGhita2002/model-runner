@@ -11,13 +11,19 @@ dependencies = [
     "numpy>=1.24,<2.5",
     "flask>=3.1.2",
     "flask-cors>=6.0.1",
-    "setuptools<=70.2.0",
+#    "setuptools<=70.2.0",
     "ninja",
 ]
 
-[build-system]
-requires = ["setuptools>=42", "wheel"]
-build-backend = "setuptools.build_meta"
+#[build-system]
+#requires = ["setuptools>=42", "wheel"]
+#build-backend = "setuptools.build_meta"
+
+#[tool.setuptools.packages.find]
+#where = ["src"]
+
+#[tool.setuptools.package-data]
+#model_runner = ["gpu_timer/*.cpp", "gpu_timer/*.cu"]
 
 # CUDA index for Linux/Windows
 [[tool.uv.index]]
@@ -25,7 +31,7 @@ name = "pytorch-cuda"
 url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
-# Use CUDA pytorch on anything but mac
+# Use CUDA pytorch on anything but Mac
 [tool.uv.sources]
 torch = [
     { index = "pytorch-cuda", marker = "sys_platform != 'darwin'" },

@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from model_splitter import ModelSplitter
+from model_runner.model_splitter import ModelSplitter
 
 
 def test_model_splitter():

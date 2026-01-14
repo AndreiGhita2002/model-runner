@@ -6,8 +6,8 @@ import torch
 from torch import nn
 from torch.multiprocessing.queue import Queue
 
-from model_splitter import ModelSplitter, extract_timing_profile_from_logs
-from timed_module import TimedModule, make_module_timed
+from .model_splitter import ModelSplitter, extract_timing_profile_from_logs
+from .timed_module import TimedModule, make_module_timed
 
 
 class DeviceManager:
