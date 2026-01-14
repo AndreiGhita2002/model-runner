@@ -19,12 +19,17 @@ dependencies = [
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
-# CUDA index for Linux
+# CUDA index for Linux/Windows
 [[tool.uv.index]]
 name = "pytorch-cuda"
 url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
+# Use CUDA pytorch on anything but mac
 [tool.uv.sources]
-torch = { index = "pytorch-cuda" }
-torchvision = { index = "pytorch-cuda" }
+torch = [
+    { index = "pytorch-cuda", marker = "sys_platform != 'darwin'" },
+]
+torchvision = [
+    { index = "pytorch-cuda", marker = "sys_platform != 'darwin'" },
+]

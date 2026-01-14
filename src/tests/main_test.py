@@ -25,7 +25,8 @@ def test_main_service():
     main = MainService(
         depth=2,
         use_multi_device=True,
-        split_strategy="computation_based"
+        split_strategy="computation_based",
+        verbose=True,
     )
     initialize_test_models(main)
 

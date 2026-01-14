@@ -121,13 +121,16 @@ class MainService:
     # Timing data for rebalancing operations (in nanoseconds)
     # Structure: model_name -> {'total': [...], 'split_spec': [...], 'apply_split': [...]}
     rebalance_timings: Dict[str, Dict[str, List[int]]] = {}
+    # Verbose logging flag
+    verbose: bool = False
 
-    def __init__(self, depth=2, use_multi_device=True, split_strategy="computation_based"):
+    def __init__(self, depth=2, use_multi_device=True, split_strategy="computation_based", verbose=False):
         """
         Args:
             depth: Depth for TimedModule profiling
             use_multi_device: Whether to use multi-device splitting
             split_strategy: Strategy for splitting models
+            verbose: Enable verbose logging output
         """
         self.device_manager = DeviceManager()
         self.primary_device = self.device_manager.get_device(0)
@@ -135,6 +138,7 @@ class MainService:
         self.depth = depth
         self.use_multi_device = use_multi_device
         self.split_strategy = split_strategy
+        self.verbose = verbose
 
         self.num_stages = self.device_manager.num_devices()
         self.splitter = ModelSplitter(
@@ -143,6 +147,11 @@ class MainService:
         )
 
         self.timing_profiles: Dict[str, Dict[str, float]] = {}
+
+    def _log(self, msg: str):
+        """Print message if verbose logging is enabled."""
+        if self.verbose:
+            print(msg)
 
     def add_model(self, model_name: str, model: nn.Module, device=None, depth: int | None=None):
         if device is None:
@@ -163,19 +172,23 @@ class MainService:
         return self.model_outputs.get(request_id, None)
 
     def run(self, exit_when_done = False):
+        self._log("MainService.run: starting main loop")
         # main loop
         while True:
             # check queue
             if not self.work_queue.empty():
                 #run models
                 (req_id, model_name, work) = self.work_queue.get(block=True)
+                self._log(f"MainService.run: processing request {req_id} for model '{model_name}'")
 
                 output = self.run_model(model_name=model_name, x=work)
+                self._log(f"MainService.run: completed request {req_id}, output type: {type(output).__name__}")
 
                 # output the output
                 self.model_outputs[req_id] = output
 
                 # rebalance the models
+                self._log("MainService.run: triggering rebalance")
                 self.rebalance_models()
             else:
                 #TODO: make MainService.run more like a service
@@ -185,6 +198,7 @@ class MainService:
 
                 # For now, we exit when the queue is done
                 if exit_when_done:
+                    self._log("MainService.run: queue empty, exiting")
                     return
 
     def rebalance_models(self):
@@ -203,32 +217,41 @@ class MainService:
         - A threshold of 10% change in timing distribution triggers rebalancing
         """
         func_start_ns = time.time_ns()
+        self._log("rebalance_models: starting")
 
         if self.num_stages < 2:
             # No rebalancing needed with only one device
+            self._log("rebalance_models: skipping, only one device available")
             return
 
         for model_name, model in self.models.items():
             # Skip models that don't have multi-device wrappers yet
             if model_name not in self.multi_device_models:
+                self._log(f"rebalance_models: skipping '{model_name}', no multi-device wrapper")
                 continue
 
             # Extract timing information from the model's most recent run
             if not isinstance(model, TimedModule):
+                self._log(f"rebalance_models: skipping '{model_name}', not a TimedModule")
                 continue
 
             logs = model.get_logs()
             if logs is None:
+                self._log(f"rebalance_models: skipping '{model_name}', no logs available")
                 continue
 
             new_profile = extract_timing_profile_from_logs(logs)
             if not new_profile:
+                self._log(f"rebalance_models: skipping '{model_name}', empty timing profile")
                 continue
 
             # Check if the timing profile has changed significantly
             old_profile = self.timing_profiles.get(model_name, {})
             if not self._should_rebalance(old_profile, new_profile):
+                self._log(f"rebalance_models: skipping '{model_name}', timing change below threshold")
                 continue
+
+            self._log(f"rebalance_models: '{model_name}' needs rebalancing")
 
             # Update the stored timing profile
             self.timing_profiles[model_name] = new_profile
@@ -238,28 +261,33 @@ class MainService:
             inner_model = wrapper.model
 
             # Create a new split specification based on updated timing
+            self._log(f"rebalance_models: computing new split spec for '{model_name}'")
             split_spec_start_ns = time.time_ns()
             new_split_spec = self.splitter.create_split_spec(
                 inner_model,
                 timing_profile=new_profile
             )
             split_spec_elapsed_ns = time.time_ns() - split_spec_start_ns
+            self._log(f"rebalance_models: split spec computed in {split_spec_elapsed_ns / 1e6:.2f}ms")
 
             # Check if the split specification actually changed
             if new_split_spec == wrapper.split_spec:
+                self._log(f"rebalance_models: split spec unchanged for '{model_name}', skipping")
                 continue
 
-            print(f"Rebalancing model: {model_name}")
-            print(f"  Old split: {wrapper.split_spec}")
-            print(f"  New split: {new_split_spec}")
+            self._log(f"rebalance_models: rebalancing '{model_name}'")
+            self._log(f"  Old split: {wrapper.split_spec}")
+            self._log(f"  New split: {new_split_spec}")
 
             # Apply the new split to devices
+            self._log(f"rebalance_models: applying split to devices for '{model_name}'")
             apply_split_start_ns = time.time_ns()
             devices = self.device_manager.get_all_devices()
             inner_model = self.splitter.apply_split_to_devices(
                 inner_model, new_split_spec, devices
             )
             apply_split_elapsed_ns = time.time_ns() - apply_split_start_ns
+            self._log(f"rebalance_models: split applied in {apply_split_elapsed_ns / 1e6:.2f}ms")
 
             # Update the wrapper with new split specification
             wrapper.split_spec = new_split_spec
@@ -267,6 +295,7 @@ class MainService:
 
             # Record timing data for this rebalancing operation
             func_elapsed_ns = time.time_ns() - func_start_ns
+            self._log(f"rebalance_models: '{model_name}' rebalanced in {func_elapsed_ns / 1e6:.2f}ms total")
             if model_name not in self.rebalance_timings:
                 self.rebalance_timings[model_name] = {
                     'total': [],
