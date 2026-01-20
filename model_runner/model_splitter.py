@@ -11,7 +11,7 @@ class ModelSplitter:
     Split Strategy: What are we splitting?
     1. Natural guess: Split at modules that would be 'natural' split points. This is opinionated.
     2. Depth: split at depth N  #TODO: do we want this?
-    3. All: Split at all the child modules of the model.
+    3. All: Split at all the child modules of the model. <--
 
     Distribution Strategies: How are we splitting?
     1. Layer-based: Split at sequential container boundaries (Conv blocks, Transformer layers)
@@ -235,7 +235,7 @@ class ModelSplitter:
             if time == 0.0:
                 for profile_name, profile_time in timing_profile.items():
                     if name in profile_name or profile_name in name:
-                        time = max(time, profile_time)
+                        time = max(0.0, profile_time)
             layer_times.append((name, time))
 
         # Calculate target time per stage
@@ -250,6 +250,9 @@ class ModelSplitter:
         current_stage_time = 0.0
         current_stage = 0
 
+        # TODO: an issue with this is that it does not take into account
+        #  what layers feed into which layers
+        #  i.e. it might assign layers in such a way that too much time is wasted in communication
         for i, (name, time) in enumerate(layer_times):
             split_spec[name] = current_stage
             current_stage_time += time
@@ -360,6 +363,8 @@ class ModelSplitter:
         """
         if len(devices) < self.num_stages:
             raise ValueError(f"Need {self.num_stages} devices but only {len(devices)} provided")
+
+        # TODO: maybe actually use torch pipelining
 
         # Move modules to their assigned devices
         for name, module in model.named_children():
