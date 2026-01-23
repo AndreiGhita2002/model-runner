@@ -1,4 +1,5 @@
 import uuid
+import multiprocessing as mp
 from dataclasses import dataclass
 from typing import Optional, Any
 
@@ -6,6 +7,35 @@ from torch.distributed.pipelining import pipeline, PipelineStage, ScheduleGPipe,
 import torch.distributed as dist
 
 from model_runner import TimedModule, DeviceManager, PipelineOptimizer, GreedyPipelineOptimizer
+
+
+def _optimizer_process_worker(
+    optimizer: PipelineOptimizer,
+    request_queue: mp.Queue,
+    result_queue: mp.Queue,
+    shutdown_event: mp.Event,
+):
+    """
+    Background worker process that runs the pipeline optimiser.
+
+    Listens for optimisation requests and sends back new configs.
+    """
+    while not shutdown_event.is_set():
+        try:
+            # Non-blocking check with timeout to allow shutdown
+            request = request_queue.get(timeout=0.1)
+        except:
+            continue
+
+        time_logs, current_config = request
+
+        # Check if we should rebalance
+        if optimizer.should_rebalance(time_logs, current_config):
+            new_config = optimizer.optimize(time_logs, current_config)
+            result_queue.put(new_config)
+        else:
+            # Signal that we checked but no rebalance needed
+            result_queue.put(None)
 
 
 @dataclass
@@ -38,6 +68,7 @@ class AdaptivePipeline:
             rebalance_threshold: int = 0.1,
             initial_pipeline_config: PipelineConfig | None = None,
             verbose: bool = False,
+            async_optimization: bool = False,
     ):
         self.original_model = model
         self.name = model_name
@@ -47,6 +78,7 @@ class AdaptivePipeline:
         self.time_logs = {}
         self.batch_i = 0
         self.verbose = verbose
+        self.async_optimization = async_optimization
 
         self.pipeline_optimizer = pipeline_optimizer if pipeline_optimizer else GreedyPipelineOptimizer()
 
@@ -55,6 +87,16 @@ class AdaptivePipeline:
         self.pipe = None
         self.stages = []
         self.scheduler = None
+
+        # Async optimization state
+        self._optimizer_process: Optional[mp.Process] = None
+        self._request_queue: Optional[mp.Queue] = None
+        self._result_queue: Optional[mp.Queue] = None
+        self._shutdown_event: Optional[mp.Event] = None
+        self._pending_optimization: bool = False
+
+        if self.async_optimization:
+            self._start_optimizer_process()
 
         # Initial pipeline setup
         if initial_pipeline_config is None:
@@ -65,6 +107,55 @@ class AdaptivePipeline:
         """Print message if verbose logging is enabled."""
         if self.verbose:
             print(msg)
+
+    def _start_optimizer_process(self):
+        """Start the background optimiser process."""
+        self._request_queue = mp.Queue()
+        self._result_queue = mp.Queue()
+        self._shutdown_event = mp.Event()
+
+        self._optimizer_process = mp.Process(
+            target=_optimizer_process_worker,
+            args=(
+                self.pipeline_optimizer,
+                self._request_queue,
+                self._result_queue,
+                self._shutdown_event,
+            ),
+            daemon=True,
+        )
+        self._optimizer_process.start()
+        self._log(f"Started optimizer process (PID: {self._optimizer_process.pid})")
+
+    def _stop_optimizer_process(self):
+        """Stop the background optimiser process."""
+        if self._optimizer_process is not None:
+            self._shutdown_event.set()
+            self._optimizer_process.join(timeout=1.0)
+            if self._optimizer_process.is_alive():
+                self._optimizer_process.terminate()
+            self._optimizer_process = None
+            self._log("Stopped optimizer process")
+
+    def _send_optimization_request(self):
+        """Send current state to the optimiser process (non-blocking)."""
+        if not self._pending_optimization:
+            self._request_queue.put((self.time_logs.copy(), self.current_config))
+            self._pending_optimization = True
+            self._log("Sent optimization request to background process")
+
+    def _check_optimization_result(self) -> Optional[PipelineConfig]:
+        """Check if the optimiser has a result ready (non-blocking)."""
+        try:
+            result = self._result_queue.get_nowait()
+            self._pending_optimization = False
+            return result
+        except:
+            return None
+
+    def shutdown(self):
+        """Clean up resources."""
+        self._stop_optimizer_process()
 
     def _initial_pipeline_config(self) -> PipelineConfig:
         """Generate initial balanced split."""
@@ -83,33 +174,47 @@ class AdaptivePipeline:
     def forward(self, x: Any) -> Any:
         rank = dist.get_rank()
 
-        # Only the first thread gets the input
+        # Only the first rank gets the input
         if rank == 0:
             output = self.scheduler.step(x)
         else:
             output = self.scheduler.step()
 
         self.update_logs()
+        self.batch_i += 1
 
+        if self.async_optimization:
+            self._forward_async_optimization()
+        else:
+            self._forward_sync_optimization()
+
+        return output
+
+    def _forward_sync_optimization(self):
+        """Synchronous optimization: blocks during rebalancing."""
         if self.batch_i != 0 and self.batch_i % self.rebalance_interval == 0:
             self.batch_i = 0
             if self.pipeline_optimizer.should_rebalance(self.time_logs, self.current_config):
-                self.optimize_pipeline()
+                self._log("Sync optimization: rebalancing pipeline")
+                new_config = self.pipeline_optimizer.optimize(self.time_logs, self.current_config)
+                self.time_logs = {}
+                dist.barrier()
+                self.rebuild_pipeline(new_config)
 
-        return output #TODO: output before you rebalance
+    def _forward_async_optimization(self):
+        """Async optimization: runs optimiser in background process."""
+        # Check if we should send a new optimisation request
+        if self.batch_i != 0 and self.batch_i % self.rebalance_interval == 0:
+            self.batch_i = 0
+            self._send_optimization_request()
 
-    def optimize_pipeline(self):
-        """Runs the pipeline optimiser to generate a new pipeline config."""
-        # TODO: make this distributed, in theory it should be possible
-
-        # Create the new config
-        new_config = self.pipeline_optimizer.optimize(self.time_logs, self.current_config)
-
-        # Reset logs
-        self.time_logs = {}
-
-        # Rebuild pipeline
-        self.rebuild_pipeline(new_config)
+        # Check if a result is ready (non-blocking)
+        new_config = self._check_optimization_result()
+        if new_config is not None:
+            self._log("Async optimization: received new config, rebuilding pipeline")
+            self.time_logs = {}
+            dist.barrier()
+            self.rebuild_pipeline(new_config)
 
     def rebuild_pipeline(self, config: PipelineConfig):
         """Create a new pipeline from config."""
