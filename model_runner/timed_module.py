@@ -12,8 +12,6 @@ try:
     print("gpu_timer imported successfully!")
 except ImportError:
     print("Error: 'gpu_timer' module not found.")
-    # print("Please build the extension first by running: pip install .")
-    # TODO: ^^ this print is outdated
     gpu_timer = None
 
 
@@ -70,6 +68,19 @@ class TimedModule(nn.Module):
             print("Inner module does not have a `rand_inputs` function!")
             return None
 
+    def to(self, *args, **kwargs):
+        """Override to() to update self.device when module is moved."""
+        result = super().to(*args, **kwargs)
+        # Update device from first parameter/buffer we can find
+        for param in self.parameters():
+            self.device = param.device
+            break
+        for buffer in self.buffers():
+            self.device = buffer.device
+            break
+        return result
+
+
 #==================
 # CUDA GPU Timed Module
 #==================
@@ -117,7 +128,8 @@ class CUDATimedModule(TimedModule):
         Will synchronise and then output elapsed cycles.
         Not torch.compile friendly.
         """
-        torch.cuda.synchronize()
+        # Sync the device where the buffer actually lives
+        torch.cuda.synchronize(self.time_buffer.device)
 
         self.last_elapsed_cycles = self.time_buffer.item()
         return self.last_elapsed_cycles
