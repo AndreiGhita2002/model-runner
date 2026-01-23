@@ -1,4 +1,5 @@
-from typing import Any
+import uuid
+from typing import Any, Dict, List
 from collections import defaultdict
 
 import torch
@@ -16,12 +17,19 @@ except ImportError:
     gpu_timer = None
 
 
+timed_module_registry = {}
+
 class TimedModule(nn.Module):
     def __init__(self, module: nn.Module, device, depth=10, wrapping_a_wrapper=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.inner = module
         self.device = device
         self.depth = depth
+
+        self.uuid = uuid.uuid4()
+        timed_module_registry[self.uuid] = self
+        self.parent_stage = None
+
         if wrapping_a_wrapper is not None:
             self.wrapping_a_wrapper = wrapping_a_wrapper
         else:
@@ -30,7 +38,7 @@ class TimedModule(nn.Module):
     def run(self, x=None):
         pass
 
-    def get_logs(self):
+    def get_logs(self, logs: Dict[uuid.UUID, List[float]] | None = None) -> Dict[uuid.UUID, List[float]]:
         pass
 
     def _inner(self) -> nn.Module:
@@ -39,6 +47,9 @@ class TimedModule(nn.Module):
         else:
             return self.inner.model
 
+    def _get_name(self):
+        return self._inner()._get_name()
+
     def rand_inputs(self) -> Any:
         if callable(self.inner.rand_inputs):
             return self.inner.rand_inputs()
@@ -46,6 +57,8 @@ class TimedModule(nn.Module):
             print("Inner module does not have a `rand_inputs` function!")
             return None
 
+timed_module_registry: Dict[uuid.UUID, TimedModule]
+timed_module_structure: Dict[uuid.UUID, dict] # TODO: might be useful to store a tree structure of the models
 
 #==================
 # CUDA GPU Timed Module
@@ -70,10 +83,11 @@ class CUDATimedModule(TimedModule):
         self.timing_depth = depth
 
         # Wrap children as well
-        if depth > 0:
+        if depth is None or depth > 0:
             for child_name, child in list(self._inner().named_children()):
                 # Decrement the depth when we go deeper in the tree
-                wrapped_child = CUDATimedModule(child, device, depth=depth - 1)
+                d = None if depth is None else (depth - 1)
+                wrapped_child = CUDATimedModule(child, device, depth=d)
                 setattr(self._inner(), child_name, wrapped_child)
                 # TODO: test this
 
@@ -97,19 +111,23 @@ class CUDATimedModule(TimedModule):
         self.last_elapsed_cycles = self.time_buffer.item()
         return self.last_elapsed_cycles
 
-    def get_logs(self):
-        logs = {
-            'module_name': self.inner._get_name(),
-            'times': {
-                'elapsed': self.get_last_elapsed_cycles(),
-            },
-            'children': [],
-        }
+    def get_logs(self, existing_logs: Dict[uuid.UUID, List[float]] | None = None) -> Dict[uuid.UUID, List[float]]:
+        if existing_logs is None:
+            existing_logs = {}
 
-        if self.depth > 0:
-            for child_name, child in list(self._inner().named_children()):
-                if isinstance(child, TimedModule):
-                    logs['children'][child_name] = child.get_logs()
+        def recurse_get_logs(module: TimedModule, logs: Dict[uuid.UUID, List[float]]):
+            if logs.get(module.uuid, None) is None:
+                logs[module.uuid] = module.get_last_elapsed_cycles()
+            else:
+                logs[module.uuid].append(module.get_last_elapsed_cycles())
+
+            if module.depth > 0:
+                for child_name, child in module._inner().named_children():
+                    if isinstance(child, TimedModule):
+                        child.recurse_get_logs(logs)
+
+        recurse_get_logs(self, logs=existing_logs)
+        return existing_logs
 
     def run(self, x=None) -> Any:
         if x is None:
@@ -254,7 +272,7 @@ class CPUTimedModule(TimedModule):
 
 
 #==================
-def make_module_timed(module: nn.Module, device=None, depth=10) -> TimedModule:
+def make_module_timed(module: nn.Module, device=None, depth=None) -> TimedModule:
     if device is None:
         if torch.cuda.is_available():
             device = "cuda"

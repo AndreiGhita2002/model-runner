@@ -1,0 +1,211 @@
+import uuid
+from abc import ABC, abstractmethod
+from typing import List, Tuple
+
+from torch.distributed.pipelining import SplitPoint
+
+from model_runner.adaptive_pipeline import PipelineConfig
+from model_runner.timed_module import timed_module_registry, TimedModule
+
+
+class PipelineOptimizer(ABC):
+    """Abstract base class for pipeline optimisers."""
+
+    def __init__(self, num_stages: int = 2):
+        self.num_stages = num_stages
+
+    @abstractmethod
+    def optimize(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig) -> PipelineConfig:
+        """
+        Optimise pipeline configuration based on timing data.
+
+        Args:
+            time_logs: Dict mapping TimedModule UUIDs to lists of elapsed times
+            old_config: The current pipeline configuration
+
+        Returns:
+            New PipelineConfig with optimised split points
+        """
+        pass
+
+    @abstractmethod
+    def should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
+        """
+        Determine if rebalancing is needed based on timing data.
+
+        Args:
+            time_logs: Dict mapping TimedModule UUIDs to lists of elapsed times
+            current_config: The current pipeline configuration
+
+        Returns:
+            True if the pipeline should be rebalanced
+        """
+        pass
+
+
+class GreedyPipelineOptimizer(PipelineOptimizer):
+    """
+    Pipeline optimiser using a greedy algorithm to balance computation time across stages.
+
+    TODO: this optimizer is pretty dumb
+    """
+
+    def __init__(self, num_stages: int = 2, rebalance_threshold: float = 0.1):
+        super().__init__(num_stages)
+        self.rebalance_threshold = rebalance_threshold
+
+    def should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
+        """
+        Determine if rebalancing is needed based on timing profile changes.
+
+        Compares the first and last elements from the current logs to detect drift.
+        Returns True if timing distribution has changed by more than the threshold.
+        """
+        if not time_logs:
+            return True
+
+        # Build profiles from first and last elements of each time list
+        first_profile = {}
+        last_profile = {}
+
+        for module_uuid, times in time_logs.items():
+            if isinstance(times, list) and len(times) >= 2:
+                first_profile[module_uuid] = times[0]
+                last_profile[module_uuid] = times[-1]
+
+        if not first_profile:
+            return True
+
+        # Calculate total time for normalisation
+        first_total = sum(first_profile.values())
+        last_total = sum(last_profile.values())
+
+        if first_total == 0 or last_total == 0:
+            return True
+
+        # Compare normalised timing distributions
+        max_change = 0.0
+
+        for module_uuid in first_profile:
+            first_ratio = first_profile[module_uuid] / first_total
+            last_ratio = last_profile[module_uuid] / last_total
+            change = abs(last_ratio - first_ratio)
+            max_change = max(max_change, change)
+
+        return max_change > self.rebalance_threshold
+
+    def optimize(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig) -> PipelineConfig:
+        """
+        Optimise pipeline configuration based on timing data.
+        Uses a greedy algorithm to balance computation time across stages.
+
+        Args:
+            time_logs: Dict mapping TimedModule UUIDs to lists of elapsed times
+            old_config: The current pipeline configuration
+
+        Returns:
+            New PipelineConfig with optimized split points
+        """
+        if not time_logs:
+            return old_config
+
+        # Build list of (module_name, avg_time) tuples from time_logs
+        layer_times = self._extract_layer_times(time_logs)
+
+        if not layer_times:
+            return old_config
+
+        # Calculate target time per stage
+        total_time = sum(t for _, t in layer_times)
+        if total_time == 0:
+            return old_config
+
+        target_time_per_stage = total_time / self.num_stages
+
+        # Greedily assign layers to stages
+        stage_assignments = self._assign_layers_to_stages(layer_times, target_time_per_stage)
+
+        # Build new split_spec: mark where stages change with SplitPoint.BEGINNING
+        split_spec = self._build_split_spec(stage_assignments)
+
+        # Preserve device mapping from old config
+        device_mapping = old_config.device_mapping
+
+        return PipelineConfig(split_spec=split_spec, device_mapping=device_mapping)
+
+    def _extract_layer_times(self, time_logs: dict[uuid.UUID, list[float]]) -> List[Tuple[str, float]]:
+        """
+        Extract layer names and average times from UUID-based time logs.
+
+        Returns:
+            List of (layer_name, avg_time) tuples sorted by module hierarchy
+        """
+        layer_times = []
+
+        for module_uuid, times in time_logs.items():
+            # Look up the TimedModule from the registry
+            timed_module = timed_module_registry.get(module_uuid)
+            if timed_module is None:
+                continue
+
+            # Get the module name
+            module_name = timed_module._get_name()
+
+            # Calculate average time (or use latest if only one)
+            if isinstance(times, list) and len(times) > 0:
+                avg_time = sum(times) / len(times)
+            elif isinstance(times, (int, float)):
+                avg_time = float(times)
+            else:
+                avg_time = 0.0
+
+            layer_times.append((module_name, avg_time))
+
+        return layer_times
+
+    def _assign_layers_to_stages(
+        self,
+        layer_times: List[Tuple[str, float]],
+        target_time_per_stage: float
+    ) -> List[Tuple[str, int]]:
+        """
+        Greedily assign layers to stages to balance computation time.
+
+        Returns:
+            List of (layer_name, stage_index) tuples
+        """
+        assignments = []
+        current_stage_time = 0.0
+        current_stage = 0
+
+        for i, (name, time) in enumerate(layer_times):
+            assignments.append((name, current_stage))
+            current_stage_time += time
+
+            # Move to next stage if we've exceeded target and not on last stage
+            if (current_stage_time >= target_time_per_stage and
+                current_stage < self.num_stages - 1 and
+                i < len(layer_times) - 1):
+
+                current_stage += 1
+                current_stage_time = 0.0
+
+        return assignments
+
+    def _build_split_spec(self, stage_assignments: List[Tuple[str, int]]) -> dict:
+        """
+        Build split_spec dict marking stage boundaries with SplitPoint.BEGINNING.
+
+        Returns:
+            Dict mapping layer names to SplitPoint.BEGINNING for stage boundaries
+        """
+        split_spec = {}
+
+        prev_stage = 0
+        for name, stage in stage_assignments:
+            # Mark the beginning of a new stage (skip stage 0, as it's implicit)
+            if stage > prev_stage:
+                split_spec[name] = SplitPoint.BEGINNING
+                prev_stage = stage
+
+        return split_spec

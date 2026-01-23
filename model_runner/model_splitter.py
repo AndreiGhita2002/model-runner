@@ -1,3 +1,8 @@
+# WARNING: This file has been deprecated! It probably does not work with the rest of the project
+
+import warnings
+warnings.warn("deprecated", DeprecationWarning)
+
 from typing import List, Dict, Tuple, Optional
 
 import torch
