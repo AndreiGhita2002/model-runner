@@ -1,3 +1,4 @@
+import queue
 import uuid
 import multiprocessing as mp
 from dataclasses import dataclass
@@ -6,7 +7,7 @@ from typing import Optional, Any
 from torch.distributed.pipelining import pipeline, PipelineStage, ScheduleGPipe, SplitPoint
 import torch.distributed as dist
 
-from model_runner import TimedModule, DeviceManager, PipelineOptimizer, GreedyPipelineOptimizer
+from model_runner import TimedModule, DeviceManager, PipelineOptimizer, GreedyPipelineOptimizer, timed_module_registry
 
 
 def _optimizer_process_worker(
@@ -24,7 +25,7 @@ def _optimizer_process_worker(
         try:
             # Non-blocking check with timeout to allow shutdown
             request = request_queue.get(timeout=0.1)
-        except:
+        except queue.Empty:
             continue
 
         time_logs, current_config = request
@@ -54,7 +55,7 @@ class AdaptivePipeline:
     # Current batch index; set back to 0 when rebalance_interval is reached
     batch_i: int
     # Threshold equal to the minimum change in a models performance that triggers rebalancing
-    rebalance_threshold: int
+    rebalance_threshold: float
     # Time logs
     time_logs: dict[uuid.UUID, list[float]]
 
@@ -65,7 +66,7 @@ class AdaptivePipeline:
             device_manager: DeviceManager,
             pipeline_optimizer: PipelineOptimizer = None,
             rebalance_interval: int = 10,
-            rebalance_threshold: int = 0.1,
+            rebalance_threshold: float = 0.1,
             initial_pipeline_config: PipelineConfig | None = None,
             verbose: bool = False,
             async_optimization: bool = False,
@@ -80,7 +81,9 @@ class AdaptivePipeline:
         self.verbose = verbose
         self.async_optimization = async_optimization
 
-        self.pipeline_optimizer = pipeline_optimizer if pipeline_optimizer else GreedyPipelineOptimizer()
+        self.pipeline_optimizer = pipeline_optimizer if pipeline_optimizer else GreedyPipelineOptimizer(
+            rebalance_threshold=rebalance_threshold
+        )
 
         # Current pipeline state
         self.current_config = None
@@ -150,7 +153,7 @@ class AdaptivePipeline:
             result = self._result_queue.get_nowait()
             self._pending_optimization = False
             return result
-        except:
+        except queue.Empty:
             return None
 
     def shutdown(self):
@@ -159,14 +162,21 @@ class AdaptivePipeline:
 
     def _initial_pipeline_config(self) -> PipelineConfig:
         """Generate initial balanced split."""
-        children = list(self.original_model.named_children())
+        children = list(self.original_model.inner().named_children())
         num_devices = self.device_manager.num_devices()
 
         # Simple initial split: divide evenly across devices
         step = max(1, len(children) // num_devices)
-        split_points = [children[i * step][0] for i in range(1, num_devices)]
+        split_point_indices = [i * step for i in range(1, num_devices)]
 
-        split_spec = {name: SplitPoint.BEGINNING for name in split_points}
+        # Get UUIDs from the TimedModule children at split points
+        split_spec = {}
+        for idx in split_point_indices:
+            if idx < len(children):
+                _, child_module = children[idx]
+                if hasattr(child_module, 'uuid'):
+                    split_spec[child_module.uuid] = SplitPoint.BEGINNING
+
         device_mapping = {i: self.device_manager.get_device(i) for i in range(num_devices)}
 
         return PipelineConfig(split_spec=split_spec, device_mapping=device_mapping)
@@ -220,11 +230,18 @@ class AdaptivePipeline:
         """Create a new pipeline from config."""
         self.current_config = config
 
+        # Convert UUID-based split_spec to path-based for PyTorch
+        path_split_spec = {}
+        for module_uuid, split_point in config.split_spec.items():
+            timed_module = timed_module_registry.get(module_uuid)
+            if timed_module is not None:
+                path_split_spec[timed_module.get_path()] = split_point
+
         # Create pipe
         self.pipe = pipeline(
             module=self.original_model,
             mb_args=(self.original_model.rand_inputs(),),
-            split_spec=config.split_spec
+            split_spec=path_split_spec
         )
 
         # Create stages with device mapping

@@ -22,11 +22,12 @@ timed_module_hierarchy: Dict[uuid.UUID, List[uuid.UUID]] = {}  # {uuid: [child_u
 
 
 class TimedModule(nn.Module):
-    def __init__(self, module: nn.Module, device, depth=10, wrapping_a_wrapper=None, parent_uuid: uuid.UUID = None, *args, **kwargs):
+    def __init__(self, module: nn.Module, device, depth=10, wrapping_a_wrapper=None, parent_uuid: uuid.UUID = None, module_path: str = "", *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.inner = module
+        self._module = module
         self.device = device
         self.depth = depth
+        self.module_path = module_path
 
         self.uuid = uuid.uuid4()
         self.parent_uuid = parent_uuid
@@ -49,18 +50,22 @@ class TimedModule(nn.Module):
     def get_logs(self, logs: Dict[uuid.UUID, List[float]] | None = None) -> Dict[uuid.UUID, List[float]]:
         pass
 
-    def _inner(self) -> nn.Module:
+    def inner(self) -> nn.Module:
         if not self.wrapping_a_wrapper:
-            return self.inner
+            return self._module
         else:
-            return self.inner.model
+            return self._module.model
 
     def _get_name(self):
-        return self._inner()._get_name()
+        return self.inner()._get_name()
+
+    def get_path(self) -> str:
+        """Get the full path of this module in the model hierarchy."""
+        return self.module_path
 
     def rand_inputs(self) -> Any:
-        if callable(self.inner.rand_inputs):
-            return self.inner.rand_inputs()
+        if callable(self._module.rand_inputs):
+            return self._module.rand_inputs()
         else:
             print("Inner module does not have a `rand_inputs` function!")
             return None
@@ -75,13 +80,13 @@ class CUDATimedModule(TimedModule):
     torch.compile friendly.
     """
 
-    def __init__(self, module: nn.Module, device, depth=1, parent_uuid: uuid.UUID = None):
-        super().__init__(module, device, depth, parent_uuid=parent_uuid)
+    def __init__(self, module: nn.Module, device, depth=1, parent_uuid: uuid.UUID = None, module_path: str = ""):
+        super().__init__(module, device, depth, parent_uuid=parent_uuid, module_path=module_path)
 
         if gpu_timer is None:
             raise ImportError("CUDA extension 'gpu_timer' is not built.")
 
-        self._inner().to(device)
+        self.inner().to(device)
 
         self.time_buffer = torch.zeros(1, dtype=torch.int64, device=device)
         self.last_elapsed_cycles = 0
@@ -89,17 +94,19 @@ class CUDATimedModule(TimedModule):
 
         # Wrap children as well
         if depth is None or depth > 0:
-            for child_name, child in list(self._inner().named_children()):
+            for child_name, child in list(self.inner().named_children()):
                 # Decrement the depth when we go deeper in the tree
                 d = None if depth is None else (depth - 1)
-                wrapped_child = CUDATimedModule(child, device, depth=d, parent_uuid=self.uuid)
-                setattr(self._inner(), child_name, wrapped_child)
+                # Build child path
+                child_path = f"{module_path}.{child_name}" if module_path else child_name
+                wrapped_child = CUDATimedModule(child, device, depth=d, parent_uuid=self.uuid, module_path=child_path)
+                setattr(self.inner(), child_name, wrapped_child)
 
     def forward(self, *args, **kwargs):
         # 1. Start the timer
         gpu_timer.start(self.time_buffer)
         # 2. Run the inner module
-        output = self.inner(*args, **kwargs)
+        output = self._module(*args, **kwargs)
         # 3. End the timer
         gpu_timer.end(self.time_buffer)
 
@@ -235,15 +242,15 @@ class CPUTimedModule(TimedModule):
     Should be torch.compile friendly.
     """
 
-    def __init__(self, module: nn.Module, device, depth=10, parent_uuid: uuid.UUID = None):
-        super().__init__(module, device, depth, parent_uuid=parent_uuid)
+    def __init__(self, module: nn.Module, device, depth=10, parent_uuid: uuid.UUID = None, module_path: str = ""):
+        super().__init__(module, device, depth, parent_uuid=parent_uuid, module_path=module_path)
 
         raise UserWarning("CPUTimedModule does not have logging working!")
         #TODO finish CPUTimedModule. Remaining issues:
         # 1. torch.compile mangles all the module names
         # 2. self.profiler.key_averages does not give us the stack events, despite doing everything it wanted of me
 
-        # self.inner = torch.compile(self.inner)
+        # self._module = torch.compile(self._module)
 
         self._has_run = False
 
@@ -264,7 +271,7 @@ class CPUTimedModule(TimedModule):
         print("lookup: \n", lookup)
 
         root_path = ''
-        logs = _build_log_tree(self.inner, lookup, parent_path=root_path)
+        logs = _build_log_tree(self._module, lookup, parent_path=root_path)
 
         return logs
 
@@ -275,9 +282,9 @@ class CPUTimedModule(TimedModule):
         self._has_run = True
 
         with self.profiler:
-            with record_function(self.inner._get_name()):
+            with record_function(self._module._get_name()):
                 with torch.no_grad():
-                    model_output = self.inner(x)
+                    model_output = self._module(x)
 
         print("Profiler Output:")
         print(self.profiler.key_averages().table(sort_by="cpu_time_total", row_limit=10))

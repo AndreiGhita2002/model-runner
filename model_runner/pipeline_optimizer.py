@@ -5,7 +5,6 @@ from typing import List, Tuple
 from torch.distributed.pipelining import SplitPoint
 
 from model_runner.adaptive_pipeline import PipelineConfig
-from model_runner.timed_module import timed_module_registry, TimedModule
 
 
 class PipelineOptimizer(ABC):
@@ -133,24 +132,16 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
 
         return PipelineConfig(split_spec=split_spec, device_mapping=device_mapping)
 
-    def _extract_layer_times(self, time_logs: dict[uuid.UUID, list[float]]) -> List[Tuple[str, float]]:
+    def _extract_layer_times(self, time_logs: dict[uuid.UUID, list[float]]) -> List[Tuple[uuid.UUID, float]]:
         """
-        Extract layer names and average times from UUID-based time logs.
+        Extract UUIDs and average times from time logs.
 
         Returns:
-            List of (layer_name, avg_time) tuples sorted by module hierarchy
+            List of (uuid, avg_time) tuples
         """
         layer_times = []
 
         for module_uuid, times in time_logs.items():
-            # Look up the TimedModule from the registry
-            timed_module = timed_module_registry.get(module_uuid)
-            if timed_module is None:
-                continue
-
-            # Get the module name
-            module_name = timed_module._get_name()
-
             # Calculate average time (or use latest if only one)
             if isinstance(times, list) and len(times) > 0:
                 avg_time = sum(times) / len(times)
@@ -159,27 +150,27 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
             else:
                 avg_time = 0.0
 
-            layer_times.append((module_name, avg_time))
+            layer_times.append((module_uuid, avg_time))
 
         return layer_times
 
     def _assign_layers_to_stages(
         self,
-        layer_times: List[Tuple[str, float]],
+        layer_times: List[Tuple[uuid.UUID, float]],
         target_time_per_stage: float
-    ) -> List[Tuple[str, int]]:
+    ) -> List[Tuple[uuid.UUID, int]]:
         """
         Greedily assign layers to stages to balance computation time.
 
         Returns:
-            List of (layer_name, stage_index) tuples
+            List of (uuid, stage_index) tuples
         """
         assignments = []
         current_stage_time = 0.0
         current_stage = 0
 
-        for i, (name, time) in enumerate(layer_times):
-            assignments.append((name, current_stage))
+        for i, (module_uuid, time) in enumerate(layer_times):
+            assignments.append((module_uuid, current_stage))
             current_stage_time += time
 
             # Move to next stage if we've exceeded target and not on last stage
@@ -192,20 +183,20 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
 
         return assignments
 
-    def _build_split_spec(self, stage_assignments: List[Tuple[str, int]]) -> dict:
+    def _build_split_spec(self, stage_assignments: List[Tuple[uuid.UUID, int]]) -> dict[uuid.UUID, SplitPoint]:
         """
         Build split_spec dict marking stage boundaries with SplitPoint.BEGINNING.
 
         Returns:
-            Dict mapping layer names to SplitPoint.BEGINNING for stage boundaries
+            Dict mapping UUIDs to SplitPoint.BEGINNING for stage boundaries
         """
         split_spec = {}
 
         prev_stage = 0
-        for name, stage in stage_assignments:
+        for module_uuid, stage in stage_assignments:
             # Mark the beginning of a new stage (skip stage 0, as it's implicit)
             if stage > prev_stage:
-                split_spec[name] = SplitPoint.BEGINNING
+                split_spec[module_uuid] = SplitPoint.BEGINNING
                 prev_stage = stage
 
         return split_spec
