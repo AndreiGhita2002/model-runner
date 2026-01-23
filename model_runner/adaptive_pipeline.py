@@ -247,5 +247,4 @@ class AdaptivePipeline:
 
     def update_logs(self):
         """Updates self.time_logs and returns them."""
-        # TODO: does this actually work after the pipeline stuff?
         return self.original_model.get_logs(self.time_logs)

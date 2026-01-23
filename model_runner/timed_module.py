@@ -17,18 +17,26 @@ except ImportError:
     gpu_timer = None
 
 
-timed_module_registry = {}
+timed_module_registry: Dict[uuid.UUID, 'TimedModule'] = {}
+timed_module_hierarchy: Dict[uuid.UUID, List[uuid.UUID]] = {}  # {uuid: [child_uuid, ...]}
+
 
 class TimedModule(nn.Module):
-    def __init__(self, module: nn.Module, device, depth=10, wrapping_a_wrapper=None, *args, **kwargs):
+    def __init__(self, module: nn.Module, device, depth=10, wrapping_a_wrapper=None, parent_uuid: uuid.UUID = None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.inner = module
         self.device = device
         self.depth = depth
 
         self.uuid = uuid.uuid4()
+        self.parent_uuid = parent_uuid
         timed_module_registry[self.uuid] = self
-        self.parent_stage = None
+
+        # Register in hierarchy
+        timed_module_hierarchy[self.uuid] = []
+        # Add self to parent's children list
+        if parent_uuid is not None and parent_uuid in timed_module_hierarchy:
+            timed_module_hierarchy[parent_uuid].append(self.uuid)
 
         if wrapping_a_wrapper is not None:
             self.wrapping_a_wrapper = wrapping_a_wrapper
@@ -57,9 +65,6 @@ class TimedModule(nn.Module):
             print("Inner module does not have a `rand_inputs` function!")
             return None
 
-timed_module_registry: Dict[uuid.UUID, TimedModule]
-timed_module_structure: Dict[uuid.UUID, dict] # TODO: might be useful to store a tree structure of the models
-
 #==================
 # CUDA GPU Timed Module
 #==================
@@ -70,8 +75,8 @@ class CUDATimedModule(TimedModule):
     torch.compile friendly.
     """
 
-    def __init__(self, module: nn.Module, device, depth=1):
-        super().__init__(module, device, depth)
+    def __init__(self, module: nn.Module, device, depth=1, parent_uuid: uuid.UUID = None):
+        super().__init__(module, device, depth, parent_uuid=parent_uuid)
 
         if gpu_timer is None:
             raise ImportError("CUDA extension 'gpu_timer' is not built.")
@@ -87,9 +92,8 @@ class CUDATimedModule(TimedModule):
             for child_name, child in list(self._inner().named_children()):
                 # Decrement the depth when we go deeper in the tree
                 d = None if depth is None else (depth - 1)
-                wrapped_child = CUDATimedModule(child, device, depth=d)
+                wrapped_child = CUDATimedModule(child, device, depth=d, parent_uuid=self.uuid)
                 setattr(self._inner(), child_name, wrapped_child)
-                # TODO: test this
 
     def forward(self, *args, **kwargs):
         # 1. Start the timer
@@ -112,21 +116,30 @@ class CUDATimedModule(TimedModule):
         return self.last_elapsed_cycles
 
     def get_logs(self, existing_logs: Dict[uuid.UUID, List[float]] | None = None) -> Dict[uuid.UUID, List[float]]:
+        """
+        Collect timing logs using the hierarchy registry.
+        Works even after PyTorch pipeline splits the model.
+        """
         if existing_logs is None:
             existing_logs = {}
 
-        def recurse_get_logs(module: TimedModule, logs: Dict[uuid.UUID, List[float]]):
-            if logs.get(module.uuid, None) is None:
-                logs[module.uuid] = module.get_last_elapsed_cycles()
+        def recurse_get_logs(module_uuid: uuid.UUID, logs: Dict[uuid.UUID, List[float]]):
+            module = timed_module_registry.get(module_uuid)
+            if module is None:
+                return
+
+            # Get timing for this module
+            elapsed = module.get_last_elapsed_cycles()
+            if logs.get(module_uuid) is None:
+                logs[module_uuid] = [elapsed]
             else:
-                logs[module.uuid].append(module.get_last_elapsed_cycles())
+                logs[module_uuid].append(elapsed)
 
-            if module.depth > 0:
-                for child_name, child in module._inner().named_children():
-                    if isinstance(child, TimedModule):
-                        child.recurse_get_logs(logs)
+            # Recurse through children using hierarchy
+            for child_uuid in timed_module_hierarchy.get(module_uuid, []):
+                recurse_get_logs(child_uuid, logs)
 
-        recurse_get_logs(self, logs=existing_logs)
+        recurse_get_logs(self.uuid, logs=existing_logs)
         return existing_logs
 
     def run(self, x=None) -> Any:
@@ -222,8 +235,8 @@ class CPUTimedModule(TimedModule):
     Should be torch.compile friendly.
     """
 
-    def __init__(self, module: nn.Module, device, depth=10):
-        super().__init__(module, device, depth)
+    def __init__(self, module: nn.Module, device, depth=10, parent_uuid: uuid.UUID = None):
+        super().__init__(module, device, depth, parent_uuid=parent_uuid)
 
         raise UserWarning("CPUTimedModule does not have logging working!")
         #TODO finish CPUTimedModule. Remaining issues:
