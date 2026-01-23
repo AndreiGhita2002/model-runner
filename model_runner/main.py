@@ -1,4 +1,5 @@
 import queue
+import threading
 from typing import Any, List, Dict
 
 import torch
@@ -17,8 +18,9 @@ class MainService:
     pipelines: dict[str, AdaptivePipeline]
     # Work Queue: (request ID, model name, input data): Tuple[int, str, Any]
     work_queue: Queue = queue.Queue()
-    # Model Outputs: request ID -> output # TODO: make sure this Dict is multi thread safe
-    model_outputs: Dict[int, Any] = {}
+    # Model Outputs: request ID -> output (protected by _outputs_lock)
+    model_outputs: dict[int, Any] = {}
+    _outputs_lock: threading.Lock = threading.Lock()
     # Verbose logging flag
     verbose: bool = False
 
@@ -66,7 +68,8 @@ class MainService:
         self.work_queue.put((request_id, model_name, x))
 
     def get_work_results(self, request_id: int) -> Any | None:
-        return self.model_outputs.get(request_id, None)
+        with self._outputs_lock:
+            return self.model_outputs.get(request_id, None)
 
     def run(self, exit_when_done = False):
         self._log("MainService.run: starting main loop")
@@ -78,12 +81,12 @@ class MainService:
                 (req_id, model_name, work) = self.work_queue.get(block=True)
                 self._log(f"MainService.run: processing request {req_id} for model '{model_name}'")
 
-                # TODO: make this async
                 output = self.pipelines[model_name].forward(work)
                 self._log(f"MainService.run: completed request {req_id}, output type: {type(output).__name__}")
 
                 # output the output
-                self.model_outputs[req_id] = output
+                with self._outputs_lock:
+                    self.model_outputs[req_id] = output
             else:
                 #TODO: make MainService.run more like a service
                 # sleep for a bit
