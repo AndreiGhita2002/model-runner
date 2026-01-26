@@ -1,11 +1,10 @@
+import time
 import uuid
+from sys import stderr
 from typing import Any, Dict, List
-from collections import defaultdict
 
 import torch
 import torch.nn as nn
-from torch.autograd.profiler_util import FunctionEventAvg
-from torch.profiler import profile, record_function, ProfilerActivity
 
 try:
     from . import gpu_timer
@@ -41,9 +40,6 @@ class TimedModule(nn.Module):
             self.wrapping_a_wrapper = wrapping_a_wrapper
         else:
             self.wrapping_a_wrapper = not isinstance(module, nn.Module)
-
-    def run(self, x=None):
-        pass
 
     def get_logs(self, logs: Dict[uuid.UUID, List[float]] | None = None) -> Dict[uuid.UUID, List[float]]:
         pass
@@ -161,146 +157,86 @@ class CUDATimedModule(TimedModule):
         recurse_get_logs(self.uuid, logs=existing_logs)
         return existing_logs
 
-    def run(self, x=None) -> Any:
-        if x is None:
-            x = self.rand_inputs()
-
-        with torch.no_grad():
-            return self(x)
-
 
 #==================
 # CPU Timed Module
 #==================
-def _recursive_profiler_logs(prof_times: dict[str, Any], module: nn.Module, depth):
-    module_name = module._get_name()
-    logs = {
-        'module_name': module_name,
-        'times': {
-            'elapsed': prof_times[module_name],
-        },
-        'children': [],
-    }
-
-    if depth > 0:
-        for child_name, child in list(module.named_children()):
-            if child_name in prof_times.keys():
-                logs['children']['child_name'] = _recursive_profiler_logs(prof_times, child, depth - 1)
-
-    return logs
-
-
-def _make_time_lookup(events: list[FunctionEventAvg]):
-    lookup = defaultdict(float)
-
-    print("events:\n")
-    for e in events:
-        print(e)
-        # 1. Grab the operation / module name
-        name = getattr(e, "key", None) or getattr(e, "name", None) or getattr(e, "function_name", None)
-        if name is None:
-            continue
-
-        # 2. Skip raw ATen operators and parameter‑access events
-        if name.startswith("aten::") or name.endswith("weight"):
-            # Look in its call stack for the python module name
-            module_name = None
-            for frame in e.stack:
-                if ".forward" in frame.function:
-                    # The function string is like 'SimpleNet.forward'
-                    module_name = frame.function.split(".")[0]
-                    break
-            key = module_name
-            if module_name is None:
-                continue
-        else:
-            key = name
-
-        # 4. Grab the per‑event CPU time
-        time = getattr(e, "self_cpu_time_total", None)
-        if time is None:
-            time = getattr(e, "self_cpu_time", 0.0)
-
-        lookup[key] += time
-
-    return dict(lookup)
-
-
-def _build_log_tree(module, lookup, parent_path=''):
-    module_name = module._get_name()
-    full_key = f'{parent_path}.{module_name}' if parent_path else module_name
-
-    elapsed = lookup.get(full_key, 0.0)
-
-    log = {
-        'module_name': module_name,
-        'times': {'elapsed': elapsed},
-        'children': []
-    }
-
-    for child_name, child in module.named_children():
-        # child_path = 'SimpleNet.0.conv1', 'SimpleNet.1.relu', …
-        child_path = f'{full_key}.{child_name}'
-        log['children'].append(
-            _build_log_tree(child, lookup, parent_path=full_key)
-        )
-
-    return log
-
-
 class CPUTimedModule(TimedModule):
     """
-    A wrapper that times the forward pass of a module using the pytorch profiler.
-    Should be torch.compile friendly.
+    A wrapper that times the forward pass of a module on CPU.
     """
 
-    def __init__(self, module: nn.Module, device, depth=10, parent_uuid: uuid.UUID = None, module_path: str = ""):
+    def __init__(self, module: nn.Module, device, depth=1, parent_uuid: uuid.UUID = None, module_path: str = ""):
+        print(UserWarning("CPUTimedModule does not have logging working!"), file=stderr)
+
         super().__init__(module, device, depth, parent_uuid=parent_uuid, module_path=module_path)
 
-        raise UserWarning("CPUTimedModule does not have logging working!")
-        #TODO finish CPUTimedModule. Remaining issues:
-        # 1. torch.compile mangles all the module names
-        # 2. self.profiler.key_averages does not give us the stack events, despite doing everything it wanted of me
+        self.inner().to(device)
 
-        # self._module = torch.compile(self._module)
+        self.last_elapsed_time = 0.0
+        self.timing_depth = depth
 
-        self._has_run = False
+        # TODO: initialize CPU timing mechanism
 
-        self.profiler = profile(
-            activities=[ProfilerActivity.CPU],
-            record_shapes=True,
-            with_stack=True,
-            profile_memory=True,
-            with_modules=True,
-        )
+        # Wrap children as well
+        if depth is None or depth > 0:
+            for child_name, child in list(self.inner().named_children()):
+                # Decrement the depth when we go deeper in the tree
+                d = None if depth is None else (depth - 1)
+                # Build child path
+                child_path = f"{module_path}.{child_name}" if module_path else child_name
+                wrapped_child = CPUTimedModule(child, device, depth=d, parent_uuid=self.uuid, module_path=child_path)
+                setattr(self.inner(), child_name, wrapped_child)
 
-    def get_logs(self):
-        if not self._has_run:
-            return None
+    def forward(self, *args, **kwargs):
+        #TODO: figure out cpu timing:
+        # - figure out how compilation actually happens
+        # - find a way
 
-        lookup = _make_time_lookup(self.profiler.key_averages())
+        # 1. Start timer
+        start = time.perf_counter_ns()
+        # 2. Run inner module
+        output = self._module(*args, **kwargs)
+        # 3. End timer and store elapsed
+        end = time.perf_counter_ns()
+        self.last_elapsed_time = end - start
 
-        print("lookup: \n", lookup)
+        return output
 
-        root_path = ''
-        logs = _build_log_tree(self._module, lookup, parent_path=root_path)
+    def get_last_elapsed_cycles(self):
+        """
+        Return the last elapsed time.
+        For CPU, this returns time in seconds (not cycles).
+        """
+        return self.last_elapsed_time
 
-        return logs
+    def get_logs(self, existing_logs: Dict[uuid.UUID, List[float]] | None = None) -> Dict[uuid.UUID, List[float]]:
+        """
+        Collect timing logs using the hierarchy registry.
+        Works even after PyTorch pipeline splits the model.
+        """
+        # TODO: this function is the same as CUDATimedModule, so it could be moved to parent
+        if existing_logs is None:
+            existing_logs = {}
 
-    def run(self, x=None):
-        if x is None:
-            x = self.rand_inputs()
+        def recurse_get_logs(module_uuid: uuid.UUID, logs: Dict[uuid.UUID, List[float]]):
+            module = timed_module_registry.get(module_uuid)
+            if module is None:
+                return
 
-        self._has_run = True
+            # Get timing for this module
+            elapsed = module.get_last_elapsed_cycles()
+            if logs.get(module_uuid) is None:
+                logs[module_uuid] = [elapsed]
+            else:
+                logs[module_uuid].append(elapsed)
 
-        with self.profiler:
-            with record_function(self._module._get_name()):
-                with torch.no_grad():
-                    model_output = self._module(x)
+            # Recurse through children using hierarchy
+            for child_uuid in timed_module_hierarchy.get(module_uuid, []):
+                recurse_get_logs(child_uuid, logs)
 
-        print("Profiler Output:")
-        print(self.profiler.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-        return model_output
+        recurse_get_logs(self.uuid, logs=existing_logs)
+        return existing_logs
 
 
 #==================
