@@ -488,8 +488,11 @@ def test_optimizer_with_real_timing():
 class CPUDeviceManager:
     """Simple device manager that uses CPU devices for testing."""
 
-    def __init__(self, num_devices: int = 2):
+    def __init__(self, num_devices: int = 2, verbose: bool = False):
         self._num_devices = num_devices
+        self.verbose = verbose
+        if verbose:
+            print(f"[CPUDeviceManager] Initialized with {num_devices} CPU device(s)")
 
     def get_device(self, index: int = 0) -> str:
         if index >= self._num_devices:
@@ -536,7 +539,7 @@ def test_adaptive_pipeline_creation_and_forward():
         timed = CPUTimedModule(model, device="cpu", depth=1, module_path="model")
 
         # Create device manager (single device for single-process test)
-        device_manager = CPUDeviceManager(num_devices=1)
+        device_manager = CPUDeviceManager(num_devices=1, verbose=True)
 
         # Create pipeline (n_microbatches=1 for batch size 1 input)
         pipeline = AdaptivePipeline(

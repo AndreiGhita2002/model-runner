@@ -31,11 +31,11 @@ class MainService:
             depth: Depth for TimedModule profiling
             verbose: Enable verbose logging output
         """
-        self.device_manager = DeviceManager()
-        self.primary_device = self.device_manager.get_device(0)
-
         self.depth = depth
         self.verbose = verbose
+
+        self.device_manager = DeviceManager(verbose=verbose)
+        self.primary_device = self.device_manager.get_device(0)
 
     def _log(self, msg: str):
         """Print message if verbose logging is enabled."""

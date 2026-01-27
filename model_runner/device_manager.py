@@ -6,20 +6,24 @@ import torch
 class DeviceManager:
     """Manages all available devices (CPU and CUDA) for model distribution."""
 
-    # TODO convert prints into optional verbose logs
-
-    def __init__(self):
+    def __init__(self, verbose: bool = False):
         """Initialise the device manager with all available devices."""
         self.devices: List[torch.device] = []
+        self.verbose = verbose
         self._initialize_devices()
+
+    def _log(self, msg: str):
+        """Print message if verbose logging is enabled."""
+        if self.verbose:
+            print(msg)
 
     def _initialize_devices(self):
         """Detect and initialise all available devices (CPU + CUDA)."""
         # Always add CPU
         cpu_device = torch.device("cpu")
         self.devices.append(cpu_device)
-        print("Detected devices:")
-        print("  Device 0: CPU")
+        self._log("Detected devices:")
+        self._log("  Device 0: CPU")
 
         # Add CUDA devices if available
         if torch.cuda.is_available():
@@ -28,12 +32,12 @@ class DeviceManager:
                 device = torch.device(f"cuda:{i}")
                 props = torch.cuda.get_device_properties(i)
                 idx = len(self.devices)
-                print(f"  Device {idx}: {props.name}")
-                print(f"    Total memory: {props.total_memory / 1e9:.2f} GB")
-                print(f"    Compute capability: {props.major}.{props.minor}")
+                self._log(f"  Device {idx}: {props.name}")
+                self._log(f"    Total memory: {props.total_memory / 1e9:.2f} GB")
+                self._log(f"    Compute capability: {props.major}.{props.minor}")
                 self.devices.append(device)
 
-        print(f"Total: {len(self.devices)} device(s)")
+        self._log(f"Total: {len(self.devices)} device(s)")
 
     def has_cuda(self) -> bool:
         """Return True if CUDA devices are available."""
