@@ -1,10 +1,15 @@
 import uuid
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import List, Tuple
 
 from torch.distributed.pipelining import SplitPoint
 
-from model_runner.adaptive_pipeline import PipelineConfig
+
+@dataclass
+class PipelineConfig:
+    split_spec: dict
+    device_mapping: dict[int, str]
 
 
 class PipelineOptimizer(ABC):

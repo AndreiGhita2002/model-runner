@@ -6,7 +6,8 @@ import torch
 from torch import nn
 from torch.multiprocessing.queue import Queue
 
-from . import AdaptivePipeline, DeviceManager
+from .adaptive_pipeline import AdaptivePipeline
+from .device_manager import DeviceManager
 from .timed_module import make_module_timed
 
 

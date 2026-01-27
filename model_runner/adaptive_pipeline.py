@@ -1,13 +1,14 @@
 import queue
 import uuid
 import multiprocessing as mp
-from dataclasses import dataclass
 from typing import Optional, Any
 
 from torch.distributed.pipelining import pipeline, PipelineStage, ScheduleGPipe, SplitPoint
 import torch.distributed as dist
 
-from model_runner import TimedModule, DeviceManager, PipelineOptimizer, GreedyPipelineOptimizer, timed_module_registry
+from .timed_module import TimedModule, timed_module_registry
+from .device_manager import DeviceManager
+from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer, PipelineConfig
 
 
 def _optimizer_process_worker(
@@ -37,12 +38,6 @@ def _optimizer_process_worker(
         else:
             # Signal that we checked but no rebalance needed
             result_queue.put(None)
-
-
-@dataclass
-class PipelineConfig:
-    split_spec: dict
-    device_mapping: dict[int, str]
 
 
 class AdaptivePipeline:

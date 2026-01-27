@@ -11,19 +11,19 @@ dependencies = [
     "numpy>=1.24,<2.5",
     "flask>=3.1.2",
     "flask-cors>=6.0.1",
-#    "setuptools<=70.2.0",
+    "setuptools<=70.2.0",
     "ninja",
 ]
 
-#[build-system]
-#requires = ["setuptools>=42", "wheel"]
-#build-backend = "setuptools.build_meta"
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
 
-#[tool.setuptools.packages.find]
-#where = ["src"]
+[tool.setuptools.packages.find]
+include = ["model_runner*"]
 
-#[tool.setuptools.package-data]
-#model_runner = ["gpu_timer/*.cpp", "gpu_timer/*.cu"]
+[tool.setuptools.package-data]
+model_runner = ["gpu_timer/*.cpp", "gpu_timer/*.cu"]
 
 # CUDA index for Linux/Windows
 [[tool.uv.index]]
