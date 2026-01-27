@@ -206,7 +206,7 @@ class CPUTimedModule(TimedModule):
     def get_last_elapsed_cycles(self):
         """
         Return the last elapsed time.
-        For CPU, this returns time in seconds (not cycles).
+        For CPU, this returns time in nanoseconds (not cycles).
         """
         return self.last_elapsed_time
 
