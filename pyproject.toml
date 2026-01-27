@@ -23,7 +23,7 @@ build-backend = "setuptools.build_meta"
 include = ["model_runner*"]
 
 [tool.setuptools.package-data]
-model_runner = ["gpu_timer/*.cpp", "gpu_timer/*.cu"]
+model_runner = ["cuda_timing_kernel/*.cpp", "cuda_timing_kernel/*.cu"]
 
 # CUDA index for Linux/Windows
 [[tool.uv.index]]

@@ -8,11 +8,11 @@ import torch.nn as nn
 from torch import Tensor
 
 try:
-    from .gpu_timer import gpu_timer_cpp
-    print("gpu_timer imported successfully!")
+    from .cuda_timing_kernel import cuda_timing_kernel_cpp
+    print("cuda_timing_kernel imported successfully!")
 except ImportError:
-    print("Error: 'gpu_timer' module not found.")
-    gpu_timer_cpp = None
+    print("Error: 'cuda_timing_kernel' module not found.")
+    cuda_timing_kernel_cpp = None
 
 
 timed_module_registry: Dict[uuid.UUID, 'TimedModule'] = {}
@@ -118,8 +118,8 @@ class CUDATimedModule(TimedModule):
     def __init__(self, module: nn.Module, device, depth=1, parent_uuid: uuid.UUID = None, module_path: str = ""):
         super().__init__(module, device, depth, parent_uuid=parent_uuid, module_path=module_path)
 
-        if gpu_timer_cpp is None:
-            raise ImportError("CUDA extension 'gpu_timer' is not built.")
+        if cuda_timing_kernel_cpp is None:
+            raise ImportError("CUDA extension 'cuda_timing_kernel' is not built.")
 
         self.inner().to(device)
 
@@ -139,11 +139,11 @@ class CUDATimedModule(TimedModule):
 
     def forward(self, *args, **kwargs):
         # 1. Start the timer
-        gpu_timer_cpp.start(self.time_buffer)
+        cuda_timing_kernel_cpp.start(self.time_buffer)
         # 2. Run the inner module
         output = self._module(*args, **kwargs)
         # 3. End the timer
-        gpu_timer_cpp.end(self.time_buffer)
+        cuda_timing_kernel_cpp.end(self.time_buffer)
 
         return output
 
@@ -219,7 +219,7 @@ class CPUTimedModule(TimedModule):
 #==================
 def make_module_timed(module: nn.Module, device=None, depth=None) -> TimedModule:
     if device is None:
-        if torch.cuda.is_available() and gpu_timer_cpp is not None:
+        if torch.cuda.is_available() and cuda_timing_kernel_cpp is not None:
             device = "cuda"
         else:
             device = "cpu"
