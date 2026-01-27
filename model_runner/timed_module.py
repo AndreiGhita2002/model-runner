@@ -41,8 +41,35 @@ class TimedModule(nn.Module):
         else:
             self.wrapping_a_wrapper = not isinstance(module, nn.Module)
 
-    def get_logs(self, logs: Dict[uuid.UUID, List[float]] | None = None) -> Dict[uuid.UUID, List[float]]:
+    def get_last_elapsed_cycles(self):
         pass
+
+    def get_logs(self, existing_logs: Dict[uuid.UUID, List[float]] | None = None) -> Dict[uuid.UUID, List[float]]:
+        """
+        Collect timing logs using the hierarchy registry.
+        Works even after PyTorch pipeline splits the model.
+        """
+        if existing_logs is None:
+            existing_logs = {}
+
+        def recurse_get_logs(module_uuid: uuid.UUID, logs: Dict[uuid.UUID, List[float]]):
+            module = timed_module_registry.get(module_uuid)
+            if module is None:
+                return
+
+            # Get timing for this module
+            elapsed = module.get_last_elapsed_cycles()
+            if logs.get(module_uuid) is None:
+                logs[module_uuid] = [elapsed]
+            else:
+                logs[module_uuid].append(elapsed)
+
+            # Recurse through children using hierarchy
+            for child_uuid in timed_module_hierarchy.get(module_uuid, []):
+                recurse_get_logs(child_uuid, logs)
+
+        recurse_get_logs(self.uuid, logs=existing_logs)
+        return existing_logs
 
     def inner(self) -> nn.Module:
         if not self.wrapping_a_wrapper:
@@ -130,33 +157,6 @@ class CUDATimedModule(TimedModule):
         self.last_elapsed_cycles = self.time_buffer.item()
         return self.last_elapsed_cycles
 
-    def get_logs(self, existing_logs: Dict[uuid.UUID, List[float]] | None = None) -> Dict[uuid.UUID, List[float]]:
-        """
-        Collect timing logs using the hierarchy registry.
-        Works even after PyTorch pipeline splits the model.
-        """
-        if existing_logs is None:
-            existing_logs = {}
-
-        def recurse_get_logs(module_uuid: uuid.UUID, logs: Dict[uuid.UUID, List[float]]):
-            module = timed_module_registry.get(module_uuid)
-            if module is None:
-                return
-
-            # Get timing for this module
-            elapsed = module.get_last_elapsed_cycles()
-            if logs.get(module_uuid) is None:
-                logs[module_uuid] = [elapsed]
-            else:
-                logs[module_uuid].append(elapsed)
-
-            # Recurse through children using hierarchy
-            for child_uuid in timed_module_hierarchy.get(module_uuid, []):
-                recurse_get_logs(child_uuid, logs)
-
-        recurse_get_logs(self.uuid, logs=existing_logs)
-        return existing_logs
-
 
 #==================
 # CPU Timed Module
@@ -209,34 +209,6 @@ class CPUTimedModule(TimedModule):
         For CPU, this returns time in seconds (not cycles).
         """
         return self.last_elapsed_time
-
-    def get_logs(self, existing_logs: Dict[uuid.UUID, List[float]] | None = None) -> Dict[uuid.UUID, List[float]]:
-        """
-        Collect timing logs using the hierarchy registry.
-        Works even after PyTorch pipeline splits the model.
-        """
-        # TODO: this function is the same as CUDATimedModule, so it could be moved to parent
-        if existing_logs is None:
-            existing_logs = {}
-
-        def recurse_get_logs(module_uuid: uuid.UUID, logs: Dict[uuid.UUID, List[float]]):
-            module = timed_module_registry.get(module_uuid)
-            if module is None:
-                return
-
-            # Get timing for this module
-            elapsed = module.get_last_elapsed_cycles()
-            if logs.get(module_uuid) is None:
-                logs[module_uuid] = [elapsed]
-            else:
-                logs[module_uuid].append(elapsed)
-
-            # Recurse through children using hierarchy
-            for child_uuid in timed_module_hierarchy.get(module_uuid, []):
-                recurse_get_logs(child_uuid, logs)
-
-        recurse_get_logs(self.uuid, logs=existing_logs)
-        return existing_logs
 
 
 #==================
