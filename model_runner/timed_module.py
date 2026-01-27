@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 import torch
 import torch.nn as nn
+from torch import Tensor
 
 try:
     from .gpu_timer import gpu_timer_cpp
@@ -161,22 +162,31 @@ class CUDATimedModule(TimedModule):
 #==================
 # CPU Timed Module
 #==================
+@torch.library.custom_op("model_runner::cpu_time_ns", mutates_args={"time_buffer"})
+def cpu_time_ns(time_buffer: torch.Tensor) -> None:
+    """Write current time in nanoseconds to the buffer."""
+    time_buffer[0] = time.time_ns()
+
+@cpu_time_ns.register_fake
+def _(time_buffer: torch.Tensor) -> None:
+    return None
+
+
 class CPUTimedModule(TimedModule):
     """
     A wrapper that times the forward pass of a module on CPU.
+    torch.compile friendly.
     """
 
     def __init__(self, module: nn.Module, device, depth=1, parent_uuid: uuid.UUID = None, module_path: str = ""):
-        print(UserWarning("CPUTimedModule does not have logging working!"), file=stderr)
-
         super().__init__(module, device, depth, parent_uuid=parent_uuid, module_path=module_path)
 
         self.inner().to(device)
 
-        self.last_elapsed_time = 0.0
+        # Use buffers for timing (torch.compile friendly)
+        self.register_buffer('start_buffer', torch.zeros(1, dtype=torch.int64))
+        self.register_buffer('end_buffer', torch.zeros(1, dtype=torch.int64))
         self.timing_depth = depth
-
-        # TODO: initialize CPU timing mechanism
 
         # Wrap children as well
         if depth is None or depth > 0:
@@ -189,17 +199,12 @@ class CPUTimedModule(TimedModule):
                 setattr(self.inner(), child_name, wrapped_child)
 
     def forward(self, *args, **kwargs):
-        #TODO: figure out cpu timing:
-        # - figure out how compilation actually happens
-        # - find a way
-
-        # 1. Start timer
-        start = time.perf_counter_ns()
+        # 1. Start timer (writes to buffer)
+        cpu_time_ns(self.start_buffer)
         # 2. Run inner module
         output = self._module(*args, **kwargs)
-        # 3. End timer and store elapsed
-        end = time.perf_counter_ns()
-        self.last_elapsed_time = end - start
+        # 3. End timer (writes to buffer)
+        cpu_time_ns(self.end_buffer)
 
         return output
 
@@ -208,16 +213,14 @@ class CPUTimedModule(TimedModule):
         Return the last elapsed time.
         For CPU, this returns time in nanoseconds (not cycles).
         """
-        return self.last_elapsed_time
+        return (self.end_buffer[0] - self.start_buffer[0]).item()
 
 
 #==================
 def make_module_timed(module: nn.Module, device=None, depth=None) -> TimedModule:
     if device is None:
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and gpu_timer_cpp is not None:
             device = "cuda"
-        elif torch.backends.mps.is_available():
-            device = "mps"
         else:
             device = "cpu"
 
