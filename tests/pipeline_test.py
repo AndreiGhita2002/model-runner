@@ -485,6 +485,95 @@ def test_optimizer_with_real_timing():
     print("  PASSED")
 
 
+class CPUDeviceManager:
+    """Simple device manager that uses CPU devices for testing."""
+
+    def __init__(self, num_devices: int = 2):
+        self._num_devices = num_devices
+
+    def get_device(self, index: int = 0) -> str:
+        if index >= self._num_devices:
+            raise IndexError(f"Device index {index} out of range.")
+        return "cpu"
+
+    def get_all_devices(self) -> List[str]:
+        return ["cpu"] * self._num_devices
+
+    def num_devices(self) -> int:
+        return self._num_devices
+
+
+def test_adaptive_pipeline_creation_and_forward():
+    """
+    Test creating an AdaptivePipeline with a real TimedModule and running forward passes.
+
+    This test initializes torch.distributed with gloo backend for single-process testing.
+    """
+    print("\n" + "=" * 80)
+    print("TEST: test_adaptive_pipeline_creation_and_forward")
+    print("=" * 80)
+
+    import os
+    import torch.distributed as dist
+    from model_runner import AdaptivePipeline
+
+    # Clear registries
+    timed_module_registry.clear()
+    timed_module_hierarchy.clear()
+
+    # Initialize distributed for single process
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "29500"
+    os.environ["RANK"] = "0"
+    os.environ["WORLD_SIZE"] = "1"
+
+    if not dist.is_initialized():
+        dist.init_process_group(backend="gloo", rank=0, world_size=1)
+
+    try:
+        # Create model and wrap with timing
+        model = SimpleSequentialNet()
+        timed = CPUTimedModule(model, device="cpu", depth=1, module_path="model")
+
+        # Create device manager (single device for single-process test)
+        device_manager = CPUDeviceManager(num_devices=1)
+
+        # Create pipeline (n_microbatches=1 for batch size 1 input)
+        pipeline = AdaptivePipeline(
+            model=timed,
+            model_name="test-pipeline",
+            device_manager=device_manager,
+            rebalance_interval=5,
+            rebalance_threshold=0.1,
+            n_microbatches=1,
+            verbose=True,
+        )
+
+        print(f"\n  Pipeline created: {pipeline.name}")
+        print(f"  Rebalance interval: {pipeline.rebalance_interval}")
+        print(f"  Current config: {pipeline.current_config}")
+
+        # Run forward passes
+        x = model.rand_inputs()
+        for i in range(3):
+            output = pipeline.forward(x)
+            print(f"  Forward pass {i+1}: output shape = {output.shape if output is not None else 'None'}")
+
+        # Check logs were collected
+        logs = pipeline.time_logs
+        print(f"  Time logs collected for {len(logs)} modules")
+        print(logs)
+
+        # Cleanup
+        pipeline.shutdown()
+        print("  Pipeline shutdown complete")
+        print("  PASSED")
+
+    finally:
+        if dist.is_initialized():
+            dist.destroy_process_group()
+
+
 if __name__ == '__main__':
     import sys
 
@@ -502,6 +591,7 @@ if __name__ == '__main__':
         ("cpu-path", test_cpu_timed_module_path),
         ("factory", test_make_module_timed),
         ("integration", test_optimizer_with_real_timing),
+        ("pipeline", test_adaptive_pipeline_creation_and_forward),
     ]
 
     if len(sys.argv) > 1:
