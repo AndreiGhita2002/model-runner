@@ -62,6 +62,7 @@ class AdaptivePipeline:
             pipeline_optimizer: PipelineOptimizer = None,
             rebalance_interval: int = 10,
             rebalance_threshold: float = 0.1,
+            n_microbatches: int = 4,
             initial_pipeline_config: PipelineConfig | None = None,
             verbose: bool = False,
             async_optimization: bool = False,
@@ -71,6 +72,7 @@ class AdaptivePipeline:
         self.device_manager = device_manager
         self.rebalance_interval = rebalance_interval
         self.rebalance_threshold = rebalance_threshold
+        self.n_microbatches = n_microbatches
         self.time_logs = {}
         self.batch_i = 0
         self.verbose = verbose
@@ -254,8 +256,8 @@ class AdaptivePipeline:
             )
             self.stages.append(stage)
 
-        # Create scheduler ??
-        self.scheduler = ScheduleGPipe(self.stages[dist.get_rank()], n_microbatches=4)
+        # Create scheduler
+        self.scheduler = ScheduleGPipe(self.stages[dist.get_rank()], n_microbatches=self.n_microbatches)
 
     def update_logs(self):
         """Updates self.time_logs and returns them."""
