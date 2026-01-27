@@ -42,8 +42,23 @@ class MainService:
         if self.verbose:
             print(msg)
 
-    def add_model(self, model_name: str, model: nn.Module, device=None, depth: int | None=None):
-        # TODO: add **kwargs here ^^ and pass them to pipeline and timed module
+    def add_model(self, model_name: str, model: nn.Module, device=None, depth: int | None = None, **kwargs):
+        """
+        Add a model to the service.
+
+        Args:
+            model_name: Unique name for the model
+            model: The PyTorch model to add
+            device: Device to run the model on (default: primary device)
+            depth: Depth for TimedModule profiling (default: self.depth)
+            **kwargs: Additional arguments passed to AdaptivePipeline:
+                - pipeline_optimizer: Custom optimiser (default: GreedyPipelineOptimizer)
+                - rebalance_interval: How often to check for rebalancing (default: 10)
+                - rebalance_threshold: Minimum change to trigger rebalancing (default: 0.1)
+                - n_microbatches: Number of microbatches for pipeline (default: 4)
+                - initial_pipeline_config: Initial pipeline configuration
+                - async_optimization: Use async optimisation (default: False)
+        """
         if device is None:
             device = str(self.primary_device)
 
@@ -58,11 +73,15 @@ class MainService:
             depth=depth
         )
 
+        # Pass verbose from self if not explicitly provided in kwargs
+        if 'verbose' not in kwargs:
+            kwargs['verbose'] = self.verbose
+
         self.pipelines[model_name] = AdaptivePipeline(
             timed_model,
             model_name,
             device_manager=self.device_manager,
-            verbose=self.verbose,
+            **kwargs
         )
 
     def queue_work(self, model_name: str, x: Any, request_id: int):
