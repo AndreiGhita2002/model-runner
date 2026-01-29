@@ -1,17 +1,11 @@
 import uuid
-from typing import Dict, List
+from typing import List
 
 import torch
 from torch import nn
 from torch.distributed.pipelining import SplitPoint
 
-from model_runner import (
-    PipelineConfig,
-    GreedyPipelineOptimizer,
-    TimedModule,
-    timed_module_registry,
-    timed_module_hierarchy,
-)
+from model_runner import PipelineConfig, GreedyPipelineOptimizer, timed_module_registry, timed_module_hierarchy
 from model_runner.timed_module import CPUTimedModule, make_module_timed
 
 
