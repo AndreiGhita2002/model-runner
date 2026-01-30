@@ -16,9 +16,13 @@ class MainService:
     Main service that manages adaptive pipelines.
     """
 
+    #TODO: find a more appropriate name for this
+    # maybe AdaptivePipelineRunner? PipelineRuntime?
+
     pipelines: dict[str, AdaptivePipeline]
     # Work Queue: (request ID, model name, input data): Tuple[int, str, Any]
     work_queue: Queue = queue.Queue()
+    next_req_id: int = 0 #TODO: switch to uuid
     # Model Outputs: request ID -> output (protected by _outputs_lock)
     model_outputs: dict[int, Any] = {}
     _outputs_lock: threading.Lock = threading.Lock()
@@ -84,8 +88,12 @@ class MainService:
             **kwargs
         )
 
-    def queue_work(self, model_name: str, x: Any, request_id: int):
+    def queue_work(self, model_name: str, x: Any, request_id: int | None = None) -> int:
+        if request_id is None:
+            request_id = self.next_req_id
+            self.next_req_id += 1
         self.work_queue.put((request_id, model_name, x))
+        return request_id
 
     def get_work_results(self, request_id: int) -> Any | None:
         with self._outputs_lock:
