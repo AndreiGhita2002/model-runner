@@ -3,12 +3,12 @@ name = "model-runner"
 version = "0.1.0"
 description = "Runs models. WIP"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 
 dependencies = [
-    "torch>=2.5.1,<2.7",
-    "torchvision>=0.20.1,<0.22",
-    "numpy>=1.24,<2.5",
+    "torch>=2.6.0",
+    "torchvision>=0.25.0",
+    "numpy>=2.2.6",
     "flask>=3.1.2",
     "flask-cors>=6.0.1",
     "setuptools<=70.2.0",
@@ -26,16 +26,16 @@ include = ["model_runner*"]
 model_runner = ["cuda_timing_kernel/*.cpp", "cuda_timing_kernel/*.cu"]
 
 # CUDA index for Linux/Windows
-[[tool.uv.index]]
-name = "pytorch-cuda"
-url = "https://download.pytorch.org/whl/cu124"
-explicit = true
-
-# Use CUDA pytorch on anything but Mac
-[tool.uv.sources]
-torch = [
-    { index = "pytorch-cuda", marker = "sys_platform != 'darwin'" },
-]
-torchvision = [
-    { index = "pytorch-cuda", marker = "sys_platform != 'darwin'" },
-]
+#[[tool.uv.index]]
+#name = "pytorch-cuda"
+#url = "https://download.pytorch.org/whl/cu124"
+#explicit = true
+#
+## Use CUDA pytorch on anything but Mac
+#[tool.uv.sources]
+#torch = [
+#    { index = "pytorch-cuda", marker = "sys_platform != 'darwin'" },
+#]
+#torchvision = [
+#    { index = "pytorch-cuda", marker = "sys_platform != 'darwin'" },
+#]
