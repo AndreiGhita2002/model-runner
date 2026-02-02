@@ -46,9 +46,31 @@ def evaluation_main():
     main.run(exit_when_done=True)
 
     # Checking the work
-    #TODO: compare pipeline outputs with baseline_data[model_name][i]["output"]
+    print("\nComparing outputs...")
+    failed_requests = []
+    for model_name in requests:
+        for i, req_id in enumerate(requests[model_name]):
+            pipeline_output = main.get_work_results(req_id)
+            baseline_output = torch.tensor(baseline_data[model_name][i]["output"])
 
-    #TODO: finish evaluation
+            if pipeline_output.shape != baseline_output.shape:
+                print(f"  [{model_name}] Request {req_id}: FAIL (shape mismatch)")
+                print(f"    Pipeline shape: {list(pipeline_output.shape)}, Baseline shape: {list(baseline_output.shape)}")
+                print(f"    Pipeline output: {pipeline_output}")
+                print(f"    Baseline output: {baseline_output}")
+                failed_requests.append((model_name, req_id))
+            elif torch.allclose(pipeline_output, baseline_output, atol=1e-6):
+                print(f"  [{model_name}] Request {req_id}: PASS")
+            else:
+                print(f"  [{model_name}] Request {req_id}: FAIL")
+                failed_requests.append((model_name, req_id))
+
+    if not failed_requests:
+        print("\nAll outputs match baseline!")
+    else:
+        print(f"\n{len(failed_requests)} request(s) differ from baseline:")
+        for model_name, req_id in failed_requests:
+            print(f"  - {model_name}: request {req_id}")
 
 
 if __name__ == '__main__':
