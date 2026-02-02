@@ -1,9 +1,12 @@
 import json
+import sys
 import torch
 from tests.testing_models import evaluation_models
 
+DEFAULT_BASELINE_FILE = "baseline_outputs.json"
 
-def baseline_main(num_requests: int = 5, seed: int = 37, output_file: str = "baseline_outputs.json"):
+
+def baseline_main(num_requests: int = 5, seed: int = 37, output_file: str = DEFAULT_BASELINE_FILE):
     results = {}
 
     for model_name, load_model, rand_inputs in evaluation_models:
@@ -41,4 +44,5 @@ def baseline_main(num_requests: int = 5, seed: int = 37, output_file: str = "bas
 
 
 if __name__ == '__main__':
-    baseline_main()
+    output_file = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_BASELINE_FILE
+    baseline_main(output_file=output_file)

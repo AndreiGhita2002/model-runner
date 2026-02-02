@@ -1,26 +1,25 @@
 import json
 import os
+import sys
 import torch
 
 from model_runner import MainService
 from tests.testing_models import evaluation_models
-from tests.baseline import baseline_main
-
-BASELINE_FILE = "baseline_outputs.json"
+from tests.baseline import baseline_main, DEFAULT_BASELINE_FILE
 
 
-def load_baseline():
-    if not os.path.exists(BASELINE_FILE):
-        print(f"Baseline file not found, generating {BASELINE_FILE}...")
-        baseline_main(output_file=BASELINE_FILE)
+def load_baseline(baseline_file: str):
+    if not os.path.exists(baseline_file):
+        print(f"Baseline file not found, generating {baseline_file}...")
+        baseline_main(output_file=baseline_file)
 
-    with open(BASELINE_FILE, "r") as f:
+    with open(baseline_file, "r") as f:
         return json.load(f)
 
 
-def evaluation_main():
+def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
     # Load baseline data
-    baseline_data = load_baseline()
+    baseline_data = load_baseline(baseline_file)
 
     # Constants:
     requests: dict[str, list[int]] = dict()
@@ -74,4 +73,5 @@ def evaluation_main():
 
 
 if __name__ == '__main__':
-    evaluation_main()
+    baseline_file = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_BASELINE_FILE
+    evaluation_main(baseline_file=baseline_file)
