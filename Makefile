@@ -7,6 +7,9 @@ install:
 
 #TODO: implement actual test suite
 
+eval:
+	$(TORCHRUN) tests.evaluation
+
 test-pipeline:
 	$(TORCHRUN) tests.pipeline_test
 

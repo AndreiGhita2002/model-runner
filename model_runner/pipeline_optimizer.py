@@ -5,6 +5,8 @@ from typing import List, Tuple
 
 from torch.distributed.pipelining import SplitPoint
 
+from .timed_module import timed_module_hierarchy
+
 
 @dataclass
 class PipelineConfig:
@@ -15,7 +17,7 @@ class PipelineConfig:
 class PipelineOptimizer(ABC):
     """Abstract base class for pipeline optimisers."""
 
-    def __init__(self, num_stages: int = 2):
+    def __init__(self, num_stages: int):
         self.num_stages = num_stages
 
     @abstractmethod
@@ -54,9 +56,10 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
     TODO: this optimizer is pretty dumb
     """
 
-    def __init__(self, num_stages: int = 2, rebalance_threshold: float = 0.1):
+    def __init__(self, num_stages: int, root_uuid: uuid.UUID, rebalance_threshold: float = 0.1):
         super().__init__(num_stages)
         self.rebalance_threshold = rebalance_threshold
+        self.root_uuid = root_uuid
 
     def should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
         """
@@ -166,22 +169,33 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
     ) -> List[Tuple[uuid.UUID, int]]:
         """
         Greedily assign layers to stages to balance computation time.
+        Only works on the children of the root module (self.root_uuid).
 
         Returns:
             List of (uuid, stage_index) tuples
         """
+        # Collecting the times of only the children of the root module
+        children_ids = timed_module_hierarchy[self.root_uuid]
+        children_times = []
+        for layer_time in layer_times:
+            # If module is a child of the root
+            if layer_time[0] in children_ids:
+                children_times.append(layer_time)
+
+        print(children_times)
+
+        # The assignment algorithm:
         assignments = []
         current_stage_time = 0.0
         current_stage = 0
-
-        for i, (module_uuid, time) in enumerate(layer_times):
+        for i, (module_uuid, time) in enumerate(children_times):
             assignments.append((module_uuid, current_stage))
             current_stage_time += time
 
             # Move to next stage if we've exceeded target and not on last stage
             if (current_stage_time >= target_time_per_stage and
                 current_stage < self.num_stages - 1 and
-                i < len(layer_times) - 1):
+                i < len(children_times) - 1):
 
                 current_stage += 1
                 current_stage_time = 0.0

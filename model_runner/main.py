@@ -19,7 +19,7 @@ class MainService:
     #TODO: find a more appropriate name for this
     # maybe AdaptivePipelineRunner? PipelineRuntime?
 
-    pipelines: dict[str, AdaptivePipeline]
+    pipelines: dict[str, AdaptivePipeline] = {}
     # Work Queue: (request ID, model name, input data): Tuple[int, str, Any]
     work_queue: Queue = queue.Queue()
     next_req_id: int = 0 #TODO: switch to uuid
@@ -29,13 +29,13 @@ class MainService:
     # Verbose logging flag
     verbose: bool = False
 
-    def __init__(self, depth=2, verbose=False):
+    def __init__(self, default_timing_depth: int = 3, verbose=False):
         """
         Args:
-            depth: Depth for TimedModule profiling
+            default_timing_depth: Depth for TimedModule profiling
             verbose: Enable verbose logging output
         """
-        self.depth = depth
+        self.default_timing_depth = default_timing_depth
         self.verbose = verbose
 
         self.device_manager = DeviceManager(verbose=verbose)
@@ -54,7 +54,7 @@ class MainService:
             model_name: Unique name for the model
             model: The PyTorch model to add
             device: Device to run the model on (default: primary device)
-            depth: Depth for TimedModule profiling (default: self.depth)
+            depth: Depth for TimedModule profiling (default: self.default_timing_depth)
             **kwargs: Additional arguments passed to AdaptivePipeline:
                 - pipeline_optimizer: Custom optimiser (default: GreedyPipelineOptimizer)
                 - rebalance_interval: How often to check for rebalancing (default: 10)
@@ -66,7 +66,7 @@ class MainService:
         if device is None:
             device = str(self.primary_device)
 
-        depth = depth or self.depth
+        depth = depth or self.default_timing_depth
 
         if self.pipelines.get(model_name, None) is not None:
             raise Exception(f"Pipeline with name {model_name} already exists!")

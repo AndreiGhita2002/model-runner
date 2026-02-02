@@ -20,9 +20,9 @@ timed_module_hierarchy: Dict[uuid.UUID, List[uuid.UUID]] = {}  # {uuid: [child_u
 
 
 class TimedModule(nn.Module):
-    def __init__(self, module: nn.Module, device, depth=10, wrapping_a_wrapper=None, parent_uuid: uuid.UUID = None, module_path: str = "", *args, **kwargs):
+    def __init__(self, module: nn.Module, device, depth=10, parent_uuid: uuid.UUID = None, module_path: str = "", *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._module = module
+        self._inner = module
         self.device = device
         self.depth = depth
         self.module_path = module_path
@@ -36,11 +36,6 @@ class TimedModule(nn.Module):
         # Add self to parent's children list
         if parent_uuid is not None and parent_uuid in timed_module_hierarchy:
             timed_module_hierarchy[parent_uuid].append(self.uuid)
-
-        if wrapping_a_wrapper is not None:
-            self.wrapping_a_wrapper = wrapping_a_wrapper
-        else:
-            self.wrapping_a_wrapper = not isinstance(module, nn.Module)
 
     def get_last_elapsed_cycles(self):
         pass
@@ -73,21 +68,32 @@ class TimedModule(nn.Module):
         return existing_logs
 
     def inner(self) -> nn.Module:
-        if not self.wrapping_a_wrapper:
-            return self._module
-        else:
-            return self._module.model
+        return self._inner
+
+    def __getattr__(self, attr: str):
+        """Delegate attribute access to inner module for attributes not found on TimedModule."""
+        try:
+            # return self._inner.__getattr__(attr)
+            return super().__getattr__(attr)
+        except AttributeError:
+            # if not hasattr(self, "_inner"):
+            #     raise AttributeError(f"Instance of class {type(self).__name__} does not have the \'_inner\' field initialised!")
+            try:
+                return getattr(self._inner, attr)
+            except AttributeError:
+                raise AttributeError(f"'{type(self).__name__}' or {nn.Module.__name__} "
+                                     f"objects have no attribute '{attr}'")
 
     def _get_name(self):
-        return self.inner()._get_name()
+        return f"Timed_{self.inner()._get_name()}[uuid:{self.uuid}]"
 
     def get_path(self) -> str:
         """Get the full path of this module in the model hierarchy."""
         return self.module_path
 
     def rand_inputs(self) -> Any:
-        if callable(self._module.rand_inputs):
-            return self._module.rand_inputs()
+        if callable(self.inner().rand_inputs):
+            return self.inner().rand_inputs()
         else:
             print("Inner module does not have a `rand_inputs` function!")
             return None
@@ -141,7 +147,7 @@ class CUDATimedModule(TimedModule):
         # 1. Start the timer
         cuda_timing_kernel_cpp.start(self.time_buffer)
         # 2. Run the inner module
-        output = self._module(*args, **kwargs)
+        output = (self.inner())(*args, **kwargs)
         # 3. End the timer
         cuda_timing_kernel_cpp.end(self.time_buffer)
 
@@ -157,6 +163,9 @@ class CUDATimedModule(TimedModule):
 
         self.last_elapsed_cycles = self.time_buffer.item()
         return self.last_elapsed_cycles
+
+    def _get_name(self):
+        return f"CUDA_{super()._get_name()}"
 
 
 #==================
@@ -202,7 +211,7 @@ class CPUTimedModule(TimedModule):
         # 1. Start timer (writes to buffer)
         cpu_time_ns(self.start_buffer)
         # 2. Run inner module
-        output = self._module(*args, **kwargs)
+        output = (self.inner())(*args, **kwargs)
         # 3. End timer (writes to buffer)
         cpu_time_ns(self.end_buffer)
 
@@ -214,6 +223,9 @@ class CPUTimedModule(TimedModule):
         For CPU, this returns time in nanoseconds (not cycles).
         """
         return (self.end_buffer[0] - self.start_buffer[0]).item()
+
+    def _get_name(self):
+        return f"CPU_{super()._get_name()}"
 
 
 #==================

@@ -5,6 +5,10 @@ import torch.nn.functional as f
 from torchvision.models import ConvNeXt, ConvNeXt_Small_Weights, convnext_small
 
 
+#TODO: get more models
+# from https://docs.pytorch.org/vision/main/models.html
+# should have: image classification, ...
+
 class SimpleNet(nn.Module):
     #TODO: note that this is not trained
 
@@ -32,7 +36,7 @@ class SimpleNet(nn.Module):
 
 #################################################
 
-def load_conv_next(device: str = None) -> ConvNeXt:
+def load_conv_next(device: str = "cpu") -> ConvNeXt:
     weights = ConvNeXt_Small_Weights.IMAGENET1K_V1
     model = convnext_small(weights=weights)
     if device is not None:
@@ -42,7 +46,7 @@ def load_conv_next(device: str = None) -> ConvNeXt:
 def conv_next_rand_inputs() -> torch.Tensor:
     return torch.randn(1, 3, 224, 224)
 
-def load_simple_net(device: str = None) -> nn.Module:
+def load_simple_net(device: str = "cpu") -> nn.Module:
     return SimpleNet(device)
 
 def simple_net_rand_inputs() -> torch.Tensor:

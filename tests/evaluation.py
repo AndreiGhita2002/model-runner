@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import torch
+import torch.distributed as dist
 
 from model_runner import MainService
 from tests.testing_models import evaluation_models
@@ -73,5 +74,11 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
 
 
 if __name__ == '__main__':
+    device = torch.accelerator.current_accelerator()
+    backend = torch.distributed.get_default_backend_for_device(device)
+    dist.init_process_group(backend=backend)
+
     baseline_file = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_BASELINE_FILE
     evaluation_main(baseline_file=baseline_file)
+
+    dist.destroy_process_group()
