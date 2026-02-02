@@ -1,3 +1,4 @@
+import types
 import torch
 import torch.nn as nn
 import torch.nn.functional as f
@@ -5,6 +6,8 @@ from torchvision.models import ConvNeXt, ConvNeXt_Small_Weights, convnext_small
 
 
 class SimpleNet(nn.Module):
+    #TODO: note that this is not trained
+
     def __init__(self, device):
         super(SimpleNet, self).__init__()
         self.conv1 = nn.Conv2d(1, 32, 3, 1)
@@ -44,3 +47,10 @@ def load_simple_net(device: str = None) -> nn.Module:
 
 def simple_net_rand_inputs() -> torch.Tensor:
     return torch.randn(1, 1, 16, 16)
+
+#################################################
+
+evaluation_models: list[tuple[str, types.FunctionType, types.FunctionType]] = [
+    ("simple_net", load_simple_net, simple_net_rand_inputs),
+    ("conv_next", load_conv_next, conv_next_rand_inputs)
+]
