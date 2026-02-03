@@ -77,6 +77,7 @@ class TimedModule(nn.Module):
         try:
             # Let torch.nn.Module handle it
             return super().__getattr__(attr)
+            #^^ might be bad for stuff like named_children; could create infinite recursion somewhere else
         except AttributeError:
             try:
                 # Let self._inner try
