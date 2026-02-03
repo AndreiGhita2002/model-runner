@@ -72,13 +72,14 @@ class TimedModule(nn.Module):
 
     def __getattr__(self, attr: str):
         """Delegate attribute access to inner module for attributes not found on TimedModule."""
+        #TODO(tests): make a good unit test for this and check all cases
+        # this is a very critical builtin
         try:
-            # return self._inner.__getattr__(attr)
+            # Let torch.nn.Module handle it
             return super().__getattr__(attr)
         except AttributeError:
-            # if not hasattr(self, "_inner"):
-            #     raise AttributeError(f"Instance of class {type(self).__name__} does not have the \'_inner\' field initialised!")
             try:
+                # Let self._inner try
                 return getattr(self._inner, attr)
             except AttributeError:
                 raise AttributeError(f"'{type(self).__name__}' or {nn.Module.__name__} "
