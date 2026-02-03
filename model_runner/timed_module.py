@@ -1,11 +1,11 @@
+import threading
 import time
 import uuid
-from sys import stderr
-from typing import Any, Dict, List
+import weakref
+from typing import Dict, List
 
 import torch
 import torch.nn as nn
-from torch import Tensor
 
 try:
     from .cuda_timing_kernel import cuda_timing_kernel_cpp
@@ -15,8 +15,24 @@ except ImportError:
     cuda_timing_kernel_cpp = None
 
 
-timed_module_registry: Dict[uuid.UUID, 'TimedModule'] = {}
+_registry_lock = threading.Lock()
+# WeakValueDictionary automatically removes entries when TimedModule is garbage collected
+timed_module_registry: weakref.WeakValueDictionary[uuid.UUID, 'TimedModule'] = weakref.WeakValueDictionary()
 timed_module_hierarchy: Dict[uuid.UUID, List[uuid.UUID]] = {}  # {uuid: [child_uuid, ...]}
+
+
+def _cleanup_hierarchy(module_uuid: uuid.UUID, parent_uuid: uuid.UUID | None):
+    """Remove a module from the hierarchy when it's garbage collected."""
+    with _registry_lock:
+        # Remove this module's entry from hierarchy
+        if module_uuid in timed_module_hierarchy:
+            del timed_module_hierarchy[module_uuid]
+        # Remove from parent's children list
+        if parent_uuid is not None and parent_uuid in timed_module_hierarchy:
+            try:
+                timed_module_hierarchy[parent_uuid].remove(module_uuid)
+            except ValueError:
+                pass  # Already removed
 
 
 class TimedModule(nn.Module):
@@ -29,13 +45,17 @@ class TimedModule(nn.Module):
 
         self.uuid = uuid.uuid4()
         self.parent_uuid = parent_uuid
-        timed_module_registry[self.uuid] = self
 
-        # Register in hierarchy
-        timed_module_hierarchy[self.uuid] = []
-        # Add self to parent's children list
-        if parent_uuid is not None and parent_uuid in timed_module_hierarchy:
-            timed_module_hierarchy[parent_uuid].append(self.uuid)
+        # Register in registry and hierarchy (thread-safe)
+        with _registry_lock:
+            timed_module_registry[self.uuid] = self
+            timed_module_hierarchy[self.uuid] = []
+            if parent_uuid is not None and parent_uuid in timed_module_hierarchy:
+                timed_module_hierarchy[parent_uuid].append(self.uuid)
+
+        # Set up weak reference callback for automatic cleanup
+        # When this TimedModule is garbage collected, _cleanup_hierarchy will be called
+        weakref.finalize(self, _cleanup_hierarchy, self.uuid, self.parent_uuid)
 
     def get_last_elapsed_cycles(self):
         pass
@@ -44,6 +64,7 @@ class TimedModule(nn.Module):
         """
         Collect timing logs using the hierarchy registry.
         Works even after PyTorch pipeline splits the model.
+        Thread-safe.
         """
         if existing_logs is None:
             existing_logs = {}
@@ -64,7 +85,8 @@ class TimedModule(nn.Module):
             for child_uuid in timed_module_hierarchy.get(module_uuid, []):
                 recurse_get_logs(child_uuid, logs)
 
-        recurse_get_logs(self.uuid, logs=existing_logs)
+        with _registry_lock:
+            recurse_get_logs(self.uuid, logs=existing_logs)
         return existing_logs
 
     def inner(self) -> nn.Module:
