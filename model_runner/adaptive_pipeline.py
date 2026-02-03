@@ -1,7 +1,11 @@
 import queue
 import uuid
+import warnings
 import multiprocessing as mp
 from typing import Optional, Any
+
+# Suppress PyTorch internal FutureWarning about LeafSpec deprecation
+warnings.filterwarnings("ignore", message=".*LeafSpec.*is deprecated.*", category=FutureWarning)
 
 from torch.distributed.pipelining import pipeline, PipelineStage, ScheduleGPipe, SplitPoint, Pipe
 import torch.distributed as dist
