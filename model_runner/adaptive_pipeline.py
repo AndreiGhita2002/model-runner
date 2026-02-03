@@ -5,6 +5,7 @@ from typing import Optional, Any
 
 from torch.distributed.pipelining import pipeline, PipelineStage, ScheduleGPipe, SplitPoint, Pipe
 import torch.distributed as dist
+from torch.distributed.pipelining.schedules import PipelineScheduleSingle, PipelineScheduleMulti
 
 from .timed_module import TimedModule, timed_module_registry, timed_module_hierarchy
 from .device_manager import DeviceManager
@@ -44,6 +45,8 @@ class AdaptivePipeline:
     """Manages a pytorch pipeline, and rebalances it every interval."""
     name: str
     current_config: Optional[PipelineConfig]
+    pipe: Pipe | None
+    scheduler: PipelineScheduleSingle | PipelineScheduleMulti | None
 
     # How many times to rebalance the pipeline?
     rebalance_interval: int
@@ -54,8 +57,6 @@ class AdaptivePipeline:
     # Time logs
     time_logs: dict[uuid.UUID, list[float]]
 
-    pipe: Pipe | None
-
     def __init__(
             self,
             model: TimedModule,
@@ -65,7 +66,7 @@ class AdaptivePipeline:
             pipeline_optimizer: PipelineOptimizer = None,
             rebalance_interval: int = 10,
             rebalance_threshold: float = 0.1,
-            n_microbatches: int = 4,
+            n_microbatches: int = 4, # This is similar to num_stages, it can change
             initial_pipeline_config: PipelineConfig | None = None,
             verbose: bool = False,
             async_optimization: bool = False,
@@ -265,6 +266,8 @@ class AdaptivePipeline:
     def update_num_stages(self):
         self.num_stages = self.pipe.num_stages
         self.pipeline_optimizer.num_stages = self.num_stages
+        # Number of microbatches must be greater than or equal to the number of stages
+        self.n_microbatches = self.n_microbatches if self.n_microbatches >= self.num_stages else self.num_stages
 
     def update_logs(self):
         """Updates self.time_logs and returns them."""

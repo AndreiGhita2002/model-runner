@@ -4,7 +4,6 @@ from typing import Any, List, Dict
 
 import torch
 from torch import nn
-from torch.multiprocessing.queue import Queue
 
 from .adaptive_pipeline import AdaptivePipeline
 from .device_manager import DeviceManager
@@ -20,8 +19,8 @@ class MainService:
     # maybe AdaptivePipelineRunner? PipelineRuntime?
 
     pipelines: dict[str, AdaptivePipeline] = {}
-    # Work Queue: (request ID, model name, input data): Tuple[int, str, Any]
-    work_queue: Queue = queue.Queue()
+    # Work queues per model: model_name -> Queue of (request_id, input_data)
+    work_by_model: Dict[str, queue.Queue] = {}
     next_req_id: int = 0 #TODO: switch to uuid
     # Model Outputs: request ID -> output (protected by _outputs_lock)
     model_outputs: dict[int, Any] = {}
@@ -90,12 +89,15 @@ class MainService:
             example_input,
             **kwargs
         )
+        self.work_by_model[model_name] = queue.Queue()
 
     def queue_work(self, model_name: str, x: Any, request_id: int | None = None) -> int:
+        if model_name not in self.work_by_model:
+            raise ValueError(f"Model '{model_name}' not found. Add it with add_model() first.")
         if request_id is None:
             request_id = self.next_req_id
             self.next_req_id += 1
-        self.work_queue.put((request_id, model_name, x))
+        self.work_by_model[model_name].put((request_id, x))
         return request_id
 
     def get_work_results(self, request_id: int) -> Any | None:
@@ -106,28 +108,53 @@ class MainService:
         self._log("MainService.run: starting main loop")
         # main loop
         while True:
-            # check queue
-            if not self.work_queue.empty():
-                #run models
-                (req_id, model_name, work) = self.work_queue.get(block=True)
-                self._log(f"MainService.run: processing request {req_id} for model '{model_name}'")
+            did_work = False
 
-                output = self.pipelines[model_name].forward(work)
-                self._log(f"MainService.run: completed request {req_id}, output type: {type(output).__name__}")
+            # Process each model's work in microbatches
+            for model_name, model_queue in self.work_by_model.items():
+                if model_queue.empty():
+                    continue
 
-                # output the output
+                did_work = True
+                pipeline = self.pipelines[model_name]
+                n_microbatches = pipeline.n_microbatches
+
+                #TODO: only rank 0 should get the work
+                # rank = dist.get_rank()
+
+                # Collect up to n_microbatches items from this model's queue
+                work_items = []
+                while len(work_items) < n_microbatches and not model_queue.empty():
+                    work_items.append(model_queue.get(block=False))
+
+                req_ids = [item[0] for item in work_items]
+                inputs = [item[1] for item in work_items]
+
+                # Pad batch if needed (scheduler expects exactly n_microbatches)
+                while len(inputs) < n_microbatches:
+                    inputs.append(inputs[-1])  # Duplicate last input as padding
+
+                self._log(f"MainService.run: processing {len(work_items)} requests for model '{model_name}' (microbatch size: {n_microbatches})")
+
+                # Stack inputs into a batch tensor
+                batched_input = torch.stack(inputs)
+                outputs = pipeline.forward(batched_input)
+
+                # Store outputs (only for real requests, not padding)
                 with self._outputs_lock:
-                    self.model_outputs[req_id] = output
-            else:
-                #TODO: make MainService.run more like a service
-                # sleep for a bit
-                # until the user requests another workload
-                # or perhaps exit
+                    for j, req_id in enumerate(req_ids):
+                        self.model_outputs[req_id] = outputs[j]
+                        self._log(f"MainService.run: completed request {req_id}")
 
-                # For now, we exit when the queue is done
-                if exit_when_done:
-                    self._log("MainService.run: queue empty, exiting")
-                    return
+            #TODO: make MainService.run more like a service
+            # sleep for a bit
+            # until the user requests another workload
+            # or perhaps exit
+
+            # For now, we exit when the queue is done
+            if not did_work and exit_when_done:
+                self._log("MainService.run: queue empty, exiting")
+                return
 
     def get_logs(self) -> Dict[str, Any]:
         """Get timing logs from all pipelines."""
