@@ -30,9 +30,9 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
     main = MainService(verbose=True)
 
     # Adding models
-    for model_name, load_model, _ in evaluation_models:
+    for model_name, load_model, rand_input in evaluation_models:
         print(f"> Adding model {model_name} with load function {load_model.__name__}")
-        main.add_model(model_name, load_model())
+        main.add_model(model_name, load_model(), rand_input())
 
         # Adding work from baseline inputs
         requests[model_name] = list()

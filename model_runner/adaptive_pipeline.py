@@ -3,10 +3,10 @@ import uuid
 import multiprocessing as mp
 from typing import Optional, Any
 
-from torch.distributed.pipelining import pipeline, PipelineStage, ScheduleGPipe, SplitPoint
+from torch.distributed.pipelining import pipeline, PipelineStage, ScheduleGPipe, SplitPoint, Pipe
 import torch.distributed as dist
 
-from .timed_module import TimedModule, timed_module_registry
+from .timed_module import TimedModule, timed_module_registry, timed_module_hierarchy
 from .device_manager import DeviceManager
 from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer, PipelineConfig
 
@@ -54,11 +54,14 @@ class AdaptivePipeline:
     # Time logs
     time_logs: dict[uuid.UUID, list[float]]
 
+    pipe: Pipe | None
+
     def __init__(
             self,
             model: TimedModule,
             model_name: str,
             device_manager: DeviceManager,
+            example_input: Any,
             pipeline_optimizer: PipelineOptimizer = None,
             rebalance_interval: int = 10,
             rebalance_threshold: float = 0.1,
@@ -66,11 +69,12 @@ class AdaptivePipeline:
             initial_pipeline_config: PipelineConfig | None = None,
             verbose: bool = False,
             async_optimization: bool = False,
-            num_stages: int = 2,
+            num_stages: int = 2, # TODO: num_stages is very questionable; the world would be better without it
     ):
         self.original_model = model
         self.name = model_name
         self.device_manager = device_manager
+        self.example_input = example_input
         self.rebalance_interval = rebalance_interval
         self.rebalance_threshold = rebalance_threshold
         self.n_microbatches = n_microbatches
@@ -163,36 +167,16 @@ class AdaptivePipeline:
 
     def _initial_pipeline_config(self) -> PipelineConfig:
         """Generate initial balanced split."""
-        children = list(self.original_model.inner().named_children())
 
-        # Simple initial split: divide evenly across devices
-        step = max(1, len(children) // self.num_stages) # 2
-        split_point_indices = [i * step for i in range(1, self.num_stages)]
-
-
-
-        # Get UUIDs from the TimedModule children at split points
-        # TODO: just make every child into a splitpoint beginning
-        print(f"split_point_indices: {split_point_indices}")
-        split_spec = {}
-        for idx in split_point_indices:
-            if idx < len(children):
-                _, child_module = children[idx]
-                if hasattr(child_module, 'uuid'):
-                    split_spec[child_module.uuid] = SplitPoint.BEGINNING
-
-        print(f">>split_spec: {split_spec}")
-        #>>split_spec: {UUID('dfc9133a-2165-4d1a-bf4f-1849d01c6e6c'): <SplitPoint.BEGINNING: 1>}
+        # Making the split spec by assigning every child of root module to be a split point
+        # SplitPoint.BEGINNING means start a stage before this one, so we cannot mark the first module with it
+        # because the first module is already the start of a stage implicitly
+        children_uuid = timed_module_hierarchy[self.original_model.uuid]
+        split_spec = {u: SplitPoint.BEGINNING for u in children_uuid[1:]}
 
         # Make device mapping
-        #TODO: this might be weird if only running on CPU
         num_devices = self.device_manager.num_devices()
-        #TODO: this is wrong: Stage 1 not in device_mapping: {0: device(type='cpu')}
-        # stage id missmatch?
-        device_mapping = {i: self.device_manager.get_device(i) for i in range(num_devices)}
-
-        print(f">>device_mapping: {device_mapping}")
-        #>>device_mapping: {0: device(type='cpu')}
+        device_mapping = {i: self.device_manager.get_device(i % num_devices) for i in range(len(split_spec)+1)}
 
         return PipelineConfig(split_spec=split_spec, device_mapping=device_mapping)
 
@@ -253,12 +237,12 @@ class AdaptivePipeline:
                 path_split_spec[timed_module.get_path()] = split_point
 
         # Create pipe
-        # TODO(critical): not all models are going to have rand_inputs. see mb_args=... below
         self.pipe = pipeline(
             module=self.original_model,
-            mb_args=(self.original_model.rand_inputs(),),
+            mb_args=(self.example_input,),
             split_spec=path_split_spec
         )
+        self.update_num_stages()
 
         # Create stages with device mapping
         self.stages = []
@@ -267,9 +251,8 @@ class AdaptivePipeline:
             assert i in config.device_mapping, f"Stage {i} not in device_mapping: {config.device_mapping}"
 
             # Create the pipeline stage
-            # todo RuntimeError: Pipeline group size 2 cannot be larger than number of stages 1
             stage = PipelineStage(
-                self.pipe.get_stage_module(i),
+                self.pipe.get_stage_module(i), #<-- why does this start counting at 1??
                 stage_index=i,
                 num_stages=self.pipe.num_stages,
                 device=config.device_mapping[i]
@@ -278,6 +261,10 @@ class AdaptivePipeline:
 
         # Create scheduler
         self.scheduler = ScheduleGPipe(self.stages[dist.get_rank()], n_microbatches=self.n_microbatches)
+
+    def update_num_stages(self):
+        self.num_stages = self.pipe.num_stages
+        self.pipeline_optimizer.num_stages = self.num_stages
 
     def update_logs(self):
         """Updates self.time_logs and returns them."""

@@ -17,6 +17,9 @@ class PipelineConfig:
 class PipelineOptimizer(ABC):
     """Abstract base class for pipeline optimisers."""
 
+    # Can be updated by AdaptivePipeline
+    num_stages: int
+
     def __init__(self, num_stages: int):
         self.num_stages = num_stages
 

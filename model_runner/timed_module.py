@@ -93,13 +93,6 @@ class TimedModule(nn.Module):
         """Get the full path of this module in the model hierarchy."""
         return self.module_path
 
-    def rand_inputs(self) -> Any:
-        if callable(self.inner().rand_inputs):
-            return self.inner().rand_inputs()
-        else:
-            print("Inner module does not have a `rand_inputs` function!")
-            return None
-
     def to(self, *args, **kwargs):
         """Override to() to update self.device when module is moved."""
         result = super().to(*args, **kwargs)
