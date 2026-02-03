@@ -4,6 +4,7 @@ from typing import Any, List, Dict
 
 import torch
 from torch import nn
+import torch.distributed as dist
 
 from .adaptive_pipeline import AdaptivePipeline
 from .device_manager import DeviceManager
@@ -106,45 +107,61 @@ class MainService:
 
     def run(self, exit_when_done = False):
         self._log("MainService.run: starting main loop")
+        rank = dist.get_rank() if dist.is_initialized() else 0
+
         # main loop
         while True:
             did_work = False
 
             # Process each model's work in microbatches
             for model_name, model_queue in self.work_by_model.items():
-                if model_queue.empty():
-                    continue
-
-                did_work = True
                 pipeline = self.pipelines[model_name]
                 n_microbatches = pipeline.n_microbatches
 
-                #TODO: only rank 0 should get the work
-                # rank = dist.get_rank()
+                # Only rank 0 checks the queue and prepares inputs
+                if rank == 0:
+                    has_work = torch.tensor([1 if not model_queue.empty() else 0], dtype=torch.int)
+                else:
+                    has_work = torch.tensor([0], dtype=torch.int)
 
-                # Collect up to n_microbatches items from this model's queue
-                work_items = []
-                while len(work_items) < n_microbatches and not model_queue.empty():
-                    work_items.append(model_queue.get(block=False))
+                # Broadcast whether there's work from rank 0 to all ranks
+                # This synchronises all ranks
+                dist.broadcast(has_work, src=0)
 
-                req_ids = [item[0] for item in work_items]
-                inputs = [item[1] for item in work_items]
+                if has_work.item() == 0:
+                    continue
 
-                # Pad batch if needed (scheduler expects exactly n_microbatches)
-                while len(inputs) < n_microbatches:
-                    inputs.append(inputs[-1])  # Duplicate last input as padding
+                did_work = True
+                req_ids = []
+                batched_input = None
 
-                self._log(f"MainService.run: processing {len(work_items)} requests for model '{model_name}' (microbatch size: {n_microbatches})")
+                if rank == 0:
+                    # Collect up to n_microbatches items from this model's queue
+                    work_items = []
+                    while len(work_items) < n_microbatches and not model_queue.empty():
+                        work_items.append(model_queue.get(block=False))
 
-                # Stack inputs into a batch tensor
-                batched_input = torch.stack(inputs)
+                    req_ids = [item[0] for item in work_items]
+                    inputs = [item[1] for item in work_items]
+
+                    # Pad batch if needed (scheduler expects exactly n_microbatches)
+                    while len(inputs) < n_microbatches:
+                        inputs.append(inputs[-1])  # Duplicate last input as padding
+
+                    self._log(f"MainService.run: processing {len(work_items)} requests for model '{model_name}' (microbatch size: {n_microbatches})")
+
+                    # Stack inputs into a batch tensor
+                    batched_input = torch.stack(inputs)
+
+                # All ranks must call forward together
                 outputs = pipeline.forward(batched_input)
 
-                # Store outputs (only for real requests, not padding)
-                with self._outputs_lock:
-                    for j, req_id in enumerate(req_ids):
-                        self.model_outputs[req_id] = outputs[j]
-                        self._log(f"MainService.run: completed request {req_id}")
+                # Only rank 0 stores outputs
+                if rank == 0:
+                    with self._outputs_lock:
+                        for j, req_id in enumerate(req_ids):
+                            self.model_outputs[req_id] = outputs[j]
+                            self._log(f"MainService.run: completed request {req_id}")
 
             #TODO: make MainService.run more like a service
             # sleep for a bit

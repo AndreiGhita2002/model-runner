@@ -1,6 +1,6 @@
 .PHONY: install test test-all test-pipeline clean
 
-TORCHRUN = uv run torchrun --nproc_per_node=1 -m
+TORCHRUN = uv run torchrun --nproc_per_node=2 -m
 
 install:
 	uv pip install -e .
