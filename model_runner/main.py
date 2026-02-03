@@ -150,14 +150,29 @@ class MainService:
 
                     self._log(f"MainService.run: processing {len(work_items)} requests for model '{model_name}' (microbatch size: {n_microbatches})")
 
-                    # Stack inputs into a batch tensor
-                    batched_input = torch.stack(inputs)
+                    # Concatenate inputs along batch dimension (inputs already have batch dim)
+                    batched_input = torch.cat(inputs, dim=0)
 
                 # All ranks must call forward together
                 outputs = pipeline.forward(batched_input)
 
+                # Output is only on the last rank, need to send it back to rank 0
+                world_size = dist.get_world_size()
+                last_rank = world_size - 1
+
+                if world_size > 1:
+                    if rank == last_rank:
+                        # Last rank has the output, send to rank 0
+                        dist.send(outputs, dst=0)
+                    elif rank == 0:
+                        # Rank 0 receives output from last rank
+                        # Need to know the shape - use the input shape as reference for buffer
+                        output_shape = (n_microbatches,) + batched_input.shape[1:]
+                        outputs = torch.empty(output_shape, dtype=batched_input.dtype)
+                        dist.recv(outputs, src=last_rank)
+
                 # Only rank 0 stores outputs
-                if rank == 0:
+                if rank == 0 and outputs is not None:
                     with self._outputs_lock:
                         for j, req_id in enumerate(req_ids):
                             self.model_outputs[req_id] = outputs[j]
