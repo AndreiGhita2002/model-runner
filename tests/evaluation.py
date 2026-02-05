@@ -1,12 +1,13 @@
 import json
 import os
 import sys
+import uuid
 from typing import Any
 
 import torch
 import torch.distributed as dist
 
-from model_runner import MainService
+from model_runner import MainService, uuids_to_tensor, tensor_to_uuids
 from tests.testing_models import evaluation_models
 from tests.baseline import baseline_main, DEFAULT_BASELINE_FILE
 
@@ -21,10 +22,10 @@ def load_baseline(baseline_file: str):
         return json.load(f)
 
 
-evaluation_results: dict[int, Any] = {}
+evaluation_results: dict[uuid.UUID, Any] = {}
 
 
-def handle_output(request_id: int, model_name: str, output: Any):
+def handle_output(request_id: uuid.UUID, model_name: str, output: Any):
     evaluation_results[request_id] = output
     print(f"Received output from {model_name} from request: {request_id}. Output shape: {output.shape}")
 
@@ -33,32 +34,58 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
     # Load baseline data
     baseline_data = load_baseline(baseline_file)
 
-    # Constants:
-    requests: dict[str, list[int]] = dict()
+    rank = dist.get_rank()
+    last_rank = dist.get_world_size() - 1
+    requests: dict[str, list[uuid.UUID]] = dict()
 
     # Init main
     print("Initialising main service...")
     main = MainService(handle_output, verbose=True)
 
-    # Adding models
+    # Adding models (all ranks)
     for model_name, load_model, rand_input in evaluation_models:
         print(f"> Adding model {model_name} with load function {load_model.__name__}")
         main.add_model(model_name, load_model(), rand_input(), model_output_is_static=True)
 
-        # Adding work from baseline inputs
-        requests[model_name] = list()
-        for entry in baseline_data[model_name]:
-            x = torch.tensor(entry["input"])
-            req_id = main.queue_work(model_name, x)
-            requests[model_name].append(req_id)
-            print(f" > Work added with request id: {req_id}")
+    # Queue work (rank 0 only)
+    if rank == 0:
+        for model_name, _, _ in evaluation_models:
+            requests[model_name] = list()
+            for entry in baseline_data[model_name]:
+                x = torch.tensor(entry["input"])
+                req_id = main.queue_work(model_name, x)
+                requests[model_name].append(req_id)
+                print(f" > Work added with request id: {req_id}")
 
-    # Running the main service:
+        # Send request IDs to last rank so it can match outputs
+        if last_rank != 0:
+            for model_name, _, _ in evaluation_models:
+                uuids = requests[model_name]
+                n = torch.tensor([len(uuids)], dtype=torch.int)
+                dist.send(n, dst=last_rank)
+                if len(uuids) > 0:
+                    t = uuids_to_tensor(uuids, len(uuids))
+                    dist.send(t, dst=last_rank)
+
+    # Receive request IDs from rank 0
+    elif rank == last_rank: # Unless there is a single rank in the world
+        for model_name, _, _ in evaluation_models:
+            n = torch.zeros(1, dtype=torch.int)
+            dist.recv(n, src=0)
+            count = n.item()
+            requests[model_name] = []
+            if count > 0:
+                t = torch.zeros(count * 4, dtype=torch.int)
+                dist.recv(t, src=0)
+                decoded = tensor_to_uuids(t)
+                requests[model_name] = [u for u in decoded if u is not None]
+
+    # Running the main service (all ranks):
     main.run(exit_when_done=True)
 
     # Checking the work
     print("\nComparing outputs (only on the last rank)...")
-    if dist.get_rank() == dist.get_world_size() - 1:
+    if rank == last_rank:
         failed_requests = []
         for model_name in requests:
             for i, req_id in enumerate(requests[model_name]):

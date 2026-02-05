@@ -1,15 +1,39 @@
 import queue
-import threading
-from types import FunctionType
+import struct
+import uuid
 from typing import Any, List, Dict, Callable
 
 import torch
-from torch import nn, Tensor
 import torch.distributed as dist
+from torch import nn
 
 from .adaptive_pipeline import AdaptivePipeline
 from .device_manager import DeviceManager
 from .timed_module import make_module_timed
+
+
+def uuids_to_tensor(uuids: list[uuid.UUID], pad_to: int) -> torch.Tensor:
+    """Encode UUIDs as a flat tensor of int32 (4 ints per UUID), padded with zeros."""
+    ints = []
+    for u in uuids:
+        ints.extend(struct.unpack('>4i', u.bytes))
+    # Pad remaining slots with zeros (nil UUID = sentinel)
+    ints.extend([0] * (pad_to - len(uuids)) * 4)
+    return torch.tensor(ints, dtype=torch.int)
+
+
+def tensor_to_uuids(t: torch.Tensor) -> list[uuid.UUID | None]:
+    """Decode flat int32 tensor back to UUIDs. Returns None for nil UUID (sentinel)."""
+    values = t.tolist()
+    result = []
+    for i in range(0, len(values), 4):
+        chunk = values[i:i + 4]
+        if all(v == 0 for v in chunk):
+            result.append(None)
+        else:
+            raw = struct.pack('>4i', *chunk)
+            result.append(uuid.UUID(bytes=raw))
+    return result
 
 
 class MainService:
@@ -20,17 +44,16 @@ class MainService:
     #TODO: find a more appropriate name for this
     # maybe AdaptivePipelineRunner? PipelineRuntime? PipelineOrchestrator?
 
-    def __init__(self, handle_output_fn: Callable[[int, str, Any], None], default_timing_depth: int = 3, verbose=False):
+    def __init__(self, handle_output_fn: Callable[[uuid.UUID, str, Any], None], default_timing_depth: int = 3, verbose=False):
         """
         Args:
             handle_output_fn: Function for handling model outputs.
-              Should be of type f(request_id: int, model_name: str, output: Any) -> None
+              Should be of type f(request_id: uuid.UUID, model_name: str, output: Any) -> None
             default_timing_depth: Depth for TimedModule profiling
             verbose: Enable verbose logging output
         """
         self.pipelines: dict[str, AdaptivePipeline] = {}
         self.work_by_model: Dict[str, queue.Queue] = {}
-        self.next_req_id: int = 1  #TODO: switch to uuid (0 is reserved as padding sentinel)
         self.handle_output_fn = handle_output_fn
         self.default_timing_depth = default_timing_depth
         self.verbose = verbose
@@ -90,15 +113,13 @@ class MainService:
         )
         self.work_by_model[model_name] = queue.Queue()
 
-    def queue_work(self, model_name: str, x: Any, request_id: int | None = None) -> int:
+    def queue_work(self, model_name: str, x: Any) -> uuid.UUID:
         """Queue work for a model. Only call this on rank 0."""
         if dist.get_rank() != 0:
             raise RuntimeError("queue_work() must only be called on rank 0")
         if model_name not in self.work_by_model:
             raise ValueError(f"Model '{model_name}' not found. Add it with add_model() first.")
-        if request_id is None:
-            request_id = self.next_req_id
-            self.next_req_id += 1
+        request_id = uuid.uuid4()
         self.work_by_model[model_name].put((request_id, x))
         return request_id
 
@@ -112,7 +133,7 @@ class MainService:
 
         if rank == 0:
             # Collect up to n_microbatches items from this model's queue
-            work_items: list[tuple[int, Any]] = []
+            work_items: list[tuple[uuid.UUID, Any]] = []
             while len(work_items) < n_microbatches and not model_queue.empty():
                 work_items.append(model_queue.get(block=False))
 
@@ -130,9 +151,8 @@ class MainService:
             batched_input = torch.cat(inputs, dim=0).contiguous()
 
             if dist.get_world_size() != 1:
-                # Prepare request ids tensor (padded with 0 sentinel — real ids start at 1)
-                t_req_ids = torch.tensor(req_ids, dtype=torch.int)
-                t_req_ids = torch.nn.functional.pad(t_req_ids, (0, n_microbatches - t_req_ids.size(0)))
+                # Encode UUIDs as int32 tensor (4 ints per UUID, nil UUID = padding sentinel)
+                t_req_ids = uuids_to_tensor(req_ids, n_microbatches)
 
         # All ranks must call forward together
         outputs = pipeline.forward(batched_input)
@@ -146,13 +166,13 @@ class MainService:
         if rank == last_rank:
             # Receive the request ids from the first rank
             if dist.get_world_size() != 1:
-                t_req_ids = torch.zeros(n_microbatches, dtype=torch.int)
+                t_req_ids = torch.zeros(n_microbatches * 4, dtype=torch.int)
                 dist.recv(t_req_ids, src=0)
-                req_ids = t_req_ids.tolist()
+                req_ids = tensor_to_uuids(t_req_ids)
 
             for i, req_id in enumerate(req_ids):
-                if req_id == 0:
-                    continue  # Skip padding entries (0 is sentinel)
+                if req_id is None:
+                    continue  # Skip padding entries (nil UUID sentinel)
                 output = outputs[i]
                 self.handle_output_fn(req_id, model_name, output)
 
