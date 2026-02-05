@@ -131,7 +131,7 @@ class MainService:
                 f"MainService.run: processing {len(work_items)} requests for model '{model_name}' (microbatch size: {n_microbatches})")
 
             # Concatenate inputs along batch dimension (inputs already have batch dim)
-            batched_input = torch.cat(inputs, dim=0)
+            batched_input = torch.cat(inputs, dim=0).contiguous()
 
         # All ranks must call forward together
         outputs = pipeline.forward(batched_input)

@@ -18,6 +18,21 @@ from .device_manager import DeviceManager
 from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer, PipelineConfig
 
 
+#TODO(think): is _ContiguousStageWrapper a good idea?
+class _ContiguousStageWrapper(torch.nn.Module):
+    """Wraps a pipeline stage submodule to ensure its output is contiguous.
+    Required because PyTorch's P2P communication (isend) requires contiguous tensors."""
+    def __init__(self, module):
+        super().__init__()
+        self.module = module
+
+    def forward(self, *args, **kwargs):
+        output = self.module(*args, **kwargs)
+        if isinstance(output, torch.Tensor):
+            return output.contiguous()
+        return output
+
+
 def _optimizer_process_worker(
     optimizer: PipelineOptimizer,
     request_queue: mp.Queue,
@@ -294,9 +309,10 @@ class AdaptivePipeline:
             # If `i` is not in device mapping, then it is incomplete and something went wrong
             assert i in config.device_mapping, f"Stage {i} not in device_mapping: {config.device_mapping}"
 
-            # Create the pipeline stage
+            # Wrap stage submodule to ensure outputs are contiguous for P2P communication
+            stage_module = self.pipe.get_stage_module(i)
             stage = PipelineStage(
-                self.pipe.get_stage_module(i),
+                _ContiguousStageWrapper(stage_module),
                 stage_index=i,
                 num_stages=self.pipe.num_stages,
                 device=config.device_mapping[i]
