@@ -14,7 +14,8 @@ from tests.baseline import baseline_main, DEFAULT_BASELINE_FILE
 def load_baseline(baseline_file: str):
     if not os.path.exists(baseline_file):
         print(f"Baseline file not found, generating {baseline_file}...")
-        baseline_main(output_file=baseline_file)
+        if dist.get_rank() == 0:
+            baseline_main(output_file=baseline_file)
 
     with open(baseline_file, "r") as f:
         return json.load(f)
@@ -68,8 +69,8 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
                     print(f"  [{model_name}] Request {req_id}: FAIL (shape mismatch)")
                     print(
                         f"    Pipeline shape: {list(pipeline_output.shape)}, Baseline shape: {list(baseline_output.shape)}")
-                    print(f"    Pipeline output: {pipeline_output}")
-                    print(f"    Baseline output: {baseline_output}")
+                    # print(f"    Pipeline output: {pipeline_output}")
+                    # print(f"    Baseline output: {baseline_output}")
                     failed_requests.append((model_name, req_id))
                 elif torch.allclose(pipeline_output, baseline_output, atol=1e-6):
                     print(f"  [{model_name}] Request {req_id}: PASS")
@@ -80,9 +81,7 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
         if not failed_requests:
             print("\nAll outputs match baseline!")
         else:
-            print(f"\n{len(failed_requests)} request(s) differ from baseline:")
-            for model_name, req_id in failed_requests:
-                print(f"  - {model_name}: request {req_id}")
+            print(f"\n{len(failed_requests)} request(s) differ from baseline.")
 
     print(f"rank:{dist.get_rank()} exiting!")
 

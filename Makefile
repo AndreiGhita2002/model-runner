@@ -10,6 +10,9 @@ install:
 eval:
 	$(TORCHRUN) tests.evaluation
 
+baseline:
+	uv run --no-sync torchrun --nproc_per_node=1 -m tests.baseline
+
 test-pipeline:
 	$(TORCHRUN) tests.pipeline_test
 

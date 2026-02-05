@@ -31,9 +31,9 @@ def baseline_main(num_requests: int = 5, seed: int = 37, output_file: str = DEFA
             results[model_name].append({
                 "seed": seed + i,
                 "input": x.tolist(),
-                "output": output.tolist()
+                "output": output[0].tolist()
             })
-            print(f"  > Request {i}: input shape {list(x.shape)}, output shape {list(output.shape)}")
+            print(f"  > Request {i}: input shape {list(x.shape)}, output shape {list(output[0].shape)}")
 
     # Save to JSON
     with open(output_file, "w") as f:
