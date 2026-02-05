@@ -38,7 +38,7 @@ class SimpleNet(nn.Module):
 
 def load_conv_next(device: str = "cpu") -> ConvNeXt:
     weights = ConvNeXt_Small_Weights.IMAGENET1K_V1
-    model = convnext_small(weights=weights)
+    model = convnext_small(weights=weights).eval()
     if device is not None:
         model.to(device)
     return model
@@ -47,7 +47,8 @@ def conv_next_rand_inputs() -> torch.Tensor:
     return torch.randn(1, 3, 224, 224)
 
 def load_simple_net(device: str = "cpu") -> nn.Module:
-    return SimpleNet(device)
+    torch.manual_seed(0)
+    return SimpleNet(device).eval()
 
 def simple_net_rand_inputs() -> torch.Tensor:
     return torch.randn(1, 1, 16, 16)

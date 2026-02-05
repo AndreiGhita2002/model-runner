@@ -12,9 +12,7 @@ def baseline_main(num_requests: int = 5, seed: int = 37, output_file: str = DEFA
     for model_name, load_model, rand_inputs in evaluation_models:
         print(f"Running baseline for model: {model_name}")
 
-        # Load model in eval mode
         model = load_model()
-        model.eval()
 
         results[model_name] = []
 
