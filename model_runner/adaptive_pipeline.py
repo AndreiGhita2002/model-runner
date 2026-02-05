@@ -4,6 +4,8 @@ import warnings
 import multiprocessing as mp
 from typing import Optional, Any
 
+import torch
+
 # Suppress PyTorch internal FutureWarning about LeafSpec deprecation
 warnings.filterwarnings("ignore", message=".*LeafSpec.*is deprecated.*", category=FutureWarning)
 
@@ -44,6 +46,16 @@ def _optimizer_process_worker(
             # Signal that we checked but no rebalance needed
             result_queue.put(None)
 
+def extract_shapes(obj):
+    if isinstance(obj, torch.Tensor):
+        return obj.shape
+    elif isinstance(obj, (tuple, list)):
+        return type(obj)(extract_shapes(x) for x in obj)
+    elif isinstance(obj, dict):
+        return {k: extract_shapes(v) for k, v in obj.items()}
+    else:
+        return None
+
 
 class AdaptivePipeline:
     """Manages a pytorch pipeline, and rebalances it every interval."""
@@ -61,12 +73,15 @@ class AdaptivePipeline:
     # Time logs
     time_logs: dict[uuid.UUID, list[float]]
 
+    #TODO: we need to know the size of the output, and only use it if the model is static
+
     def __init__(
             self,
             model: TimedModule,
             model_name: str,
             device_manager: DeviceManager,
             example_input: Any,
+            model_output_is_static: bool,
             pipeline_optimizer: PipelineOptimizer = None,
             rebalance_interval: int = 10,
             rebalance_threshold: float = 0.1,
@@ -79,6 +94,7 @@ class AdaptivePipeline:
         self.name = model_name
         self.device_manager = device_manager
         self.example_input = example_input
+        self.model_output_is_static = model_output_is_static
         self.rebalance_interval = rebalance_interval
         self.rebalance_threshold = rebalance_threshold
         self.time_logs = {}
@@ -87,6 +103,9 @@ class AdaptivePipeline:
         self.async_optimization = async_optimization
         self.num_stages = dist.get_world_size()
         self.n_microbatches = n_microbatches if n_microbatches >= self.num_stages else self.num_stages
+
+        if model_output_is_static:
+            self._dummy_run()
 
         self.pipeline_optimizer = pipeline_optimizer if pipeline_optimizer else GreedyPipelineOptimizer(
             root_uuid=model.uuid,
@@ -199,10 +218,11 @@ class AdaptivePipeline:
         print(f"rank:{rank} in forward")
 
         # Only the first rank gets the input
-        if rank == 0:
-            output = self.scheduler.step(x)  # <--- crashes here
-        else:
-            output = self.scheduler.step()
+        with torch.no_grad():
+            if rank == 0:
+                output = self.scheduler.step(x)
+            else:
+                output = self.scheduler.step()
 
         self.update_logs()  #todo: this probably does not work in a parallel context
         self.batch_i += 1
@@ -242,6 +262,7 @@ class AdaptivePipeline:
 
     def rebuild_pipeline(self, config: PipelineConfig):
         """Create a new pipeline from config."""
+        print(f"[rank:{dist.get_rank()}] rebuilding pipeline...")
         self.current_config = config
 
         # Convert UUID-based split_spec to path-based for PyTorch
@@ -288,3 +309,22 @@ class AdaptivePipeline:
     def update_logs(self):
         """Updates self.time_logs and returns them."""
         return self.original_model.get_logs(self.time_logs)
+
+    def get_output_size(self):
+        """Returns the size of the output if the output is static, and if not it will return None.
+           Tell the pipeline if the model is static or not with the `model_output_is_static` field."""
+        if self.model_output_is_static:
+            return self.output_size
+        else:
+            return None
+
+    def _dummy_run(self):
+        """Runs a dummy run of the model to set `output_size`.
+           Only works before the pipeline has been built and if `model_output_is_static` is True."""
+        if not self.model_output_is_static:
+            raise ValueError("AdaptivePipeline._dummy_run() was called when model output is not static.")
+
+        # TODO: you can also use the dummy run to get initial timing data
+
+        output = self.original_model(self.example_input)
+        self.output_size = extract_shapes(output)

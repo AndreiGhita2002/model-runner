@@ -1,6 +1,7 @@
 import queue
 import threading
-from typing import Any, List, Dict
+from types import FunctionType
+from typing import Any, List, Dict, Callable
 
 import torch
 from torch import nn
@@ -17,24 +18,27 @@ class MainService:
     """
 
     #TODO: find a more appropriate name for this
-    # maybe AdaptivePipelineRunner? PipelineRuntime?
+    # maybe AdaptivePipelineRunner? PipelineRuntime? PipelineOrchestrator?
 
     pipelines: dict[str, AdaptivePipeline] = {}
     # Work queues per model: model_name -> Queue of (request_id, input_data)
     work_by_model: Dict[str, queue.Queue] = {}
     next_req_id: int = 0 #TODO: switch to uuid
-    # Model Outputs: request ID -> output (protected by _outputs_lock)
-    model_outputs: dict[int, Any] = {}
-    _outputs_lock: threading.Lock = threading.Lock()
+    # Function that handles the output of a model.
+    # Should be of type f(request_id: int, model_name: str, output: Any) -> None
+    handle_output_fn: Callable[[int, str, Any], None]
     # Verbose logging flag
     verbose: bool = False
 
-    def __init__(self, default_timing_depth: int = 3, verbose=False):
+    def __init__(self, handle_output_fn, default_timing_depth: int = 3, verbose=False):
         """
         Args:
+            handle_output_fn: Function for handling model outputs.
+              Should be of type f(request_id: int, model_name: str, output: Any) -> None
             default_timing_depth: Depth for TimedModule profiling
             verbose: Enable verbose logging output
         """
+        self.handle_output_fn = handle_output_fn
         self.default_timing_depth = default_timing_depth
         self.verbose = verbose
 
@@ -46,7 +50,7 @@ class MainService:
         if self.verbose:
             print(msg)
 
-    def add_model(self, model_name: str, model: nn.Module, example_input: Any, device=None, depth: int | None = None, **kwargs):
+    def add_model(self, model_name: str, model: nn.Module, example_input: Any, model_output_is_static: bool, device=None, depth: int | None = None, **kwargs):
         """
         Add a model to the service.
 
@@ -54,6 +58,7 @@ class MainService:
             model_name: Unique name for the model
             model: The PyTorch model to add
             example_input: An example input for the model
+            model_output_is_static: does the model always output a tensor of the same size?
             device: Device to run the model on (default: primary device)
             depth: Depth for TimedModule profiling (default: self.default_timing_depth)
             **kwargs: Additional arguments passed to AdaptivePipeline:
@@ -63,7 +68,6 @@ class MainService:
                 - n_microbatches: Number of microbatches for pipeline (default: 4)
                 - initial_pipeline_config: Initial pipeline configuration
                 - async_optimization: Use async optimisation (default: False)
-
         """
         if device is None:
             device = str(self.primary_device)
@@ -88,6 +92,7 @@ class MainService:
             model_name,
             self.device_manager,
             example_input,
+            model_output_is_static,
             **kwargs
         )
         self.work_by_model[model_name] = queue.Queue()
@@ -101,23 +106,55 @@ class MainService:
         self.work_by_model[model_name].put((request_id, x))
         return request_id
 
-    def get_work_results(self, request_id: int) -> Any | None:
-        with self._outputs_lock:
-            return self.model_outputs.get(request_id, None)
+    def _run_pipeline(self, model_name: str):
+        pipeline = self.pipelines[model_name]
+        model_queue = self.work_by_model[model_name]
+        n_microbatches = pipeline.n_microbatches
+        rank = dist.get_rank()
+        req_ids = []
+        batched_input = None
+
+        if rank == 0:
+            # Collect up to n_microbatches items from this model's queue
+            work_items = []
+            while len(work_items) < n_microbatches and not model_queue.empty():
+                work_items.append(model_queue.get(block=False))
+
+            req_ids = [item[0] for item in work_items]
+            inputs = [item[1] for item in work_items]
+
+            # Pad batch if needed (scheduler expects exactly n_microbatches)
+            while len(inputs) < n_microbatches:
+                inputs.append(inputs[-1])  # Duplicate last input as padding
+
+            self._log(
+                f"MainService.run: processing {len(work_items)} requests for model '{model_name}' (microbatch size: {n_microbatches})")
+
+            # Concatenate inputs along batch dimension (inputs already have batch dim)
+            batched_input = torch.cat(inputs, dim=0)
+
+        # All ranks must call forward together
+        outputs = pipeline.forward(batched_input)
+
+        # Output is only on the last rank
+        # Which should handle the output with the user defined function
+        if rank == dist.get_world_size() - 1:
+            assert len(req_ids) <= len(outputs)
+
+            for i, req_id in enumerate(req_ids):
+                # I hope the outputs come in the same order I put them in
+                output = outputs[i]
+                self.handle_output_fn(req_id, model_name, output)
 
     def run(self, exit_when_done = False):
+        """The main loop of the service."""
         self._log("MainService.run: starting main loop")
-        rank = dist.get_rank() if dist.is_initialized() else 0
-
-        # main loop
+        rank = dist.get_rank()
         while True:
             did_work = False
 
             # Process each model's work in microbatches
             for model_name, model_queue in self.work_by_model.items():
-                pipeline = self.pipelines[model_name]
-                n_microbatches = pipeline.n_microbatches
-
                 # Only rank 0 checks the queue and prepares inputs
                 if rank == 0:
                     has_work = torch.tensor([1 if not model_queue.empty() else 0], dtype=torch.int)
@@ -128,55 +165,9 @@ class MainService:
                 # This synchronises all ranks
                 dist.broadcast(has_work, src=0)
 
-                if has_work.item() == 0:
-                    continue
-
-                did_work = True
-                req_ids = []
-                batched_input = None
-
-                if rank == 0:
-                    # Collect up to n_microbatches items from this model's queue
-                    work_items = []
-                    while len(work_items) < n_microbatches and not model_queue.empty():
-                        work_items.append(model_queue.get(block=False))
-
-                    req_ids = [item[0] for item in work_items]
-                    inputs = [item[1] for item in work_items]
-
-                    # Pad batch if needed (scheduler expects exactly n_microbatches)
-                    while len(inputs) < n_microbatches:
-                        inputs.append(inputs[-1])  # Duplicate last input as padding
-
-                    self._log(f"MainService.run: processing {len(work_items)} requests for model '{model_name}' (microbatch size: {n_microbatches})")
-
-                    # Concatenate inputs along batch dimension (inputs already have batch dim)
-                    batched_input = torch.cat(inputs, dim=0)
-
-                # All ranks must call forward together
-                outputs = pipeline.forward(batched_input)
-
-                # Output is only on the last rank, need to send it back to rank 0
-                world_size = dist.get_world_size()
-                last_rank = world_size - 1
-
-                if world_size > 1:
-                    if rank == last_rank:
-                        # Last rank has the output, send to rank 0
-                        dist.send(outputs, dst=0)
-                    elif rank == 0:
-                        # Rank 0 receives output from last rank
-                        # Need to know the shape - use the input shape as reference for buffer
-                        output_shape = (n_microbatches,) + batched_input.shape[1:]
-                        outputs = torch.empty(output_shape, dtype=batched_input.dtype)
-                        dist.recv(outputs, src=last_rank)
-
-                # Only rank 0 stores outputs
-                if rank == 0 and outputs is not None:
-                    with self._outputs_lock:
-                        for j, req_id in enumerate(req_ids):
-                            self.model_outputs[req_id] = outputs[j]
-                            self._log(f"MainService.run: completed request {req_id}")
+                if has_work.item() != 0:
+                    self._run_pipeline(model_name)
+                    did_work = True
 
             #TODO: make MainService.run more like a service
             # sleep for a bit

@@ -1,6 +1,8 @@
 import json
 import os
 import sys
+from typing import Any
+
 import torch
 import torch.distributed as dist
 
@@ -17,6 +19,11 @@ def load_baseline(baseline_file: str):
     with open(baseline_file, "r") as f:
         return json.load(f)
 
+evaluation_results: dict[int, Any]
+
+def handle_output(request_id: int, model_name: str, output: Any):
+    evaluation_results[request_id] = output
+    print(f"Received output from {model_name} from request: {request_id}. Output shape: {output.shape}")
 
 def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
     # Load baseline data
@@ -27,12 +34,12 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
 
     # Init main
     print("Initialising main service...")
-    main = MainService(verbose=True)
+    main = MainService(handle_output, verbose=True)
 
     # Adding models
     for model_name, load_model, rand_input in evaluation_models:
         print(f"> Adding model {model_name} with load function {load_model.__name__}")
-        main.add_model(model_name, load_model(), rand_input())
+        main.add_model(model_name, load_model(), rand_input(), model_output_is_static=True)
 
         # Adding work from baseline inputs
         requests[model_name] = list()
@@ -50,7 +57,7 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
     failed_requests = []
     for model_name in requests:
         for i, req_id in enumerate(requests[model_name]):
-            pipeline_output = main.get_work_results(req_id)
+            pipeline_output = evaluation_results[req_id]
             baseline_output = torch.tensor(baseline_data[model_name][i]["output"])
 
             if pipeline_output.shape != baseline_output.shape:
@@ -78,7 +85,7 @@ if __name__ == '__main__':
     backend = torch.distributed.get_default_backend_for_device(device)
     dist.init_process_group(backend=backend)
 
-    baseline_file = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_BASELINE_FILE
-    evaluation_main(baseline_file=baseline_file)
+    baseline = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_BASELINE_FILE
+    evaluation_main(baseline_file=baseline)
 
     dist.destroy_process_group()
