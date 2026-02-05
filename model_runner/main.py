@@ -4,7 +4,7 @@ from types import FunctionType
 from typing import Any, List, Dict, Callable
 
 import torch
-from torch import nn
+from torch import nn, Tensor
 import torch.distributed as dist
 
 from .adaptive_pipeline import AdaptivePipeline
@@ -23,7 +23,7 @@ class MainService:
     pipelines: dict[str, AdaptivePipeline] = {}
     # Work queues per model: model_name -> Queue of (request_id, input_data)
     work_by_model: Dict[str, queue.Queue] = {}
-    next_req_id: int = 0 #TODO: switch to uuid
+    next_req_id: int = 1 #TODO: switch to uuid (0 is reserved as padding sentinel)
     # Function that handles the output of a model.
     # Should be of type f(request_id: int, model_name: str, output: Any) -> None
     handle_output_fn: Callable[[int, str, Any], None]
@@ -111,12 +111,12 @@ class MainService:
         model_queue = self.work_by_model[model_name]
         n_microbatches = pipeline.n_microbatches
         rank = dist.get_rank()
-        req_ids = []
+        last_rank = dist.get_world_size() - 1
         batched_input = None
 
         if rank == 0:
             # Collect up to n_microbatches items from this model's queue
-            work_items = []
+            work_items: list[tuple[int, Any]] = []
             while len(work_items) < n_microbatches and not model_queue.empty():
                 work_items.append(model_queue.get(block=False))
 
@@ -133,16 +133,28 @@ class MainService:
             # Concatenate inputs along batch dimension (inputs already have batch dim)
             batched_input = torch.cat(inputs, dim=0).contiguous()
 
+            # Prepare request ids tensor (padded with 0 sentinel — real ids start at 1)
+            t_req_ids = torch.tensor(req_ids, dtype=torch.int)
+            t_req_ids = torch.nn.functional.pad(t_req_ids, (0, n_microbatches - t_req_ids.size(0)))
+
         # All ranks must call forward together
         outputs = pipeline.forward(batched_input)
 
+        # Send req_ids after forward so it doesn't interfere with the scheduler's P2P
+        if rank == 0:
+            dist.send(t_req_ids, dst=last_rank)
+
         # Output is only on the last rank
         # Which should handle the output with the user defined function
-        if rank == dist.get_world_size() - 1:
-            assert len(req_ids) <= len(outputs)
+        if rank == last_rank:
+            # Receive the request ids from the first rank
+            t_req_ids = torch.zeros(n_microbatches, dtype=torch.int)
+            dist.recv(t_req_ids, src=0)
+            req_ids = t_req_ids.tolist()
 
             for i, req_id in enumerate(req_ids):
-                # I hope the outputs come in the same order I put them in
+                if req_id == 0:
+                    continue  # Skip padding entries (0 is sentinel)
                 output = outputs[i]
                 self.handle_output_fn(req_id, model_name, output)
 
