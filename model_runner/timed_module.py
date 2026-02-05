@@ -22,7 +22,14 @@ timed_module_hierarchy: Dict[uuid.UUID, List[uuid.UUID]] = {}  # {uuid: [child_u
 
 
 def _cleanup_hierarchy(module_uuid: uuid.UUID, parent_uuid: uuid.UUID | None):
-    """Remove a module from the hierarchy when it's garbage collected."""
+    """Remove a module from the hierarchy when it is garbage collected.
+
+    Registered as a weak-reference finalizer by ``TimedModule.__init__``.
+
+    Args:
+        module_uuid: UUID of the module being collected.
+        parent_uuid: UUID of the parent module (or None for root).
+    """
     with _registry_lock:
         # Remove this module's entry from hierarchy
         if module_uuid in timed_module_hierarchy:
@@ -36,7 +43,29 @@ def _cleanup_hierarchy(module_uuid: uuid.UUID, parent_uuid: uuid.UUID | None):
 
 
 class TimedModule(nn.Module):
+    """Base class for modules that measure their own forward-pass duration.
+
+    Wraps an inner ``nn.Module``, assigns it a UUID, and registers it in the
+    global ``timed_module_registry`` / ``timed_module_hierarchy``. Subclasses
+    (``CUDATimedModule``, ``CPUTimedModule``) provide the actual timing logic.
+
+    Attribute access falls through to the inner module, so the wrapper is
+    largely transparent to the rest of the model.
+    """
+
     def __init__(self, module: nn.Module, device, depth=10, parent_uuid: uuid.UUID = None, module_path: str = "", *args, **kwargs):
+        """Wrap a module for timing and register it in the global hierarchy.
+
+        Args:
+            module: The ``nn.Module`` to wrap.
+            device: Device the module runs on (used by subclasses for buffer placement).
+            depth: How many levels of children to recursively wrap. ``None`` for unlimited.
+            parent_uuid: UUID of the parent ``TimedModule`` (None for root).
+            module_path: Dot-separated path of this module inside the model tree
+                (e.g. ``"layer1.conv"``). Used to map back to PyTorch split specs.
+            *args: Forwarded to ``nn.Module.__init__``.
+            **kwargs: Forwarded to ``nn.Module.__init__``.
+        """
         super().__init__(*args, **kwargs)
         self._inner = module
         self.device = device
@@ -58,13 +87,25 @@ class TimedModule(nn.Module):
         weakref.finalize(self, _cleanup_hierarchy, self.uuid, self.parent_uuid)
 
     def get_last_elapsed_cycles(self):
+        """Return the duration of the most recent forward pass.
+
+        Returns:
+            Elapsed time. Units depend on the subclass (GPU cycles for CUDA,
+            nanoseconds for CPU). Base implementation returns ``None``.
+        """
         pass
 
     def get_logs(self, existing_logs: Dict[uuid.UUID, List[float]] | None = None) -> Dict[uuid.UUID, List[float]]:
-        """
-        Collect timing logs using the hierarchy registry.
-        Works even after PyTorch pipeline splits the model.
-        Thread-safe.
+        """Recursively collect timing data from this module and all descendants.
+
+        Traverses the global hierarchy (not ``nn.Module.children``), so it works
+        even after PyTorch pipeline splitting has moved submodules. Thread-safe.
+
+        Args:
+            existing_logs: Dict to append into. If None, a new dict is created.
+
+        Returns:
+            Dict mapping each module's UUID to a list of elapsed-time measurements.
         """
         if existing_logs is None:
             existing_logs = {}
@@ -90,10 +131,27 @@ class TimedModule(nn.Module):
         return existing_logs
 
     def inner(self) -> nn.Module:
+        """Return the unwrapped inner module.
+
+        Returns:
+            The original ``nn.Module`` passed at construction.
+        """
         return self._inner
 
     def __getattr__(self, attr: str):
-        """Delegate attribute access to inner module for attributes not found on TimedModule."""
+        """Delegate attribute access to the inner module when not found on self.
+
+        Lookup order: ``nn.Module.__getattr__`` -> ``self._inner``.
+
+        Args:
+            attr: Attribute name.
+
+        Returns:
+            The attribute value.
+
+        Raises:
+            AttributeError: If neither this module nor the inner module has the attribute.
+        """
         #TODO(tests): make a good unit test for this and check all cases
         # this is a very critical builtin
         try:
@@ -109,14 +167,31 @@ class TimedModule(nn.Module):
                                      f"objects have no attribute '{attr}'")
 
     def _get_name(self):
+        """Return a human-readable name including the inner module's name and UUID.
+
+        Returns:
+            String of the form ``Timed_<InnerName>[uuid:<uuid>]``.
+        """
         return f"Timed_{self.inner()._get_name()}[uuid:{self.uuid}]"
 
     def get_path(self) -> str:
-        """Get the full path of this module in the model hierarchy."""
+        """Return the dot-separated path of this module in the model hierarchy.
+
+        Returns:
+            The ``module_path`` string set at construction (e.g. ``"layer1.conv"``).
+        """
         return self.module_path
 
     def to(self, *args, **kwargs):
-        """Override to() to update self.device when module is moved."""
+        """Move the module to a device/dtype and update ``self.device`` accordingly.
+
+        Args:
+            *args: Forwarded to ``nn.Module.to``.
+            **kwargs: Forwarded to ``nn.Module.to``.
+
+        Returns:
+            ``self``.
+        """
         result = super().to(*args, **kwargs)
         # Update device from first parameter/buffer we can find
         for param in self.parameters():
@@ -132,13 +207,27 @@ class TimedModule(nn.Module):
 # CUDA GPU Timed Module
 #==================
 class CUDATimedModule(TimedModule):
-    """
-    A wrapper that times the forward pass of a module using on-device clock64() CUDA kernels.
-    This measures raw GPU cycles as seen by the device.
-    torch.compile friendly.
+    """Times forward passes using on-device ``clock64()`` CUDA kernels.
+
+    Measures raw GPU cycles. ``torch.compile`` friendly. Requires the
+    ``cuda_timing_kernel`` C++ extension to be built.
+
+    Children are recursively wrapped up to ``depth`` levels.
     """
 
     def __init__(self, module: nn.Module, device, depth=1, parent_uuid: uuid.UUID = None, module_path: str = ""):
+        """Wrap a module for CUDA cycle-level timing.
+
+        Args:
+            module: The ``nn.Module`` to wrap.
+            device: CUDA device to place timing buffers on.
+            depth: Levels of children to recursively wrap (``None`` = unlimited).
+            parent_uuid: UUID of the parent ``TimedModule`` (None for root).
+            module_path: Dot-separated path in the model tree.
+
+        Raises:
+            ImportError: If the ``cuda_timing_kernel`` extension is not available.
+        """
         super().__init__(module, device, depth, parent_uuid=parent_uuid, module_path=module_path)
 
         if cuda_timing_kernel_cpp is None:
@@ -161,6 +250,15 @@ class CUDATimedModule(TimedModule):
                 setattr(self.inner(), child_name, wrapped_child)
 
     def forward(self, *args, **kwargs):
+        """Run the inner module bracketed by CUDA timer kernels.
+
+        Args:
+            *args: Forwarded to the inner module.
+            **kwargs: Forwarded to the inner module.
+
+        Returns:
+            The inner module's output.
+        """
         # 1. Start the timer
         cuda_timing_kernel_cpp.start(self.time_buffer)
         # 2. Run the inner module
@@ -171,9 +269,12 @@ class CUDATimedModule(TimedModule):
         return output
 
     def get_last_elapsed_cycles(self):
-        """
-        Will synchronise and then output elapsed cycles.
-        Not torch.compile friendly.
+        """Synchronize the CUDA device and return the elapsed GPU cycles.
+
+        Not ``torch.compile`` friendly (calls ``torch.cuda.synchronize``).
+
+        Returns:
+            Elapsed GPU cycles (int64) for the most recent forward pass.
         """
         # Sync the device where the buffer actually lives
         torch.cuda.synchronize(self.time_buffer.device)
@@ -182,6 +283,11 @@ class CUDATimedModule(TimedModule):
         return self.last_elapsed_cycles
 
     def _get_name(self):
+        """Return a display name prefixed with ``CUDA_``.
+
+        Returns:
+            String of the form ``CUDA_Timed_<InnerName>[uuid:<uuid>]``.
+        """
         return f"CUDA_{super()._get_name()}"
 
 
@@ -190,7 +296,11 @@ class CUDATimedModule(TimedModule):
 #==================
 @torch.library.custom_op("model_runner::cpu_time_ns", mutates_args={"time_buffer"})
 def cpu_time_ns(time_buffer: torch.Tensor) -> None:
-    """Write current time in nanoseconds to the buffer."""
+    """Write ``time.time_ns()`` into ``time_buffer[0]``. ``torch.compile`` friendly custom op.
+
+    Args:
+        time_buffer: A 1-element int64 tensor (mutated in-place).
+    """
     time_buffer[0] = time.time_ns()
 
 @cpu_time_ns.register_fake
@@ -199,12 +309,21 @@ def _(time_buffer: torch.Tensor) -> None:
 
 
 class CPUTimedModule(TimedModule):
-    """
-    A wrapper that times the forward pass of a module on CPU.
-    torch.compile friendly.
+    """Times forward passes on CPU using ``time.time_ns()`` via a custom op.
+
+    ``torch.compile`` friendly. Children are recursively wrapped up to ``depth`` levels.
     """
 
     def __init__(self, module: nn.Module, device, depth=1, parent_uuid: uuid.UUID = None, module_path: str = ""):
+        """Wrap a module for CPU nanosecond-level timing.
+
+        Args:
+            module: The ``nn.Module`` to wrap.
+            device: Device to place the module on (should be CPU).
+            depth: Levels of children to recursively wrap (``None`` = unlimited).
+            parent_uuid: UUID of the parent ``TimedModule`` (None for root).
+            module_path: Dot-separated path in the model tree.
+        """
         super().__init__(module, device, depth, parent_uuid=parent_uuid, module_path=module_path)
 
         self.inner().to(device)
@@ -225,6 +344,15 @@ class CPUTimedModule(TimedModule):
                 setattr(self.inner(), child_name, wrapped_child)
 
     def forward(self, *args, **kwargs):
+        """Run the inner module bracketed by nanosecond timestamps.
+
+        Args:
+            *args: Forwarded to the inner module.
+            **kwargs: Forwarded to the inner module.
+
+        Returns:
+            The inner module's output.
+        """
         # 1. Start timer (writes to buffer)
         cpu_time_ns(self.start_buffer)
         # 2. Run inner module
@@ -235,18 +363,38 @@ class CPUTimedModule(TimedModule):
         return output
 
     def get_last_elapsed_cycles(self):
-        """
-        Return the last elapsed time.
-        For CPU, this returns time in nanoseconds (not cycles).
+        """Return the elapsed wall-clock time of the most recent forward pass.
+
+        Returns:
+            Elapsed time in nanoseconds (int).
         """
         return (self.end_buffer[0] - self.start_buffer[0]).item()
 
     def _get_name(self):
+        """Return a display name prefixed with ``CPU_``.
+
+        Returns:
+            String of the form ``CPU_Timed_<InnerName>[uuid:<uuid>]``.
+        """
         return f"CPU_{super()._get_name()}"
 
 
 #==================
 def make_module_timed(module: nn.Module, device=None, depth=None) -> TimedModule:
+    """Factory that wraps a module in the appropriate ``TimedModule`` subclass.
+
+    Selects ``CUDATimedModule`` when ``device`` is a CUDA device (and the
+    extension is available), otherwise ``CPUTimedModule``.
+
+    Args:
+        module: The ``nn.Module`` to wrap.
+        device: Target device string or ``torch.device``. If None, auto-detects
+            (CUDA if available, else CPU).
+        depth: How many levels of children to recursively wrap. ``None`` for unlimited.
+
+    Returns:
+        A ``CUDATimedModule`` or ``CPUTimedModule`` wrapping the module.
+    """
     if device is None:
         if torch.cuda.is_available() and cuda_timing_kernel_cpp is not None:
             device = "cuda"

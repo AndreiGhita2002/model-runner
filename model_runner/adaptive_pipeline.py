@@ -20,13 +20,27 @@ from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer, Pipe
 
 #TODO(think): is _ContiguousStageWrapper a good idea?
 class _ContiguousStageWrapper(torch.nn.Module):
-    """Wraps a pipeline stage submodule to ensure its output is contiguous.
-    Required because PyTorch's P2P communication (isend) requires contiguous tensors."""
+    """Wraps a pipeline stage submodule to make its output contiguous.
+
+    Required because PyTorch's P2P communication (isend) requires contiguous tensors.
+
+    Args:
+        module: The stage submodule to wrap.
+    """
     def __init__(self, module):
         super().__init__()
         self.module = module
 
     def forward(self, *args, **kwargs):
+        """Run the wrapped module and return a contiguous output.
+
+        Args:
+            *args: Positional arguments forwarded to the wrapped module.
+            **kwargs: Keyword arguments forwarded to the wrapped module.
+
+        Returns:
+            The module's output, made contiguous if it is a tensor.
+        """
         output = self.module(*args, **kwargs)
         if isinstance(output, torch.Tensor):
             return output.contiguous()
@@ -39,10 +53,17 @@ def _optimizer_process_worker(
     result_queue: mp.Queue,
     shutdown_event: mp.Event,
 ):
-    """
-    Background worker process that runs the pipeline optimiser.
+    """Background worker that runs the pipeline optimiser in a separate process.
 
-    Listens for optimisation requests and sends back new configs.
+    Blocks on ``request_queue``, runs ``optimizer.optimize`` when a request arrives,
+    and puts the result (a ``PipelineConfig`` or ``None``) on ``result_queue``.
+    Exits when ``shutdown_event`` is set.
+
+    Args:
+        optimizer: The pipeline optimiser instance.
+        request_queue: Queue of ``(time_logs, current_config)`` tuples to process.
+        result_queue: Queue where results are placed (``PipelineConfig`` or ``None``).
+        shutdown_event: Event signalling the worker to exit.
     """
     while not shutdown_event.is_set():
         try:
@@ -62,6 +83,15 @@ def _optimizer_process_worker(
             result_queue.put(None)
 
 def extract_shapes(obj):
+    """Recursively extract tensor shapes from a nested structure.
+
+    Args:
+        obj: A tensor, or a nested tuple/list/dict of tensors.
+
+    Returns:
+        The same nested structure with tensors replaced by their ``torch.Size``,
+        or ``None`` for non-tensor leaves.
+    """
     if isinstance(obj, torch.Tensor):
         return obj.shape
     elif isinstance(obj, (tuple, list)):
@@ -73,7 +103,14 @@ def extract_shapes(obj):
 
 
 class AdaptivePipeline:
-    """Manages a pytorch pipeline, and rebalances it every interval."""
+    """Manages a PyTorch pipeline with automatic stage rebalancing.
+
+    Wraps a ``TimedModule`` in a ``ScheduleGPipe`` pipeline and periodically
+    re-optimises the stage split based on collected timing data. Rebalancing
+    can run synchronously (blocking) or asynchronously (in a background process).
+
+    Requires ``torch.distributed`` to be initialized before use.
+    """
     name: str
     current_config: Optional[PipelineConfig]
     pipe: Pipe | None
@@ -105,6 +142,27 @@ class AdaptivePipeline:
             verbose: bool = False,
             async_optimization: bool = False,
     ):
+        """Initialize the adaptive pipeline and build the initial stage split.
+
+        Args:
+            model: A ``TimedModule``-wrapped model to run in the pipeline.
+            model_name: Human-readable name (used for logging).
+            device_manager: Provides device allocation for pipeline stages.
+            example_input: Representative input tensor used to trace the pipeline graph.
+            model_output_is_static: If True, a dummy forward pass is run at init to
+                record the output shape (needed for pre-allocated receive buffers).
+            pipeline_optimizer: Optimiser that decides how to split stages. Defaults
+                to ``GreedyPipelineOptimizer``.
+            rebalance_interval: Number of forward batches between rebalance checks.
+            rebalance_threshold: Minimum timing imbalance ratio to trigger a rebalance.
+            n_microbatches: Number of microbatches per pipeline step. Clamped to at
+                least ``world_size``.
+            initial_pipeline_config: Explicit first split config. If None, a uniform
+                split is generated automatically.
+            verbose: Enable verbose logging to stdout.
+            async_optimization: If True, run the optimiser in a background process
+                so rebalancing does not block the forward path.
+        """
         self.original_model = model
         self.name = model_name
         self.device_manager = device_manager
@@ -150,12 +208,16 @@ class AdaptivePipeline:
         self.rebuild_pipeline(initial_pipeline_config)
 
     def _log(self, msg: str):
-        """Print message if verbose logging is enabled."""
+        """Print a message to stdout if verbose logging is enabled.
+
+        Args:
+            msg: The message to print.
+        """
         if self.verbose:
             print(msg)
 
     def _start_optimizer_process(self):
-        """Start the background optimiser process."""
+        """Spawn the background optimiser process and its communication queues."""
         self._request_queue = mp.Queue()
         self._result_queue = mp.Queue()
         self._shutdown_event = mp.Event()
@@ -174,7 +236,7 @@ class AdaptivePipeline:
         self._log(f"Started optimizer process (PID: {self._optimizer_process.pid})")
 
     def _stop_optimizer_process(self):
-        """Stop the background optimiser process."""
+        """Signal the background optimiser to exit and wait for it to terminate."""
         if self._optimizer_process is not None:
             self._shutdown_event.set()
             self._optimizer_process.join(timeout=1.0)
@@ -184,14 +246,22 @@ class AdaptivePipeline:
             self._log("Stopped optimizer process")
 
     def _send_optimization_request(self):
-        """Send current state to the optimiser process (non-blocking)."""
+        """Enqueue the current timing logs and config for background optimisation.
+
+        No-op if an optimisation request is already in flight.
+        """
         if not self._pending_optimization:
             self._request_queue.put((self.time_logs.copy(), self.current_config))
             self._pending_optimization = True
             self._log("Sent optimization request to background process")
 
     def _check_optimization_result(self) -> Optional[PipelineConfig]:
-        """Check if the optimiser has a result ready (non-blocking)."""
+        """Poll the background optimiser for a completed result (non-blocking).
+
+        Returns:
+            A new ``PipelineConfig`` if the optimiser produced one, or ``None``
+            if no result is ready or no rebalance was needed.
+        """
         try:
             result = self._result_queue.get_nowait()
             self._pending_optimization = False
@@ -200,11 +270,18 @@ class AdaptivePipeline:
             return None
 
     def shutdown(self):
-        """Clean up resources."""
+        """Release resources, including the background optimiser process if running."""
         self._stop_optimizer_process()
 
     def _initial_pipeline_config(self) -> PipelineConfig:
-        """Generate initial balanced split."""
+        """Generate a uniform initial split across all ranks.
+
+        Divides the model's top-level children evenly into ``world_size`` stages
+        and assigns each stage to a device via round-robin.
+
+        Returns:
+            A ``PipelineConfig`` with a balanced split spec and device mapping.
+        """
 
         # Making the split spec
         # SplitPoint.BEGINNING means start a stage before this one, so we cannot mark the first module with it
@@ -229,6 +306,20 @@ class AdaptivePipeline:
         return PipelineConfig(split_spec=split_spec, device_mapping=device_mapping)
 
     def forward(self, x: Any) -> Any:
+        """Run one pipeline step across all ranks. Must be called on all ranks.
+
+        Only rank 0 supplies the input; other ranks pass ``None``. After the
+        forward pass, timing logs are updated and a rebalance check may trigger
+        (synchronously or asynchronously depending on configuration).
+
+        Args:
+            x: Batched input tensor on rank 0 (concatenated microbatches).
+                Ignored on other ranks.
+
+        Returns:
+            On the last rank: list of per-microbatch output tensors.
+            On other ranks: ``None``.
+        """
         rank = dist.get_rank()
         print(f"rank:{rank} in forward")
 
@@ -250,7 +341,7 @@ class AdaptivePipeline:
         return output
 
     def _forward_sync_optimization(self):
-        """Synchronous optimization: blocks during rebalancing."""
+        """Check for rebalance and apply it synchronously (blocks all ranks)."""
         if self.batch_i != 0 and self.batch_i % self.rebalance_interval == 0:
             self.batch_i = 0
             if self.pipeline_optimizer.should_rebalance(self.time_logs, self.current_config):
@@ -261,7 +352,7 @@ class AdaptivePipeline:
                 self.rebuild_pipeline(new_config)
 
     def _forward_async_optimization(self):
-        """Async optimization: runs optimiser in background process."""
+        """Submit timing data to the background optimiser and apply any ready result."""
         # Check if we should send a new optimisation request
         if self.batch_i != 0 and self.batch_i % self.rebalance_interval == 0:
             self.batch_i = 0
@@ -276,7 +367,18 @@ class AdaptivePipeline:
             self.rebuild_pipeline(new_config)
 
     def rebuild_pipeline(self, config: PipelineConfig):
-        """Create a new pipeline from config."""
+        """Tear down the current pipeline and rebuild it from a new config.
+
+        Traces the model graph, splits it according to ``config.split_spec``,
+        creates ``PipelineStage`` objects with the device mapping, and
+        instantiates a new ``ScheduleGPipe`` scheduler.
+
+        Args:
+            config: The split specification and device mapping to apply.
+
+        Raises:
+            RuntimeError: If the resulting number of stages does not equal ``world_size``.
+        """
         print(f"[rank:{dist.get_rank()}] rebuilding pipeline...")
         self.current_config = config
 
@@ -323,20 +425,34 @@ class AdaptivePipeline:
         self.scheduler = ScheduleGPipe(self.stages[dist.get_rank()], n_microbatches=self.n_microbatches)
 
     def update_logs(self):
-        """Updates self.time_logs and returns them."""
+        """Collect the latest timing data from the model into ``self.time_logs``.
+
+        Returns:
+            The updated ``time_logs`` dict (maps module UUID to list of durations).
+        """
         return self.original_model.get_logs(self.time_logs)
 
     def get_output_size(self):
-        """Returns the size of the output if the output is static, and if not it will return None.
-           Tell the pipeline if the model is static or not with the `model_output_is_static` field."""
+        """Return the pre-recorded output shape, or ``None`` for dynamic models.
+
+        Only available when ``model_output_is_static=True`` was passed at init.
+
+        Returns:
+            The nested shape structure (as produced by ``extract_shapes``), or ``None``.
+        """
         if self.model_output_is_static:
             return self.output_size
         else:
             return None
 
     def _dummy_run(self):
-        """Runs a dummy run of the model to set `output_size`.
-           Only works before the pipeline has been built and if `model_output_is_static` is True."""
+        """Run a single forward pass on the unwrapped model to record ``output_size``.
+
+        Called during ``__init__`` when ``model_output_is_static=True``.
+
+        Raises:
+            ValueError: If ``model_output_is_static`` is False.
+        """
         if not self.model_output_is_static:
             raise ValueError("AdaptivePipeline._dummy_run() was called when model output is not static.")
 
