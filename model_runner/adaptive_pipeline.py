@@ -18,7 +18,6 @@ from .device_manager import DeviceManager
 from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer, PipelineConfig
 
 
-#TODO(think): is _ContiguousStageWrapper a good idea?
 class _ContiguousStageWrapper(torch.nn.Module):
     """Wraps a pipeline stage submodule to make its output contiguous.
 
@@ -125,15 +124,12 @@ class AdaptivePipeline:
     # Time logs
     time_logs: dict[uuid.UUID, list[float]]
 
-    #TODO: we need to know the size of the output, and only use it if the model is static
-
     def __init__(
             self,
             model: TimedModule,
             model_name: str,
             device_manager: DeviceManager,
             example_input: Any,
-            model_output_is_static: bool,
             pipeline_optimizer: PipelineOptimizer = None,
             rebalance_interval: int = 10,
             rebalance_threshold: float = 0.1,
@@ -142,14 +138,13 @@ class AdaptivePipeline:
             verbose: bool = False,
             async_optimization: bool = False,
     ):
-        """Initialize the adaptive pipeline and build the initial stage split.
+        """Initialise the adaptive pipeline and build the initial stage split.
 
         Args:
             model: A ``TimedModule``-wrapped model to run in the pipeline.
             model_name: Human-readable name (used for logging).
             device_manager: Provides device allocation for pipeline stages.
             example_input: Representative input tensor used to trace the pipeline graph.
-            model_output_is_static: If True, a dummy forward pass is run at init to
                 record the output shape (needed for pre-allocated receive buffers).
             pipeline_optimizer: Optimiser that decides how to split stages. Defaults
                 to ``GreedyPipelineOptimizer``.
@@ -167,7 +162,6 @@ class AdaptivePipeline:
         self.name = model_name
         self.device_manager = device_manager
         self.example_input = example_input
-        self.model_output_is_static = model_output_is_static
         self.rebalance_interval = rebalance_interval
         self.rebalance_threshold = rebalance_threshold
         self.time_logs = {}
@@ -176,9 +170,6 @@ class AdaptivePipeline:
         self.async_optimization = async_optimization
         self.num_stages = dist.get_world_size()
         self.n_microbatches = n_microbatches if n_microbatches >= self.num_stages else self.num_stages
-
-        if model_output_is_static:
-            self._dummy_run()
 
         self.pipeline_optimizer = pipeline_optimizer if pipeline_optimizer else GreedyPipelineOptimizer(
             root_uuid=model.uuid,
@@ -430,35 +421,6 @@ class AdaptivePipeline:
         Returns:
             The updated ``time_logs`` dict (maps module UUID to list of durations).
         """
-        # todo: this probably does not work in a parallel context
-        # also todo: logs should have some info on how the stages are set
+        #todo: this probably does not work in a parallel context
+        # also logs should have some info on how the stages are set
         return self.original_model.get_logs(self.time_logs)
-
-    def get_output_size(self):
-        """Return the pre-recorded output shape, or ``None`` for dynamic models.
-
-        Only available when ``model_output_is_static=True`` was passed at init.
-
-        Returns:
-            The nested shape structure (as produced by ``extract_shapes``), or ``None``.
-        """
-        if self.model_output_is_static:
-            return self.output_size
-        else:
-            return None
-
-    def _dummy_run(self):
-        """Run a single forward pass on the unwrapped model to record ``output_size``.
-
-        Called during ``__init__`` when ``model_output_is_static=True``.
-
-        Raises:
-            ValueError: If ``model_output_is_static`` is False.
-        """
-        if not self.model_output_is_static:
-            raise ValueError("AdaptivePipeline._dummy_run() was called when model output is not static.")
-
-        # TODO: you can also use the dummy run to get initial timing data
-
-        output = self.original_model(self.example_input)
-        self.output_size = extract_shapes(output)
