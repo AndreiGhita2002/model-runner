@@ -5,8 +5,6 @@ TORCHRUN = uv run --no-sync torchrun --nproc_per_node=2 -m
 install:
 	uv pip install -e .
 
-#TODO: implement actual test suite
-
 eval:
 	$(TORCHRUN) tests.evaluation
 

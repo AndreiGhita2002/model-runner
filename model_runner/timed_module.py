@@ -51,6 +51,36 @@ class TimedModule(nn.Module):
 
     Attribute access falls through to the inner module, so the wrapper is
     largely transparent to the rest of the model.
+
+    Design notes on ``__getattr__`` and module introspection:
+        We override ``__getattr__`` to delegate attribute access to ``_inner`` when
+        an attribute isn't found on the wrapper. This provides transparency for most
+        use cases, but has limitations:
+
+        - ``named_children()`` / ``children()`` return the wrapper's children (i.e.,
+          ``_inner``), not the original model's children. We intentionally do NOT
+          override these methods because:
+
+          1. It would break the ``nn.Module`` contract — ``self._modules`` wouldn't
+             match what ``named_children()`` returns, causing issues with code that
+             mutates children via ``setattr``.
+
+          2. PyTorch's ``pipeline()`` and split-spec matching rely on the actual
+             registered module paths. Changing what ``named_children()`` returns
+             would break path-based pipeline splitting.
+
+          3. ``state_dict()`` keys are built from the module hierarchy. Mismatched
+             introspection would cause checkpoint save/load issues.
+
+          4. We'd need to consistently override ~8 methods (``named_modules``,
+             ``modules``, ``named_parameters``, ``parameters``, etc.) to avoid
+             inconsistent behavior.
+
+        - To inspect the original model structure, use ``timed_module.inner().named_children()``.
+
+        - Potential infinite recursion: if ``__getattr__`` is called before ``_inner``
+          is assigned in ``__init__``, it would recurse. Currently safe because
+          ``self._inner = module`` is set immediately after ``super().__init__()``.
     """
 
     def __init__(self, module: nn.Module, device, depth=10, parent_uuid: uuid.UUID = None, module_path: str = "", *args, **kwargs):
@@ -67,6 +97,7 @@ class TimedModule(nn.Module):
             **kwargs: Forwarded to ``nn.Module.__init__``.
         """
         super().__init__(*args, **kwargs)
+        # _inner needs to be initialised first
         self._inner = module
         self.device = device
         self.depth = depth
@@ -152,8 +183,6 @@ class TimedModule(nn.Module):
         Raises:
             AttributeError: If neither this module nor the inner module has the attribute.
         """
-        #TODO(tests): make a good unit test for this and check all cases
-        # this is a very critical builtin
         try:
             # Let torch.nn.Module handle it
             return super().__getattr__(attr)

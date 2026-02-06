@@ -10,8 +10,6 @@ from torchvision.models import ConvNeXt, ConvNeXt_Small_Weights, convnext_small
 # should have: image classification, ...
 
 class SimpleNet(nn.Module):
-    #TODO: note that this is not trained
-
     def __init__(self, device):
         super(SimpleNet, self).__init__()
         self.conv1 = nn.Conv2d(1, 32, 3, 1)
