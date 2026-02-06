@@ -321,7 +321,7 @@ class AdaptivePipeline:
             On other ranks: ``None``.
         """
         rank = dist.get_rank()
-        print(f"rank:{rank} in forward")
+        self._log(f"rank:{rank} in forward")
 
         # Only the first rank gets the input
         with torch.no_grad():
@@ -330,7 +330,7 @@ class AdaptivePipeline:
             else:
                 output = self.scheduler.step()
 
-        self.update_logs()  #todo: this probably does not work in a parallel context
+        self.update_logs()
         self.batch_i += 1
 
         if self.async_optimization:
@@ -379,7 +379,7 @@ class AdaptivePipeline:
         Raises:
             RuntimeError: If the resulting number of stages does not equal ``world_size``.
         """
-        print(f"[rank:{dist.get_rank()}] rebuilding pipeline...")
+        self._log(f"[rank:{dist.get_rank()}] rebuilding pipeline...")
         self.current_config = config
 
         # Convert UUID-based split_spec to path-based for PyTorch
@@ -430,6 +430,8 @@ class AdaptivePipeline:
         Returns:
             The updated ``time_logs`` dict (maps module UUID to list of durations).
         """
+        # todo: this probably does not work in a parallel context
+        # also todo: logs should have some info on how the stages are set
         return self.original_model.get_logs(self.time_logs)
 
     def get_output_size(self):

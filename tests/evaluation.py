@@ -13,24 +13,54 @@ from tests.baseline import baseline_main, DEFAULT_BASELINE_FILE
 
 
 def load_baseline(baseline_file: str):
+    """Load baseline data from a JSON file, generating it if it doesn't exist.
+
+    If the file is missing, rank 0 generates it via ``baseline_main``. A barrier
+    ensures all ranks wait for generation to complete before reading.
+
+    Args:
+        baseline_file: Path to the baseline JSON file.
+
+    Returns:
+        Parsed JSON data as a dict.
+    """
     if not os.path.exists(baseline_file):
         print(f"Baseline file not found, generating {baseline_file}...")
         if dist.get_rank() == 0:
             baseline_main(output_file=baseline_file)
+        dist.barrier()  # Wait for rank 0 to finish writing
 
     with open(baseline_file, "r") as f:
         return json.load(f)
 
 
 evaluation_results: dict[uuid.UUID, Any] = {}
+"""Global dict storing pipeline outputs keyed by request UUID. Populated by ``handle_output``."""
 
 
 def handle_output(request_id: uuid.UUID, model_name: str, output: Any):
+    """Callback passed to ``MainService`` to collect pipeline outputs.
+
+    Stores the output in the global ``evaluation_results`` dict for later comparison.
+
+    Args:
+        request_id: UUID of the completed request.
+        model_name: Name of the model that produced the output.
+        output: The output tensor from the pipeline.
+    """
     evaluation_results[request_id] = output
     print(f"Received output from {model_name} from request: {request_id}. Output shape: {output.shape}")
 
 
 def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
+    """Run evaluation: queue baseline inputs through the pipeline and compare outputs.
+
+    Loads baseline data, registers models, queues work (rank 0 only), runs the
+    pipeline across all ranks, and compares outputs against baseline on the last rank.
+
+    Args:
+        baseline_file: Path to the baseline JSON file.
+    """
     # Load baseline data
     baseline_data = load_baseline(baseline_file)
 

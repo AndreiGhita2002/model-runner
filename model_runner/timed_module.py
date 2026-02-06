@@ -193,13 +193,14 @@ class TimedModule(nn.Module):
             ``self``.
         """
         result = super().to(*args, **kwargs)
-        # Update device from first parameter/buffer we can find
-        for param in self.parameters():
-            self.device = param.device
-            break
-        for buffer in self.buffers():
-            self.device = buffer.device
-            break
+        # Update device from first parameter or buffer we can find
+        try:
+            self.device = next(self.parameters()).device
+        except StopIteration:
+            try:
+                self.device = next(self.buffers()).device
+            except StopIteration:
+                pass  # No parameters or buffers, keep existing device
         return result
 
 
