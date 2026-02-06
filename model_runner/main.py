@@ -1,5 +1,6 @@
 import queue
 import struct
+import threading
 import uuid
 from typing import Any, List, Dict, Callable
 
@@ -82,6 +83,10 @@ class MainService:
         self.handle_output_fn = handle_output_fn
         self.default_timing_depth = default_timing_depth
         self.verbose = verbose
+
+        # Synchronization for cross-thread/process work submission
+        self._work_available = threading.Condition()
+        self._shutdown_requested = False
 
         self.device_manager = DeviceManager(verbose=verbose)
         self.primary_device = self.device_manager.get_device(0)
@@ -170,6 +175,8 @@ class MainService:
             raise ValueError(f"Model '{model_name}' not found. Add it with add_model() first.")
         request_id = uuid.uuid4()
         self.work_by_model[model_name].put((request_id, x))
+        with self._work_available:
+            self._work_available.notify()
         return request_id
 
     def _run_pipeline(self, model_name: str):
@@ -234,18 +241,23 @@ class MainService:
                 output = outputs[i]
                 self.handle_output_fn(req_id, model_name, output)
 
-    def run(self, exit_when_done = False):
+    def run(self, exit_when_done=False):
         """Run the main processing loop. Must be called on all ranks.
 
         Continuously drains work queues for every registered model. All ranks
         participate in each pipeline forward pass (synchronized via broadcast).
 
+        When no work is available and ``exit_when_done=False``, rank 0 waits on a
+        condition variable that is signalled by ``queue_work()``. Other ranks
+        synchronize via broadcast. Call ``shutdown()`` to request a graceful exit.
+
         Args:
             exit_when_done: If True, return once all queues are empty. If False
-                (default), loop indefinitely waiting for new work.
+                (default), wait for new work or a shutdown signal.
         """
         self._log("MainService.run: starting main loop")
         rank = dist.get_rank()
+
         while True:
             did_work = False
 
@@ -268,15 +280,54 @@ class MainService:
                     self._run_pipeline(model_name)
                     did_work = True
 
-            #TODO: make MainService.run more like a service
-            # sleep for a bit
-            # until the user requests another workload
-            # or perhaps exit
+            # No work was processed this iteration
+            if not did_work:
+                if exit_when_done:
+                    self._log("MainService.run: queue empty, exiting")
+                    return
 
-            # For now, we exit when the queue is done
-            if not did_work and exit_when_done:
-                self._log("MainService.run: queue empty, exiting")
-                return
+                # Check for shutdown and wait for new work (rank 0 only decides)
+                if rank == 0:
+                    with self._work_available:
+                        # Check shutdown flag and whether any queue has work
+                        should_exit = self._shutdown_requested
+                        has_any_work = any(not q.empty() for q in self.work_by_model.values())
+
+                        if not should_exit and not has_any_work:
+                            # Wait for queue_work() or shutdown() to signal
+                            self._work_available.wait()
+                            should_exit = self._shutdown_requested
+
+                    # Broadcast shutdown decision to all ranks
+                    shutdown_tensor = torch.tensor([1 if should_exit else 0], dtype=torch.int)
+                else:
+                    shutdown_tensor = torch.tensor([0], dtype=torch.int)
+
+                dist.broadcast(shutdown_tensor, src=0)
+
+                if shutdown_tensor.item() == 1:
+                    self._log("MainService.run: shutdown requested, exiting")
+                    return
+
+    def shutdown(self):
+        """Request a graceful shutdown of the service.
+
+        Signals the ``run()`` loop to exit after completing any in-progress work.
+        Thread-safe; can be called from a different thread than the one running ``run()``.
+        Only effective on rank 0 (other ranks follow via broadcast).
+        """
+        with self._work_available:
+            self._shutdown_requested = True
+            self._work_available.notify()
+        self._log("MainService.shutdown: shutdown requested")
+
+    def is_shutdown_requested(self) -> bool:
+        """Check whether shutdown has been requested.
+
+        Returns:
+            True if ``shutdown()`` has been called.
+        """
+        return self._shutdown_requested
 
     def get_logs(self) -> Dict[str, Any]:
         """Return timing logs from all registered pipelines.
