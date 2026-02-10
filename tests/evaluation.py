@@ -12,6 +12,9 @@ from tests.testing_models import evaluation_models
 from tests.baseline import baseline_main, DEFAULT_BASELINE_FILE
 
 
+#TODO: record performance of baseline and compare it with the evaluation
+
+
 def load_baseline(baseline_file: str):
     """Load baseline data from a JSON file, generating it if it doesn't exist.
 
@@ -27,7 +30,7 @@ def load_baseline(baseline_file: str):
     if not os.path.exists(baseline_file):
         print(f"Baseline file not found, generating {baseline_file}...")
         if dist.get_rank() == 0:
-            baseline_main(output_file=baseline_file)
+            baseline_main(output_file=baseline_file, num_requests=30)
         dist.barrier()  # Wait for rank 0 to finish writing
 
     with open(baseline_file, "r") as f:
