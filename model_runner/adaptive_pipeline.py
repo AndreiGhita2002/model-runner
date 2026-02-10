@@ -174,6 +174,7 @@ class AdaptivePipeline:
         self.pipeline_optimizer = pipeline_optimizer if pipeline_optimizer else GreedyPipelineOptimizer(
             root_uuid=model.uuid,
             num_stages=self.num_stages,
+            device_manager=device_manager,
             rebalance_threshold=rebalance_threshold,
         )
 
@@ -195,7 +196,7 @@ class AdaptivePipeline:
 
         # Initial pipeline setup
         if initial_pipeline_config is None:
-            initial_pipeline_config = self._initial_pipeline_config()
+            initial_pipeline_config = self.pipeline_optimizer.initial_setup()
         self.rebuild_pipeline(initial_pipeline_config)
 
     def _log(self, msg: str):
@@ -263,38 +264,6 @@ class AdaptivePipeline:
     def shutdown(self):
         """Release resources, including the background optimiser process if running."""
         self._stop_optimizer_process()
-
-    def _initial_pipeline_config(self) -> PipelineConfig:
-        """Generate a uniform initial split across all ranks.
-
-        Divides the model's top-level children evenly into ``world_size`` stages
-        and assigns each stage to a device via round-robin.
-
-        Returns:
-            A ``PipelineConfig`` with a balanced split spec and device mapping.
-        """
-
-        # Making the split spec
-        # SplitPoint.BEGINNING means start a stage before this one, so we cannot mark the first module with it
-        # because the first module is already the start of a stage implicitly
-        children_uuid = timed_module_hierarchy[self.original_model.uuid]
-        step = max(len(children_uuid) // self.num_stages, 1)
-        split_spec = {}
-        current_stage_num = 1
-        for i in range(step, len(children_uuid), step):
-            # new split point
-            u = children_uuid[i]
-            split_spec[u] = SplitPoint.BEGINNING
-            current_stage_num += 1
-            # we have enough stages
-            if current_stage_num == self.num_stages:
-                break
-
-        # Making the device mapping
-        num_devices = self.device_manager.num_devices()
-        device_mapping = {i: self.device_manager.get_device(i % num_devices) for i in range(len(split_spec)+1)}
-
-        return PipelineConfig(split_spec=split_spec, device_mapping=device_mapping)
 
     def forward(self, x: Any) -> Any:
         """Run one pipeline step across all ranks. Must be called on all ranks.

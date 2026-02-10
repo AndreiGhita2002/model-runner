@@ -5,6 +5,7 @@ from typing import List, Tuple
 
 from torch.distributed.pipelining import SplitPoint
 
+from . import TimedModule, DeviceManager
 from .timed_module import timed_module_hierarchy
 
 
@@ -17,11 +18,10 @@ class PipelineConfig:
 class PipelineOptimizer(ABC):
     """Abstract base class for pipeline optimisers."""
 
-    # Can be updated by AdaptivePipeline
-    num_stages: int
-
-    def __init__(self, num_stages: int):
+    def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager):
         self.num_stages = num_stages
+        self.device_manager = device_manager
+        self.root_uuid = root_uuid
 
     @abstractmethod
     def optimize(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig) -> PipelineConfig:
@@ -51,6 +51,39 @@ class PipelineOptimizer(ABC):
         """
         pass
 
+    def initial_setup(self) -> PipelineConfig:
+        """Generate a uniform initial split across all ranks.
+
+        Divides the model's top-level children evenly into ``world_size`` stages
+        and assigns each stage to a device via round-robin.
+
+        Returns:
+            A ``PipelineConfig`` with a balanced split spec and device mapping.
+        """
+
+        # Making the split spec
+        # SplitPoint.BEGINNING means start a stage before this one, so we cannot mark the first module with it
+        # because the first module is already the start of a stage implicitly
+
+        children_uuid = timed_module_hierarchy[self.root_uuid]
+        step = max(len(children_uuid) // self.num_stages, 1)
+        split_spec = {}
+        current_stage_num = 1
+        for i in range(step, len(children_uuid), step):
+            # new split point
+            u = children_uuid[i]
+            split_spec[u] = SplitPoint.BEGINNING
+            current_stage_num += 1
+            # we have enough stages
+            if current_stage_num == self.num_stages:
+                break
+
+        # Making the device mapping
+        num_devices = self.device_manager.num_devices()
+        device_mapping = {i: self.device_manager.get_device(i % num_devices) for i in range(len(split_spec) + 1)}
+
+        return PipelineConfig(split_spec=split_spec, device_mapping=device_mapping)
+
 
 class GreedyPipelineOptimizer(PipelineOptimizer):
     """
@@ -59,10 +92,9 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
     TODO: this optimizer is pretty dumb
     """
 
-    def __init__(self, num_stages: int, root_uuid: uuid.UUID, rebalance_threshold: float = 0.1):
-        super().__init__(num_stages)
+    def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager, rebalance_threshold: float = 0.1):
+        super().__init__(num_stages, root_uuid, device_manager)
         self.rebalance_threshold = rebalance_threshold
-        self.root_uuid = root_uuid
 
     def should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
         """
