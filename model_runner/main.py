@@ -67,7 +67,7 @@ class MainService:
     Requires ``torch.distributed`` to be initialised before use.
     """
 
-    #TODO: find a more appropriate name for this
+    #TODO(naming): find a more appropriate name for this
     # maybe AdaptivePipelineRunner? PipelineRuntime? PipelineOrchestrator?
 
     def __init__(self, handle_output_fn: Callable[[uuid.UUID, str, Any], None], default_timing_depth: int = 3, verbose=False):

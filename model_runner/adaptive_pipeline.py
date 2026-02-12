@@ -1,7 +1,7 @@
+import multiprocessing as mp
 import queue
 import uuid
 import warnings
-import multiprocessing as mp
 from typing import Optional, Any
 
 import torch
@@ -15,8 +15,7 @@ from torch.distributed.pipelining.schedules import PipelineScheduleSingle, Pipel
 
 from .timed_module import TimedModule, timed_module_registry, timed_module_hierarchy
 from .device_manager import DeviceManager
-from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer, PipelineConfig, \
-    TimeBasedShishaPipelineOptimizer
+from .pipeline_optimizer import PipelineOptimizer, PipelineConfig, TimeBasedShishaPipelineOptimizer
 
 
 class _ContiguousStageWrapper(torch.nn.Module):
