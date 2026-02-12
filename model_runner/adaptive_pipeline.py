@@ -389,12 +389,52 @@ class AdaptivePipeline:
         # Create scheduler
         self.scheduler = ScheduleGPipe(self.stages[dist.get_rank()], n_microbatches=self.n_microbatches)
 
+        # Cache which children belong to this rank's stage for update_logs()
+        self._local_children = self._compute_local_stage_children(config)
+
+    def _compute_local_stage_children(self, config: PipelineConfig) -> list[uuid.UUID]:
+        """Return the child UUIDs that belong to this rank's pipeline stage."""
+        children = timed_module_hierarchy[self.original_model.uuid]
+        split_spec = config.split_spec
+
+        rank = dist.get_rank()
+        stages: list[list[uuid.UUID]] = [[]]
+
+        for child_uuid in children:
+            if child_uuid in split_spec and split_spec[child_uuid] == SplitPoint.BEGINNING:
+                stages.append([])
+            stages[-1].append(child_uuid)
+
+        if rank < len(stages):
+            return stages[rank]
+        return []
+
     def update_logs(self):
-        """Collect the latest timing data from the model into ``self.time_logs``.
+        """Collect timing data from each rank's local stage and combine across all ranks.
+
+        Each rank only has valid timing for modules in its own pipeline stage.
+        Local logs are gathered via ``dist.all_gather_object`` and merged into
+        ``self.time_logs``.
 
         Returns:
             The updated ``time_logs`` dict (maps module UUID to list of durations).
         """
-        #todo: this probably does not work in a parallel context
-        # also logs should have some info on how the stages are set
-        return self.original_model.get_logs(self.time_logs)
+        local_logs = {}
+        for child_uuid in self._local_children:
+            child = timed_module_registry.get(child_uuid)
+            if child is not None:
+                child.get_logs(local_logs)
+
+        all_local_logs = [None] * dist.get_world_size()
+        dist.all_gather_object(all_local_logs, local_logs)
+
+        for rank_logs in all_local_logs:
+            if rank_logs is None:
+                continue
+            for mod_uuid, times in rank_logs.items():
+                if mod_uuid in self.time_logs:
+                    self.time_logs[mod_uuid].extend(times)
+                else:
+                    self.time_logs[mod_uuid] = list(times)
+
+        return self.time_logs
