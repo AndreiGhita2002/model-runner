@@ -131,8 +131,8 @@ class AdaptivePipeline:
             model_name: str,
             device_manager: DeviceManager,
             example_input: Any,
-            # TODO: pipeline_optimizer cannot really be passed in because the pipeline needs to initialise it
-            pipeline_optimizer: PipelineOptimizer = None,
+            optimizer_class: type[PipelineOptimizer] = TimeBasedShishaPipelineOptimizer,
+            optimizer_kwargs: dict | None = None,
             rebalance_interval: int = 10,
             rebalance_threshold: float = 0.1,
             n_microbatches: int = 4,
@@ -148,8 +148,11 @@ class AdaptivePipeline:
             device_manager: Provides device allocation for pipeline stages.
             example_input: Representative input tensor used to trace the pipeline graph.
                 record the output shape (needed for pre-allocated receive buffers).
-            pipeline_optimizer: Optimiser that decides how to split stages. Defaults
-                to ``GreedyPipelineOptimizer``.
+            optimizer_class: Class of the pipeline optimiser to use. Constructed
+                internally with ``num_stages``, ``root_uuid``, and ``device_manager``.
+                Defaults to ``GreedyPipelineOptimizer``.
+            optimizer_kwargs: Extra keyword arguments forwarded to the optimiser
+                constructor (e.g. ``alpha`` for ``TimeBasedShishaPipelineOptimizer``).
             rebalance_interval: Number of forward batches between rebalance checks.
             rebalance_threshold: Minimum timing imbalance ratio to trigger a rebalance.
             n_microbatches: Number of microbatches per pipeline step. Clamped to at
@@ -173,16 +176,11 @@ class AdaptivePipeline:
         self.num_stages = dist.get_world_size()
         self.n_microbatches = n_microbatches if n_microbatches >= self.num_stages else self.num_stages
 
-        # self.pipeline_optimizer = pipeline_optimizer if pipeline_optimizer else GreedyPipelineOptimizer(
-        #     root_uuid=model.uuid,
-        #     num_stages=self.num_stages,
-        #     device_manager=device_manager,
-        #     rebalance_threshold=rebalance_threshold,
-        # )
-        self.pipeline_optimizer = TimeBasedShishaPipelineOptimizer(
-            root_uuid=model.uuid,
+        self.pipeline_optimizer = optimizer_class(
             num_stages=self.num_stages,
+            root_uuid=model.uuid,
             device_manager=device_manager,
+            **(optimizer_kwargs or {}),
         )
 
         # Current pipeline state
@@ -191,7 +189,7 @@ class AdaptivePipeline:
         self.stages = []
         self.scheduler = None
 
-        # Async optimization state
+        # Async optimization state todo: test async optimisation for pipelines
         self._optimizer_process: Optional[mp.Process] = None
         self._request_queue: Optional[mp.Queue] = None
         self._result_queue: Optional[mp.Queue] = None

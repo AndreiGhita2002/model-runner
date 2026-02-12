@@ -10,6 +10,7 @@ from torch import nn
 
 from .adaptive_pipeline import AdaptivePipeline
 from .device_manager import DeviceManager
+from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer
 from .timed_module import make_module_timed
 
 
@@ -100,7 +101,9 @@ class MainService:
         if self.verbose:
             print(msg)
 
-    def add_model(self, model_name: str, model: nn.Module, example_input: Any, model_output_is_static: bool, device=None, depth: int | None = None, **kwargs):
+    def add_model(self, model_name: str, model: nn.Module, example_input: Any, model_output_is_static: bool,
+                  optimizer_class: type[PipelineOptimizer] = GreedyPipelineOptimizer,
+                  device=None, depth: int | None = None, **kwargs):
         """Register a model and create its adaptive pipeline. Must be called on all ranks.
 
         The model is wrapped in a ``TimedModule`` for profiling and then handed to an
@@ -111,10 +114,13 @@ class MainService:
             model: The PyTorch model. Caller is responsible for setting eval/train mode.
             example_input: A representative input tensor used to trace the pipeline.
             model_output_is_static: Whether the model always produces the same output shape.
+            optimizer_class: Pipeline optimiser class. Constructed internally by
+                ``AdaptivePipeline`` with ``num_stages``, ``root_uuid``, and
+                ``device_manager``. Defaults to ``GreedyPipelineOptimizer``.
             device: Device to run the model on (default: primary device).
             depth: Depth for TimedModule profiling (default: ``default_timing_depth``).
             **kwargs: Forwarded to ``AdaptivePipeline``:
-                - pipeline_optimizer: Custom optimiser (default: GreedyPipelineOptimizer)
+                - optimizer_kwargs: Extra kwargs for the optimiser constructor
                 - rebalance_interval: How often to check for rebalancing (default: 10)
                 - rebalance_threshold: Minimum change to trigger rebalancing (default: 0.1)
                 - n_microbatches: Number of microbatches for pipeline (default: 4)
@@ -147,7 +153,7 @@ class MainService:
             model_name,
             self.device_manager,
             example_input,
-            model_output_is_static,
+            optimizer_class=optimizer_class,
             **kwargs
         )
         self.work_by_model[model_name] = queue.Queue()

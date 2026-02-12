@@ -90,8 +90,6 @@ class PipelineOptimizer(ABC):
 class GreedyPipelineOptimizer(PipelineOptimizer):
     """
     Pipeline optimiser using a greedy algorithm to balance computation time across stages.
-
-    TODO: this optimizer is pretty dumb
     """
 
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager, rebalance_threshold: float = 0.1):
