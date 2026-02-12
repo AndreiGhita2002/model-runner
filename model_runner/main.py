@@ -122,7 +122,7 @@ class MainService:
             **kwargs: Forwarded to ``AdaptivePipeline``:
                 - optimizer_kwargs: Extra kwargs for the optimiser constructor
                 - rebalance_interval: How often to check for rebalancing (default: 10)
-                - rebalance_threshold: Minimum change to trigger rebalancing (default: 0.1)
+                - max_log_entries: Max timing measurements per module (default: 5)
                 - n_microbatches: Number of microbatches for pipeline (default: 4)
                 - initial_pipeline_config: Initial pipeline configuration
                 - async_optimization: Use async optimisation (default: False)

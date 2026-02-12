@@ -120,8 +120,8 @@ class AdaptivePipeline:
     rebalance_interval: int
     # Current batch index; set back to 0 when rebalance_interval is reached
     batch_i: int
-    # Threshold equal to the minimum change in a models performance that triggers rebalancing
-    rebalance_threshold: float
+    # Maximum number of timing measurements to keep per module
+    max_log_entries: int
     # Time logs
     time_logs: dict[uuid.UUID, list[float]]
 
@@ -134,7 +134,7 @@ class AdaptivePipeline:
             optimizer_class: type[PipelineOptimizer] = TimeBasedShishaPipelineOptimizer,
             optimizer_kwargs: dict | None = None,
             rebalance_interval: int = 10,
-            rebalance_threshold: float = 0.1,
+            max_log_entries: int = 5,
             n_microbatches: int = 4,
             initial_pipeline_config: PipelineConfig | None = None,
             verbose: bool = False,
@@ -154,7 +154,8 @@ class AdaptivePipeline:
             optimizer_kwargs: Extra keyword arguments forwarded to the optimiser
                 constructor (e.g. ``alpha`` for ``TimeBasedShishaPipelineOptimizer``).
             rebalance_interval: Number of forward batches between rebalance checks.
-            rebalance_threshold: Minimum timing imbalance ratio to trigger a rebalance.
+            max_log_entries: Maximum number of timing measurements to keep per module.
+                Older entries are discarded when the cap is reached.
             n_microbatches: Number of microbatches per pipeline step. Clamped to at
                 least ``world_size``.
             initial_pipeline_config: Explicit first split config. If None, a uniform
@@ -168,7 +169,7 @@ class AdaptivePipeline:
         self.device_manager = device_manager
         self.example_input = example_input
         self.rebalance_interval = rebalance_interval
-        self.rebalance_threshold = rebalance_threshold
+        self.max_log_entries = max_log_entries
         self.time_logs = {}
         self.batch_i = 0
         self.verbose = verbose
@@ -189,19 +190,23 @@ class AdaptivePipeline:
         self.stages = []
         self.scheduler = None
 
-        # Async optimization state todo: test async optimisation for pipelines
+        # Async optimization state (only used on rank 0)
         self._optimizer_process: Optional[mp.Process] = None
         self._request_queue: Optional[mp.Queue] = None
         self._result_queue: Optional[mp.Queue] = None
         self._shutdown_event: Optional[mp.Event] = None
         self._pending_optimization: bool = False
 
-        if self.async_optimization:
+        if self.async_optimization and dist.get_rank() == 0:
             self._start_optimizer_process()
 
-        # Initial pipeline setup
+        # Initial pipeline setup — rank 0 computes, broadcasts to all
         if initial_pipeline_config is None:
-            initial_pipeline_config = self.pipeline_optimizer.initial_setup()
+            if dist.get_rank() == 0:
+                initial_pipeline_config = self.pipeline_optimizer.initial_setup()
+            config_list = [initial_pipeline_config]
+            dist.broadcast_object_list(config_list, src=0)
+            initial_pipeline_config = config_list[0]
         self.rebuild_pipeline(initial_pipeline_config)
 
     def _log(self, msg: str):
@@ -267,8 +272,9 @@ class AdaptivePipeline:
             return None
 
     def shutdown(self):
-        """Release resources, including the background optimiser process if running."""
-        self._stop_optimizer_process()
+        """Release resources, including the background optimiser process on rank 0."""
+        if dist.get_rank() == 0:
+            self._stop_optimizer_process()
 
     def forward(self, x: Any) -> Any:
         """Run one pipeline step across all ranks. Must be called on all ranks.
@@ -306,29 +312,57 @@ class AdaptivePipeline:
         return output
 
     def _forward_sync_optimization(self):
-        """Check for rebalance and apply it synchronously (blocks all ranks)."""
+        """Check for rebalance and apply it synchronously.
+
+        Only rank 0 runs the optimiser; the decision and new config are
+        broadcast so every rank takes the same path (no conditional collectives).
+        """
         if self.batch_i != 0 and self.batch_i % self.rebalance_interval == 0:
             self.batch_i = 0
-            if self.pipeline_optimizer.should_rebalance(self.time_logs, self.current_config):
+
+            # Rank 0 decides and computes; others receive via broadcast
+            if dist.get_rank() == 0:
+                if self.pipeline_optimizer.should_rebalance(self.time_logs, self.current_config):
+                    new_config = self.pipeline_optimizer.optimize(self.time_logs, self.current_config)
+                else:
+                    new_config = None
+                config_list = [new_config]
+            else:
+                config_list = [None]
+
+            dist.broadcast_object_list(config_list, src=0)
+            new_config = config_list[0]
+
+            if new_config is not None:
                 self._log("Sync optimization: rebalancing pipeline")
-                new_config = self.pipeline_optimizer.optimize(self.time_logs, self.current_config)
                 self.time_logs = {}
-                dist.barrier()
                 self.rebuild_pipeline(new_config)
 
     def _forward_async_optimization(self):
-        """Submit timing data to the background optimiser and apply any ready result."""
-        # Check if we should send a new optimisation request
+        """Submit timing data to the background optimiser and apply any ready result.
+
+        Only rank 0 manages the background process; results are broadcast so
+        every rank rebuilds together.
+        """
         if self.batch_i != 0 and self.batch_i % self.rebalance_interval == 0:
             self.batch_i = 0
-            self._send_optimization_request()
+            # Only rank 0 sends requests to the background optimizer
+            if dist.get_rank() == 0:
+                self._send_optimization_request()
 
-        # Check if a result is ready (non-blocking)
-        new_config = self._check_optimization_result()
+        # Rank 0 polls for a result; broadcasts to all ranks every forward call
+        if dist.get_rank() == 0:
+            new_config = self._check_optimization_result()
+            config_list = [new_config]
+        else:
+            config_list = [None]
+
+        dist.broadcast_object_list(config_list, src=0)
+        new_config = config_list[0]
+
         if new_config is not None:
             self._log("Async optimization: received new config, rebuilding pipeline")
             self.time_logs = {}
-            dist.barrier()
             self.rebuild_pipeline(new_config)
 
     def rebuild_pipeline(self, config: PipelineConfig):
@@ -436,5 +470,12 @@ class AdaptivePipeline:
                     self.time_logs[mod_uuid].extend(times)
                 else:
                     self.time_logs[mod_uuid] = list(times)
+
+        # Cap each module's log to the most recent max_log_entries measurements
+        if self.max_log_entries > 0:
+            for mod_uuid in self.time_logs:
+                entries = self.time_logs[mod_uuid]
+                if len(entries) > self.max_log_entries:
+                    self.time_logs[mod_uuid] = entries[-self.max_log_entries:]
 
         return self.time_logs
