@@ -15,7 +15,8 @@ from torch.distributed.pipelining.schedules import PipelineScheduleSingle, Pipel
 
 from .timed_module import TimedModule, timed_module_registry, timed_module_hierarchy
 from .device_manager import DeviceManager
-from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer, PipelineConfig
+from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer, PipelineConfig, \
+    TimeBasedShishaPipelineOptimizer
 
 
 class _ContiguousStageWrapper(torch.nn.Module):
@@ -130,6 +131,7 @@ class AdaptivePipeline:
             model_name: str,
             device_manager: DeviceManager,
             example_input: Any,
+            # TODO: pipeline_optimizer cannot really be passed in because the pipeline needs to initialise it
             pipeline_optimizer: PipelineOptimizer = None,
             rebalance_interval: int = 10,
             rebalance_threshold: float = 0.1,
@@ -171,11 +173,16 @@ class AdaptivePipeline:
         self.num_stages = dist.get_world_size()
         self.n_microbatches = n_microbatches if n_microbatches >= self.num_stages else self.num_stages
 
-        self.pipeline_optimizer = pipeline_optimizer if pipeline_optimizer else GreedyPipelineOptimizer(
+        # self.pipeline_optimizer = pipeline_optimizer if pipeline_optimizer else GreedyPipelineOptimizer(
+        #     root_uuid=model.uuid,
+        #     num_stages=self.num_stages,
+        #     device_manager=device_manager,
+        #     rebalance_threshold=rebalance_threshold,
+        # )
+        self.pipeline_optimizer = TimeBasedShishaPipelineOptimizer(
             root_uuid=model.uuid,
             num_stages=self.num_stages,
             device_manager=device_manager,
-            rebalance_threshold=rebalance_threshold,
         )
 
         # Current pipeline state

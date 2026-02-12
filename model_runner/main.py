@@ -63,14 +63,14 @@ class MainService:
     (rank 0 only), and ``run`` drives the processing loop on all ranks. Completed
     outputs are delivered through the ``handle_output_fn`` callback on the last rank.
 
-    Requires ``torch.distributed`` to be initialized before use.
+    Requires ``torch.distributed`` to be initialised before use.
     """
 
     #TODO: find a more appropriate name for this
     # maybe AdaptivePipelineRunner? PipelineRuntime? PipelineOrchestrator?
 
     def __init__(self, handle_output_fn: Callable[[uuid.UUID, str, Any], None], default_timing_depth: int = 3, verbose=False):
-        """Initialize the service.
+        """Initialise the service.
 
         Args:
             handle_output_fn: Callback invoked on the last rank when a request
