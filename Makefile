@@ -1,4 +1,4 @@
-.PHONY: install test-flask test-pipeline eval baseline clean
+.PHONY: install test-flask test-pipeline eval quick-eval baseline clean
 
 TORCHRUN = uv run --no-sync torchrun --nproc_per_node=2 -m
 
@@ -7,6 +7,9 @@ install:
 
 eval: install
 	$(TORCHRUN) tests.evaluation
+
+quick-eval: install
+	$(TORCHRUN) tests.quick_evaluation
 
 baseline: install
 	uv run --no-sync torchrun --nproc_per_node=1 -m tests.baseline
