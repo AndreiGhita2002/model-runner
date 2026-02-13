@@ -245,6 +245,11 @@ class MainService:
                 dist.recv(t_req_ids, src=0)
                 req_ids = tensor_to_uuids(t_req_ids)
 
+            batch_size = sum(1 for r in req_ids if r is not None)
+            if timing is not None:
+                timing["batch_size"] = batch_size
+                timing["n_microbatches"] = n_microbatches
+
             for i, req_id in enumerate(req_ids):
                 if req_id is None:
                     continue  # Skip padding entries (nil UUID sentinel)

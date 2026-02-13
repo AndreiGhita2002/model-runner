@@ -17,6 +17,11 @@ def baseline_main(num_requests: int = 5, seed: int = 37, output_file: str = DEFA
 
         results[model_name] = []
 
+        # Warmup pass (not recorded) to avoid PyTorch lazy-init overhead in timings
+        with torch.no_grad():
+            torch.manual_seed(seed)
+            model(rand_inputs())
+
         for i in range(num_requests):
             # Set seed for reproducible inputs
             torch.manual_seed(seed + i)

@@ -83,7 +83,7 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
         print(f"> Adding model {model_name} with load function {load_model.__name__}")
         main.add_model(model_name, load_model(), rand_input(),
                        optimizer_class=TimeBasedShishaPipelineOptimizer,
-                       rebalance_interval=1)
+                       rebalance_interval=4)
 
     # Queue work (rank 0 only)
     if rank == 0:
@@ -148,49 +148,81 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
         else:
             print(f"\n{len(failed_requests)} request(s) differ from baseline.")
 
-        # Timing comparison
+        # Timing comparison — group requests by pipeline batch
         print("\n" + "=" * 60)
         print("Timing Comparison (pipeline vs baseline)")
         print("=" * 60)
         faster_count = 0
         slower_count = 0
         total_diff = 0.0
-        n_timed = 0
+        n_batches = 0
 
         for model_name in requests:
             print(f"\n  [{model_name}]")
-            for i, req_id in enumerate(requests[model_name]):
-                pipeline_timing = evaluation_timings.get(req_id)
-                baseline_entry = baseline_data[model_name][i]
-                baseline_timing = baseline_entry.get("timing")
 
-                if pipeline_timing is None or baseline_timing is None:
-                    print(f"    Request {i}: timing unavailable")
+            # Group consecutive requests into batches using the shared timing object
+            batches: list[list[tuple[int, uuid.UUID]]] = []
+            last_timing_id = None
+            for i, req_id in enumerate(requests[model_name]):
+                tid = id(evaluation_timings.get(req_id))
+                if tid != last_timing_id:
+                    batches.append([])
+                    last_timing_id = tid
+                batches[-1].append((i, req_id))
+
+            for batch_idx, batch in enumerate(batches):
+                first_req_id = batch[0][1]
+                pipeline_timing = evaluation_timings.get(first_req_id)
+                if pipeline_timing is None:
+                    print(f"    Batch {batch_idx}: timing unavailable")
                     continue
 
                 fwd = pipeline_timing["forward"]
                 reb = pipeline_timing["rebalance"]
-                pipeline_fwd = fwd["end"] - fwd["start"]
+                pipeline_fwd_raw = fwd["end"] - fwd["start"]
                 pipeline_reb = reb["end"] - reb["start"]
-                baseline_duration = baseline_timing["end"] - baseline_timing["start"]
-                diff = pipeline_fwd - baseline_duration
+                rebalanced = " (rebalanced)" if reb["did_rebalance"] else ""
 
+                batch_size = pipeline_timing.get("batch_size", len(batch))
+                n_microbatches = pipeline_timing.get("n_microbatches", batch_size)
+                is_padded = batch_size < n_microbatches
+                padding_label = f" (padded {batch_size}/{n_microbatches})" if is_padded else ""
+
+                # Scale pipeline time to account for wasted padding work
+                pipeline_fwd = pipeline_fwd_raw * (batch_size / n_microbatches) if is_padded else pipeline_fwd_raw
+
+                print(f"    Batch {batch_idx}{padding_label}:")
+                baseline_total = 0.0
+                for i, req_id in batch:
+                    baseline_entry = baseline_data[model_name][i]
+                    baseline_timing = baseline_entry.get("timing")
+                    if baseline_timing is None:
+                        print(f"      Request {i}: baseline timing unavailable")
+                        continue
+                    bl = baseline_timing["end"] - baseline_timing["start"]
+                    baseline_total += bl
+                    print(f"      Request {i}: baseline={bl:.4f}s")
+
+                diff = pipeline_fwd - baseline_total
+                n_batches += 1
                 total_diff += diff
-                n_timed += 1
                 if diff < 0:
                     faster_count += 1
                 else:
                     slower_count += 1
 
-                rebalanced = " (rebalanced)" if reb["did_rebalance"] else ""
-                print(f"    Request {i}: pipeline_fwd={pipeline_fwd:.4f}s, "
+                fwd_label = f"pipeline_fwd={pipeline_fwd:.4f}s"
+                if is_padded:
+                    fwd_label += f" (raw={pipeline_fwd_raw:.4f}s)"
+                print(f"      {fwd_label}, "
                       f"rebalance={pipeline_reb:.4f}s{rebalanced}, "
-                      f"baseline={baseline_duration:.4f}s, diff={diff:+.4f}s")
+                      f"baseline_total={baseline_total:.4f}s, "
+                      f"diff={diff:+.4f}s")
 
-        if n_timed > 0:
-            avg_diff = total_diff / n_timed
-            print(f"\n  Summary: {faster_count} faster, {slower_count} slower, "
-                  f"avg diff={avg_diff:+.4f}s")
+        if n_batches > 0:
+            avg_diff = total_diff / n_batches
+            print(f"\n  Summary ({n_batches} batches): {faster_count} faster, "
+                  f"{slower_count} slower, avg diff={avg_diff:+.4f}s")
         else:
             print("\n  No timing data available for comparison.")
 
