@@ -13,7 +13,7 @@ from .device_manager import DeviceManager
 
 @dataclass
 class PipelineConfig:
-    split_spec: dict
+    split_spec: dict[str, SplitPoint]  # module path → SplitPoint
     device_mapping: dict[int, str]
 
 
@@ -37,6 +37,42 @@ class PipelineOptimizer(ABC):
         self.root_uuid = root_uuid
         self.rebalance_interval = rebalance_interval
         self._call_count = 0
+        self.children = self._compute_effective_children()
+
+    def _compute_effective_children(self) -> list[uuid.UUID]:
+        """Compute the effective children list for pipeline splitting.
+
+        If the root module has fewer direct children than ``num_stages``,
+        iteratively expands the child with the most sub-children (replacing it
+        with its sub-children) until enough split candidates exist or no further
+        expansion is possible.
+
+        Returns:
+            List of module UUIDs to use as pipeline split candidates.
+        """
+        children = list(timed_module_hierarchy[self.root_uuid])
+        while len(children) < self.num_stages:
+            # Find the child with the most sub-children to expand
+            best_idx = None
+            best_count = 0
+            for i, c in enumerate(children):
+                sub = timed_module_hierarchy.get(c, [])
+                if len(sub) > 1 and len(sub) > best_count:
+                    best_count = len(sub)
+                    best_idx = i
+            if best_idx is None:
+                break  # No child can be expanded further
+            sub = list(timed_module_hierarchy[children[best_idx]])
+            children = children[:best_idx] + sub + children[best_idx + 1:]
+        return children
+
+    @staticmethod
+    def _uuid_to_path(module_uuid: uuid.UUID) -> str:
+        """Convert a module UUID to its dot-separated path string."""
+        module = timed_module_registry.get(module_uuid)
+        if module is None:
+            raise ValueError(f"Module UUID {module_uuid} not found in registry")
+        return module.get_path()
 
     @abstractmethod
     def optimize(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig) -> PipelineConfig:
@@ -104,14 +140,14 @@ class PipelineOptimizer(ABC):
         # SplitPoint.BEGINNING means start a stage before this one, so we cannot mark the first module with it
         # because the first module is already the start of a stage implicitly
 
-        children_uuid = timed_module_hierarchy[self.root_uuid]
+        children_uuid = self.children
         step = max(len(children_uuid) // self.num_stages, 1)
-        split_spec = {}
+        split_spec: dict[str, SplitPoint] = {}
         current_stage_num = 1
         for i in range(step, len(children_uuid), step):
             # new split point
-            u = children_uuid[i]
-            split_spec[u] = SplitPoint.BEGINNING
+            path = self._uuid_to_path(children_uuid[i])
+            split_spec[path] = SplitPoint.BEGINNING
             current_stage_num += 1
             # we have enough stages
             if current_stage_num == self.num_stages:
@@ -248,7 +284,7 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
             List of (uuid, stage_index) tuples
         """
         # Collecting the times of only the children of the root module
-        children_ids = timed_module_hierarchy[self.root_uuid]
+        children_ids = self.children
         children_times = []
         for layer_time in layer_times:
             # If module is a child of the root
@@ -275,20 +311,20 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
 
         return assignments
 
-    def _build_split_spec(self, stage_assignments: List[Tuple[uuid.UUID, int]]) -> dict[uuid.UUID, SplitPoint]:
+    def _build_split_spec(self, stage_assignments: List[Tuple[uuid.UUID, int]]) -> dict[str, SplitPoint]:
         """
         Build split_spec dict marking stage boundaries with SplitPoint.BEGINNING.
 
         Returns:
-            Dict mapping UUIDs to SplitPoint.BEGINNING for stage boundaries
+            Dict mapping module paths to SplitPoint.BEGINNING for stage boundaries
         """
-        split_spec = {}
+        split_spec: dict[str, SplitPoint] = {}
 
         prev_stage = 0
         for module_uuid, stage in stage_assignments:
             # Mark the beginning of a new stage (skip stage 0, as it's implicit)
             if stage > prev_stage:
-                split_spec[module_uuid] = SplitPoint.BEGINNING
+                split_spec[self._uuid_to_path(module_uuid)] = SplitPoint.BEGINNING
                 prev_stage = stage
 
         return split_spec
@@ -327,10 +363,11 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
     def _children_to_stages(self, config: PipelineConfig) -> list[list[uuid.UUID]]:
         """Reconstruct which children are in which stage from the split_spec."""
-        children = timed_module_hierarchy[self.root_uuid]
+        children = self.children
         stages: list[list[uuid.UUID]] = [[]]
         for child_uuid in children:
-            if child_uuid in config.split_spec and config.split_spec[child_uuid] == SplitPoint.BEGINNING:
+            child_path = self._uuid_to_path(child_uuid)
+            if child_path in config.split_spec and config.split_spec[child_path] == SplitPoint.BEGINNING:
                 stages.append([])
             stages[-1].append(child_uuid)
         return stages
@@ -369,7 +406,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
     # ── Seed Generation (Algorithm 1) ────────────────────────────────────
 
     def _seed_generation(self) -> PipelineConfig:
-        children = list(timed_module_hierarchy[self.root_uuid])
+        children = list(self.children)
         N = self.num_stages
 
         # Phase 1: Merge children into N balanced groups by weight
@@ -378,7 +415,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         ]
 
         while len(groups) > N:
-            # Find lightest group
+            # Find the lightest group
             min_idx = min(range(len(groups)), key=lambda i: groups[i][1])
 
             # Find lightest immediate neighbor
@@ -414,11 +451,11 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             stage_to_device[stage_idx] = ranked_devices[rank % num_devices]
 
         # Build PipelineConfig
-        split_spec: dict[uuid.UUID, SplitPoint] = {}
+        split_spec: dict[str, SplitPoint] = {}
         device_mapping: dict[int, torch.device] = {}
         for stage_idx, (uuids, _weight) in enumerate(groups):
             if stage_idx > 0:
-                split_spec[uuids[0]] = SplitPoint.BEGINNING
+                split_spec[self._uuid_to_path(uuids[0])] = SplitPoint.BEGINNING
             device_mapping[stage_idx] = stage_to_device[stage_idx]
 
         return PipelineConfig(split_spec=split_spec, device_mapping=device_mapping)
@@ -462,10 +499,10 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             stages[slowest_idx] = stages[slowest_idx][:-1]
 
         # Build new split_spec from modified stages
-        new_split_spec: dict[uuid.UUID, SplitPoint] = {}
+        new_split_spec: dict[str, SplitPoint] = {}
         for stage_idx, stage_uuids in enumerate(stages):
             if stage_idx > 0 and stage_uuids:
-                new_split_spec[stage_uuids[0]] = SplitPoint.BEGINNING
+                new_split_spec[self._uuid_to_path(stage_uuids[0])] = SplitPoint.BEGINNING
 
         return PipelineConfig(split_spec=new_split_spec, device_mapping=old_config.device_mapping)
 

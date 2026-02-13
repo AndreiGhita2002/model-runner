@@ -435,18 +435,11 @@ class AdaptivePipeline:
         self._log(f"[rank:{dist.get_rank()}] rebuilding pipeline...")
         self.current_config = config
 
-        # Convert UUID-based split_spec to path-based for PyTorch
-        path_split_spec = {}
-        for module_uuid, split_point in config.split_spec.items():
-            timed_module = timed_module_registry.get(module_uuid)
-            if timed_module is not None:
-                path_split_spec[timed_module.get_path()] = split_point
-
-        # Create pipe
+        # Create pipe (split_spec is already path-based)
         self.pipe = pipeline(
             module=self.original_model,
             mb_args=(self.example_input,),
-            split_spec=path_split_spec
+            split_spec=config.split_spec
         )
 
         # Validate: num_stages must equal world_size for pipeline parallelism
@@ -482,14 +475,16 @@ class AdaptivePipeline:
 
     def _compute_local_stage_children(self, config: PipelineConfig) -> list[uuid.UUID]:
         """Return the child UUIDs that belong to this rank's pipeline stage."""
-        children = timed_module_hierarchy[self.original_model.uuid]
+        children = self.pipeline_optimizer.children
         split_spec = config.split_spec
 
         rank = dist.get_rank()
         stages: list[list[uuid.UUID]] = [[]]
 
         for child_uuid in children:
-            if child_uuid in split_spec and split_spec[child_uuid] == SplitPoint.BEGINNING:
+            child = timed_module_registry.get(child_uuid)
+            child_path = child.get_path() if child is not None else None
+            if child_path in split_spec and split_spec[child_path] == SplitPoint.BEGINNING:
                 stages.append([])
             stages[-1].append(child_uuid)
 
