@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import queue
+import threading
 import time
 import uuid
 import warnings
@@ -109,7 +110,7 @@ class AdaptivePipeline:
     re-optimises the stage split based on collected timing data. Rebalancing
     can run synchronously (blocking) or asynchronously (in a background process).
 
-    Requires ``torch.distributed`` to be initialized before use.
+    Requires ``torch.distributed`` to be initialised before use.
     """
     name: str
     current_config: Optional[PipelineConfig]
@@ -121,6 +122,8 @@ class AdaptivePipeline:
     # Time logs
     time_logs: dict[uuid.UUID, list[float]]
 
+    #TODO: sometimes models can genuinely not be split enough and world_size will always > num stages
+
     def __init__(
             self,
             model: TimedModule,
@@ -128,7 +131,6 @@ class AdaptivePipeline:
             device_manager: DeviceManager,
             example_input: Any,
             optimizer_class: type[PipelineOptimizer] = TimeBasedShishaPipelineOptimizer,
-            optimizer_kwargs: dict | None = None,
             max_log_entries: int = 5,
             n_microbatches: int = 4,
             initial_pipeline_config: PipelineConfig | None = None,
@@ -181,13 +183,14 @@ class AdaptivePipeline:
         # Current pipeline state
         self.current_config = None
         self.pipe = None
-        self.stages = []
+        self.stage = None
         self.scheduler = None
 
         # Force-rebalance flag (set from Flask thread, read from main loop)
         self._force_rebalance: bool = False
+        self._force_rebalance_lock = threading.Lock()
 
-        # Async optimization state (only used on rank 0)
+        # Async optimisation state (only used on rank 0)
         self._optimizer_process: Optional[mp.Process] = None
         self._request_queue: Optional[mp.Queue] = None
         self._result_queue: Optional[mp.Queue] = None
@@ -216,7 +219,19 @@ class AdaptivePipeline:
             print(msg)
 
     def _start_optimizer_process(self):
-        """Spawn the background optimiser process and its communication queues."""
+        """Spawn the background optimiser process and its communication queues.
+
+        TODO: The background process receives a fork/pickle *copy* of
+        ``self.pipeline_optimizer``. If the main process later mutates the
+        optimizer (e.g. ``generate_safe_config()`` changes depth/children, or
+        ``should_rebalance`` updates internal counters), the background copy
+        diverges.  This can cause the background optimizer to keep producing
+        configs at the wrong depth after a fallback.  Fix options:
+        - Restart the background process after any optimizer mutation.
+        - Send updated optimizer state over the queue.
+        - Move the optimizer entirely into the background process and proxy
+          all calls through the queues.
+        """
         self._request_queue = mp.Queue()
         self._result_queue = mp.Queue()
         self._shutdown_event = mp.Event()
@@ -279,7 +294,8 @@ class AdaptivePipeline:
         Thread-safe: may be called from a Flask thread while the main loop
         runs ``forward()`` on the main thread.
         """
-        self._force_rebalance = True
+        with self._force_rebalance_lock:
+            self._force_rebalance = True
 
     def forward(self, x: Any) -> dict[str, Any]:
         """Run one pipeline step across all ranks. Must be called on all ranks.
@@ -315,6 +331,11 @@ class AdaptivePipeline:
             else:
                 output = self.scheduler.step()
 
+        # Capture forward end time on last rank immediately after the step,
+        # before update_logs / P2P so it only measures actual computation.
+        if rank == last_rank:
+            forward_end = time.time()
+
         self.update_logs()
 
         # Send forward_start from rank 0 to last rank
@@ -326,10 +347,6 @@ class AdaptivePipeline:
                 t = torch.tensor([0.0], dtype=torch.float64)
                 dist.recv(t, src=0)
                 forward_start = t.item()
-
-        # Capture forward end time on last rank
-        if rank == last_rank:
-            forward_end = time.time()
 
         if self.async_optimization:
             rebalance_timing = self._forward_async_optimization()
@@ -359,8 +376,9 @@ class AdaptivePipeline:
 
         # Rank 0 decides and computes; others receive via broadcast
         if dist.get_rank() == 0:
-            force = self._force_rebalance
-            self._force_rebalance = False
+            with self._force_rebalance_lock:
+                force = self._force_rebalance
+                self._force_rebalance = False
             if force or self.pipeline_optimizer.should_rebalance(self.time_logs, self.current_config):
                 new_config = self.pipeline_optimizer.optimize(self.time_logs, self.current_config)
             else:
@@ -395,8 +413,9 @@ class AdaptivePipeline:
 
         # Only rank 0 sends requests and polls for results
         if dist.get_rank() == 0:
-            force = self._force_rebalance
-            self._force_rebalance = False
+            with self._force_rebalance_lock:
+                force = self._force_rebalance
+                self._force_rebalance = False
             if force:
                 # Bypass background process — optimise directly so it takes
                 # effect on the very next forward pass.
@@ -490,24 +509,20 @@ class AdaptivePipeline:
                 f"Either adjust your model split or run with --nproc_per_node={self.pipe.num_stages}"
             )
 
-        # Create stages with device mapping
-        self.stages = []
-        for i in range(self.pipe.num_stages):
-            # If `i` is not in device mapping, then it is incomplete and something went wrong
-            assert i in config.device_mapping, f"Stage {i} not in device_mapping: {config.device_mapping}"
+        # Create only this rank's pipeline stage (not all stages)
+        rank = dist.get_rank()
+        assert rank in config.device_mapping, f"Rank {rank} not in device_mapping: {config.device_mapping}"
 
-            # Wrap stage submodule to ensure outputs are contiguous for P2P communication
-            stage_module = self.pipe.get_stage_module(i)
-            stage = PipelineStage(
-                _ContiguousStageWrapper(stage_module),
-                stage_index=i,
-                num_stages=self.pipe.num_stages,
-                device=config.device_mapping[i]
-            )
-            self.stages.append(stage)
+        stage_module = self.pipe.get_stage_module(rank)
+        self.stage = PipelineStage(
+            _ContiguousStageWrapper(stage_module),
+            stage_index=rank,
+            num_stages=self.pipe.num_stages,
+            device=config.device_mapping[rank]
+        )
 
         # Create scheduler
-        self.scheduler = ScheduleGPipe(self.stages[dist.get_rank()], n_microbatches=self.n_microbatches)
+        self.scheduler = ScheduleGPipe(self.stage, n_microbatches=self.n_microbatches)
 
         # Cache which children belong to this rank's stage for update_logs()
         self._local_children = self._compute_local_stage_children(config)

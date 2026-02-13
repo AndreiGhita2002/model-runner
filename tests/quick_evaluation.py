@@ -55,7 +55,7 @@ def quick_evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
     print(f"> Adding model {QUICK_MODEL_NAME}")
     main.add_model(QUICK_MODEL_NAME, load_conv_next(), conv_next_rand_inputs(),
                    optimizer_class=TimeBasedShishaPipelineOptimizer,
-                   rebalance_interval=4)
+                   rebalance_interval=4, async_optimization=False)
 
     requests: list[uuid.UUID] = []
 

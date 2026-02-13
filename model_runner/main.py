@@ -462,6 +462,6 @@ class MainService:
 
         print("\nPipelines:")
         for name, pipeline in self.pipelines.items():
-            num_stages = len(pipeline.stages) if pipeline.stages else 0
+            num_stages = pipeline.pipe.num_stages if pipeline.pipe else 0
             num_logs = len(pipeline.time_logs)
             print(f"  {name}: stages={num_stages}, time_logs={num_logs}")

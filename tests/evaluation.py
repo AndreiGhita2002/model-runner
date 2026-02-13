@@ -83,7 +83,7 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
         print(f"> Adding model {model_name} with load function {load_model.__name__}")
         main.add_model(model_name, load_model(), rand_input(),
                        optimizer_class=TimeBasedShishaPipelineOptimizer,
-                       rebalance_interval=4, n_microbatches=5)
+                       rebalance_interval=4, n_microbatches=5, async_optimization=False)
 
     # Queue work (rank 0 only)
     if rank == 0:
