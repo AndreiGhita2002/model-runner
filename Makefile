@@ -6,7 +6,7 @@ install:
 	uv pip install -e .
 
 eval: install
-	$(TORCHRUN) tests.evaluation
+	uv run --no-sync torchrun --nproc_per_node=5 -m tests.evaluation
 
 quick-eval: install
 	$(TORCHRUN) tests.quick_evaluation
