@@ -18,12 +18,25 @@ class PipelineConfig:
 
 
 class PipelineOptimizer(ABC):
-    """Abstract base class for pipeline optimisers."""
+    """Abstract base class for pipeline optimisers.
 
-    def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager):
+    ``should_rebalance`` is called every forward pass by the pipeline. The base
+    class tracks a call counter and only delegates to the subclass's
+    ``_should_rebalance`` once every ``rebalance_interval`` calls. This lets
+    timing data accumulate between evaluations without burdening each subclass
+    with interval bookkeeping.
+
+    Subclasses that need to evaluate every forward pass can set
+    ``rebalance_interval=1``.
+    """
+
+    def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
+                 rebalance_interval: int = 10):
         self.num_stages = num_stages
         self.device_manager = device_manager
         self.root_uuid = root_uuid
+        self.rebalance_interval = rebalance_interval
+        self._call_count = 0
 
     @abstractmethod
     def optimize(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig) -> PipelineConfig:
@@ -40,9 +53,12 @@ class PipelineOptimizer(ABC):
         pass
 
     @abstractmethod
-    def should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
+    def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
         """
         Determine if rebalancing is needed based on timing data.
+
+        Called by ``should_rebalance`` once every ``rebalance_interval`` forward
+        passes. Subclasses implement their rebalancing criteria here.
 
         Args:
             time_logs: Dict mapping TimedModule UUIDs to lists of elapsed times
@@ -52,6 +68,27 @@ class PipelineOptimizer(ABC):
             True if the pipeline should be rebalanced
         """
         pass
+
+    def should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
+        """
+        Gate rebalancing checks behind ``rebalance_interval``.
+
+        Increments an internal call counter each time it is invoked. Only
+        delegates to ``_should_rebalance`` when the counter reaches
+        ``rebalance_interval``, then resets the counter.
+
+        Args:
+            time_logs: Dict mapping TimedModule UUIDs to lists of elapsed times
+            current_config: The current pipeline configuration
+
+        Returns:
+            True if the pipeline should be rebalanced
+        """
+        self._call_count += 1
+        if self._call_count < self.rebalance_interval:
+            return False
+        self._call_count = 0
+        return self._should_rebalance(time_logs, current_config)
 
     def initial_setup(self) -> PipelineConfig:
         """Generate a uniform initial split across all ranks.
@@ -92,11 +129,12 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
     Pipeline optimiser using a greedy algorithm to balance computation time across stages.
     """
 
-    def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager, rebalance_threshold: float = 0.1):
-        super().__init__(num_stages, root_uuid, device_manager)
+    def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
+                 rebalance_threshold: float = 0.1, rebalance_interval: int = 10):
+        super().__init__(num_stages, root_uuid, device_manager, rebalance_interval=rebalance_interval)
         self.rebalance_threshold = rebalance_threshold
 
-    def should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
+    def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
         """
         Determine if rebalancing is needed based on timing profile changes.
 
@@ -271,9 +309,10 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
                  alpha: int = 10,
                  assignment_choice: str = "rank_w",
-                 balance_strategy: str = "nearest_lightest_fep"):
+                 balance_strategy: str = "nearest_lightest_fep",
+                 rebalance_interval: int = 10):
 
-        super().__init__(num_stages, root_uuid, device_manager)
+        super().__init__(num_stages, root_uuid, device_manager, rebalance_interval=rebalance_interval)
         self.n = self.device_manager.num_devices()
         self.alpha = alpha
         self.assignment_choice = assignment_choice
@@ -438,7 +477,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             return None
 
         if self.balance_strategy == "nearest_lightest_fep":
-            # Among all stages != slowest, find one with lowest time,
+            # Among all stages != slowest, find one with the lowest time,
             # preferring CUDA ("FEP") stages, breaking ties by proximity.
             cuda_candidates = []
             all_candidates = []
@@ -500,8 +539,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         self._is_seeded = True
         return config
 
-    def should_rebalance(self, time_logs: dict[uuid.UUID, list[float]],
-                         current_config: PipelineConfig) -> bool:
+    def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]],
+                          current_config: PipelineConfig) -> bool:
         if not time_logs:
             return True
 

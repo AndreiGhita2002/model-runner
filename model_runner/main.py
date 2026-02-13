@@ -121,7 +121,6 @@ class MainService:
             depth: Depth for TimedModule profiling (default: ``default_timing_depth``).
             **kwargs: Forwarded to ``AdaptivePipeline``:
                 - optimizer_kwargs: Extra kwargs for the optimiser constructor
-                - rebalance_interval: How often to check for rebalancing (default: 10)
                 - max_log_entries: Max timing measurements per module (default: 5)
                 - n_microbatches: Number of microbatches for pipeline (default: 4)
                 - initial_pipeline_config: Initial pipeline configuration
