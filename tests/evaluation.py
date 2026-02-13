@@ -170,6 +170,10 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
                     last_timing_id = tid
                 batches[-1].append((i, req_id))
 
+            # Track per-batch data for rebalance improvement analysis
+            # Each entry: (pipeline_fwd_raw, did_rebalance)
+            batch_records: list[tuple[float, bool]] = []
+
             for batch_idx, batch in enumerate(batches):
                 first_req_id = batch[0][1]
                 pipeline_timing = evaluation_timings.get(first_req_id)
@@ -181,7 +185,8 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
                 reb = pipeline_timing["rebalance"]
                 pipeline_fwd_raw = fwd["end"] - fwd["start"]
                 pipeline_reb = reb["end"] - reb["start"]
-                rebalanced = " (rebalanced)" if reb["did_rebalance"] else ""
+                did_rebalance = reb["did_rebalance"]
+                rebalanced = " (rebalanced)" if did_rebalance else ""
 
                 batch_size = pipeline_timing.get("batch_size", len(batch))
                 n_microbatches = pipeline_timing.get("n_microbatches", batch_size)
@@ -190,6 +195,8 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
 
                 # Scale pipeline time to account for wasted padding work
                 pipeline_fwd = pipeline_fwd_raw * (batch_size / n_microbatches) if is_padded else pipeline_fwd_raw
+
+                batch_records.append((pipeline_fwd_raw, did_rebalance))
 
                 print(f"    Batch {batch_idx}{padding_label}:")
                 baseline_total = 0.0
@@ -218,6 +225,36 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
                       f"rebalance={pipeline_reb:.4f}s{rebalanced}, "
                       f"baseline_total={baseline_total:.4f}s, "
                       f"diff={diff:+.4f}s")
+
+            # Rebalance improvement analysis
+            # Group batches into pipeline segments: a new segment starts after a
+            # batch that triggered a rebalance (that batch still ran on the OLD
+            # pipeline, so it belongs to the previous segment).
+            if batch_records:
+                segments: list[list[float]] = [[]]
+                for fwd_time, did_reb in batch_records:
+                    segments[-1].append(fwd_time)
+                    if did_reb:
+                        segments.append([])
+                # Drop trailing empty segment if the last batch rebalanced
+                if not segments[-1]:
+                    segments.pop()
+
+                if len(segments) >= 2:
+                    first_avg = sum(segments[0]) / len(segments[0])
+                    last_avg = sum(segments[-1]) / len(segments[-1])
+                    improvement = first_avg - last_avg
+                    pct = (improvement / first_avg) * 100 if first_avg > 0 else 0
+
+                    print(f"\n    Rebalance improvement ({len(segments)} pipeline configs):")
+                    for seg_idx, seg in enumerate(segments):
+                        seg_avg = sum(seg) / len(seg)
+                        print(f"      Config {seg_idx}: avg={seg_avg:.4f}s "
+                              f"({len(seg)} batch{'es' if len(seg) != 1 else ''})")
+                    print(f"      Initial avg: {first_avg:.4f}s -> Final avg: {last_avg:.4f}s "
+                          f"({improvement:+.4f}s, {pct:+.1f}%)")
+                else:
+                    print(f"\n    Rebalance improvement: no rebalance occurred")
 
         if n_batches > 0:
             avg_diff = total_diff / n_batches
