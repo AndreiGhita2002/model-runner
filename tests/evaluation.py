@@ -28,7 +28,7 @@ def load_baseline(baseline_file: str):
     if not os.path.exists(baseline_file):
         print(f"Baseline file not found, generating {baseline_file}...")
         if dist.get_rank() == 0:
-            baseline_main(output_file=baseline_file, num_requests=30)
+            baseline_main(output_file=baseline_file)
         dist.barrier()  # Wait for rank 0 to finish writing
 
     with open(baseline_file, "r") as f:
