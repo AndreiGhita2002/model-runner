@@ -421,6 +421,20 @@ class AdaptivePipeline:
         rebalance_end = time.time()
         return {"start": rebalance_start, "end": rebalance_end, "did_rebalance": did_rebalance}
 
+    def _cleanup_split_annotations(self):
+        """Remove stale ``pipe_split()`` annotations left by previous ``pipeline()`` calls.
+
+        ``annotate_split_points()`` (called inside ``pipeline()``) mutates each
+        split-point module's ``forward()`` in-place, storing the original as
+        ``_orig_forward``. Without cleanup, a rebuild with a *different*
+        ``split_spec`` would accumulate old markers, producing more stages than
+        intended.
+        """
+        for _, module in self.original_model.named_modules():
+            if hasattr(module, '_orig_forward'):
+                module.forward = module._orig_forward
+                del module._orig_forward
+
     def rebuild_pipeline(self, config: PipelineConfig):
         """Tear down the current pipeline and rebuild it from a new config.
 
@@ -428,24 +442,22 @@ class AdaptivePipeline:
         creates ``PipelineStage`` objects with the device mapping, and
         instantiates a new ``ScheduleGPipe`` scheduler.
 
+        If the resulting stage count doesn't match ``world_size`` (e.g. because
+        a split point landed inside a parallel branch that the tracer cannot
+        partition), the optimizer is reconfigured to depth-1 (top-level children
+        only) and the pipeline is rebuilt with a safe split.
+
         Args:
             config: The split specification and device mapping to apply.
 
         Raises:
-            RuntimeError: If the resulting number of stages does not equal ``world_size``.
+            RuntimeError: If the resulting number of stages does not equal
+                ``world_size`` even after the depth-1 fallback.
         """
         self._log(f"[rank:{dist.get_rank()}] rebuilding pipeline...")
         self.current_config = config
 
-        # Clean up stale split annotations from previous pipeline builds.
-        # annotate_split_points() (called inside pipeline()) mutates each
-        # split-point module's forward() in-place.  Without cleanup, a
-        # rebuild with a *different* split_spec would accumulate old
-        # pipe_split() markers, producing more stages than intended.
-        for _, module in self.original_model.named_modules():
-            if hasattr(module, '_orig_forward'):
-                module.forward = module._orig_forward
-                del module._orig_forward
+        self._cleanup_split_annotations()
 
         # Create pipe (split_spec is already path-based)
         self.pipe = pipeline(
@@ -456,6 +468,21 @@ class AdaptivePipeline:
 
         # Validate: num_stages must equal world_size for pipeline parallelism
         world_size = dist.get_world_size()
+        if self.pipe.num_stages != world_size:
+            self._log(
+                f"Warning: split produced {self.pipe.num_stages} stage(s) instead of "
+                f"{world_size}. Falling back to depth-1 (top-level) split."
+            )
+            self._cleanup_split_annotations()
+            config = self.pipeline_optimizer.generate_safe_config()
+            self.current_config = config
+
+            self.pipe = pipeline(
+                module=self.original_model,
+                mb_args=(self.example_input,),
+                split_spec=config.split_spec
+            )
+
         if self.pipe.num_stages != world_size:
             raise RuntimeError(
                 f"Pipeline has {self.pipe.num_stages} stages but world_size is {world_size}. "

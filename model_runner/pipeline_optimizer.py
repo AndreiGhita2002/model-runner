@@ -67,6 +67,32 @@ class PipelineOptimizer(ABC):
             dfs(child, 1)
         return leaves
 
+    def reconfigure_depth(self, new_depth: int):
+        """Re-collect leaf children at a different depth.
+
+        Updates ``self.children`` to reflect the new depth. Useful when
+        splitting at the current depth produces an invalid pipeline (e.g.
+        split points landing inside parallel branches).
+
+        Args:
+            new_depth: The new depth for ``_collect_leaf_children``.
+        """
+        self.depth = new_depth
+        self.children = self._collect_leaf_children()
+
+    def generate_safe_config(self) -> PipelineConfig:
+        """Fall back to depth-1 children and regenerate the initial config.
+
+        Reconfigures the optimizer to use only top-level children (which are
+        always on the model's sequential path) and returns a fresh initial
+        split. Subsequent ``optimize`` calls will also use depth-1 children.
+
+        Returns:
+            A ``PipelineConfig`` using top-level module boundaries.
+        """
+        self.reconfigure_depth(1)
+        return self.initial_setup()
+
     @staticmethod
     def _uuid_to_path(module_uuid: uuid.UUID) -> str:
         """Convert a module UUID to its dot-separated path string."""

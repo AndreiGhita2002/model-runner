@@ -7,7 +7,7 @@ from tests.testing_models import evaluation_models
 DEFAULT_BASELINE_FILE = "baseline_outputs.json"
 
 
-def baseline_main(num_requests: int = 5, seed: int = 37, output_file: str = DEFAULT_BASELINE_FILE):
+def baseline_main(num_requests: int = 30, seed: int = 37, output_file: str = DEFAULT_BASELINE_FILE):
     results = {}
 
     for model_name, load_model, rand_inputs in evaluation_models:
