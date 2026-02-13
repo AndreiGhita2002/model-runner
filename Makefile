@@ -1,17 +1,20 @@
-.PHONY: install test test-all test-pipeline clean
+.PHONY: install test-flask test-pipeline eval baseline clean
 
 TORCHRUN = uv run --no-sync torchrun --nproc_per_node=2 -m
 
 install:
 	uv pip install -e .
 
-eval:
+eval: install
 	$(TORCHRUN) tests.evaluation
 
-baseline:
+baseline: install
 	uv run --no-sync torchrun --nproc_per_node=1 -m tests.baseline
 
-test-pipeline:
+test-flask: install
+	uv run --no-sync python -m tests.flask_test
+
+test-pipeline: install
 	$(TORCHRUN) tests.pipeline_test
 
 clean:

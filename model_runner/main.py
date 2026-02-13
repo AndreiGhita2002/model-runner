@@ -85,6 +85,10 @@ class MainService:
         self.default_timing_depth = default_timing_depth
         self.verbose = verbose
 
+        # Result storage for async Flask API (request_id -> (model_name, output))
+        self._results: dict[uuid.UUID, tuple[str, Any]] = {}
+        self._results_lock = threading.Lock()
+
         # Synchronization for cross-thread/process work submission
         self._work_available = threading.Condition()
         self._shutdown_requested = False
@@ -246,6 +250,37 @@ class MainService:
                 output = outputs[i]
                 self.handle_output_fn(req_id, model_name, output)
 
+        # Relay results back to rank 0 for the async Flask API
+        world_size = dist.get_world_size()
+        if world_size == 1:
+            # Rank 0 IS the last rank — store results directly
+            for i, req_id in enumerate(req_ids):
+                if req_id is None:
+                    continue
+                output = outputs[i].detach().cpu()
+                with self._results_lock:
+                    self._results[req_id] = (model_name, output)
+        else:
+            # Last rank broadcasts results to all ranks (including rank 0)
+            if rank == last_rank:
+                result_entries = []
+                for i, req_id in enumerate(req_ids):
+                    if req_id is None:
+                        continue
+                    result_entries.append((req_id, model_name, outputs[i].detach().cpu()))
+                broadcast_list = [result_entries]
+            else:
+                broadcast_list = [None]
+
+            dist.broadcast_object_list(broadcast_list, src=last_rank)
+
+            # Rank 0 stores the results
+            if rank == 0:
+                result_entries = broadcast_list[0]
+                with self._results_lock:
+                    for req_id, m_name, output in result_entries:
+                        self._results[req_id] = (m_name, output)
+
     def run(self, exit_when_done=False):
         """Run the main processing loop. Must be called on all ranks.
 
@@ -376,6 +411,32 @@ class MainService:
             info['devices'].append(device_info)
 
         return info
+
+    def get_result(self, request_id: uuid.UUID) -> tuple[str, Any] | None:
+        """Pop a completed result by request ID.
+
+        Returns:
+            ``(model_name, output)`` if the result is ready, or ``None`` if
+            the request is still pending.
+        """
+        with self._results_lock:
+            return self._results.pop(request_id, None)
+
+    def force_rebalance(self, model_name: str):
+        """Request a forced rebalance of the named pipeline.
+
+        Thread-safe: may be called from the Flask thread.
+
+        Args:
+            model_name: Name of a model registered with ``add_model``.
+
+        Raises:
+            ValueError: If ``model_name`` has not been registered.
+        """
+        pipeline = self.pipelines.get(model_name)
+        if pipeline is None:
+            raise ValueError(f"Model '{model_name}' not found.")
+        pipeline.request_force_rebalance()
 
     def print_status(self):
         """Print a summary of the service to stdout, including devices and pipeline info."""

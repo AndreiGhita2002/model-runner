@@ -181,6 +181,9 @@ class AdaptivePipeline:
         self.stages = []
         self.scheduler = None
 
+        # Force-rebalance flag (set from Flask thread, read from main loop)
+        self._force_rebalance: bool = False
+
         # Async optimization state (only used on rank 0)
         self._optimizer_process: Optional[mp.Process] = None
         self._request_queue: Optional[mp.Queue] = None
@@ -267,6 +270,14 @@ class AdaptivePipeline:
         if dist.get_rank() == 0:
             self._stop_optimizer_process()
 
+    def request_force_rebalance(self):
+        """Request a forced rebalance on the next forward pass.
+
+        Thread-safe: may be called from a Flask thread while the main loop
+        runs ``forward()`` on the main thread.
+        """
+        self._force_rebalance = True
+
     def forward(self, x: Any) -> Any:
         """Run one pipeline step across all ranks. Must be called on all ranks.
 
@@ -309,7 +320,9 @@ class AdaptivePipeline:
         """
         # Rank 0 decides and computes; others receive via broadcast
         if dist.get_rank() == 0:
-            if self.pipeline_optimizer.should_rebalance(self.time_logs, self.current_config):
+            force = self._force_rebalance
+            self._force_rebalance = False
+            if force or self.pipeline_optimizer.should_rebalance(self.time_logs, self.current_config):
                 new_config = self.pipeline_optimizer.optimize(self.time_logs, self.current_config)
             else:
                 new_config = None
@@ -333,9 +346,16 @@ class AdaptivePipeline:
         """
         # Only rank 0 sends requests and polls for results
         if dist.get_rank() == 0:
-            if not self._pending_optimization:
-                self._send_optimization_request()
-            new_config = self._check_optimization_result()
+            force = self._force_rebalance
+            self._force_rebalance = False
+            if force:
+                # Bypass background process — optimise directly so it takes
+                # effect on the very next forward pass.
+                new_config = self.pipeline_optimizer.optimize(self.time_logs, self.current_config)
+            else:
+                if not self._pending_optimization:
+                    self._send_optimization_request()
+                new_config = self._check_optimization_result()
             config_list = [new_config]
         else:
             config_list = [None]
