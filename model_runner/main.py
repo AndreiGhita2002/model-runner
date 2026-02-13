@@ -105,7 +105,7 @@ class MainService:
         if self.verbose:
             print(msg)
 
-    def add_model(self, model_name: str, model: nn.Module, example_input: Any, model_output_is_static: bool,
+    def add_model(self, model_name: str, model: nn.Module, example_input: Any,
                   optimizer_class: type[PipelineOptimizer] = GreedyPipelineOptimizer,
                   device=None, depth: int | None = None, **kwargs):
         """Register a model and create its adaptive pipeline. Must be called on all ranks.
@@ -117,7 +117,6 @@ class MainService:
             model_name: Unique name for the model. Used to reference it in ``queue_work``.
             model: The PyTorch model. Caller is responsible for setting eval/train mode.
             example_input: A representative input tensor used to trace the pipeline.
-            model_output_is_static: Whether the model always produces the same output shape.
             optimizer_class: Pipeline optimiser class. Constructed internally by
                 ``AdaptivePipeline`` with ``num_stages``, ``root_uuid``, and
                 ``device_manager``. Defaults to ``GreedyPipelineOptimizer``.
@@ -157,7 +156,7 @@ class MainService:
             self.device_manager,
             example_input,
             optimizer_class=optimizer_class,
-            **kwargs
+            **kwargs,
         )
         self.work_by_model[model_name] = queue.Queue()
 

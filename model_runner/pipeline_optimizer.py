@@ -411,6 +411,12 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         children = list(self.children)
         N = self.num_stages
 
+        if len(children) < N:
+            raise RuntimeError(
+                f"Cannot create {N} pipeline stages from only {len(children)} "
+                f"children. Increase TimedModule depth or reduce world_size."
+            )
+
         # Phase 1: Merge children into N balanced groups by weight
         groups: list[tuple[list[uuid.UUID], int]] = [
             ([c], self._get_child_weight(c)) for c in children

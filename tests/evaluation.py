@@ -81,8 +81,9 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
     # Adding models (all ranks)
     for model_name, load_model, rand_input in evaluation_models:
         print(f"> Adding model {model_name} with load function {load_model.__name__}")
-        main.add_model(model_name, load_model(), rand_input(), model_output_is_static=True,
-                       optimizer_class=TimeBasedShishaPipelineOptimizer)
+        main.add_model(model_name, load_model(), rand_input(),
+                       optimizer_class=TimeBasedShishaPipelineOptimizer,
+                       rebalance_interval=1)
 
     # Queue work (rank 0 only)
     if rank == 0:

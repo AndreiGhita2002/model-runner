@@ -134,6 +134,7 @@ class AdaptivePipeline:
             initial_pipeline_config: PipelineConfig | None = None,
             verbose: bool = False,
             async_optimization: bool = False,
+            **kwargs
     ):
         """Initialise the adaptive pipeline and build the initial stage split.
 
@@ -174,7 +175,7 @@ class AdaptivePipeline:
             root_uuid=model.uuid,
             device_manager=device_manager,
             depth=model.depth,
-            **(optimizer_kwargs or {}),
+            **kwargs,
         )
 
         # Current pipeline state
@@ -435,6 +436,16 @@ class AdaptivePipeline:
         """
         self._log(f"[rank:{dist.get_rank()}] rebuilding pipeline...")
         self.current_config = config
+
+        # Clean up stale split annotations from previous pipeline builds.
+        # annotate_split_points() (called inside pipeline()) mutates each
+        # split-point module's forward() in-place.  Without cleanup, a
+        # rebuild with a *different* split_spec would accumulate old
+        # pipe_split() markers, producing more stages than intended.
+        for _, module in self.original_model.named_modules():
+            if hasattr(module, '_orig_forward'):
+                module.forward = module._orig_forward
+                del module._orig_forward
 
         # Create pipe (split_spec is already path-based)
         self.pipe = pipeline(
