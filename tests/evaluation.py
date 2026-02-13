@@ -42,18 +42,23 @@ def load_baseline(baseline_file: str):
 evaluation_results: dict[uuid.UUID, Any] = {}
 """Global dict storing pipeline outputs keyed by request UUID. Populated by ``handle_output``."""
 
+evaluation_timings: dict[uuid.UUID, dict | None] = {}
+"""Global dict storing pipeline wall-clock timings keyed by request UUID."""
 
-def handle_output(request_id: uuid.UUID, model_name: str, output: Any):
+
+def handle_output(request_id: uuid.UUID, model_name: str, output: Any, timing: dict | None):
     """Callback passed to ``MainService`` to collect pipeline outputs.
 
-    Stores the output in the global ``evaluation_results`` dict for later comparison.
+    Stores the output and timing in the global dicts for later comparison.
 
     Args:
         request_id: UUID of the completed request.
         model_name: Name of the model that produced the output.
         output: The output tensor from the pipeline.
+        timing: Wall-clock timing dict with ``"start"`` and ``"end"`` keys, or ``None``.
     """
     evaluation_results[request_id] = output
+    evaluation_timings[request_id] = timing
     print(f"Received output from {model_name} from request: {request_id}. Output shape: {output.shape}")
 
 
@@ -145,6 +150,47 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
             print("\nAll outputs match baseline!")
         else:
             print(f"\n{len(failed_requests)} request(s) differ from baseline.")
+
+        # Timing comparison
+        print("\n" + "=" * 60)
+        print("Timing Comparison (pipeline vs baseline)")
+        print("=" * 60)
+        faster_count = 0
+        slower_count = 0
+        total_diff = 0.0
+        n_timed = 0
+
+        for model_name in requests:
+            print(f"\n  [{model_name}]")
+            for i, req_id in enumerate(requests[model_name]):
+                pipeline_timing = evaluation_timings.get(req_id)
+                baseline_entry = baseline_data[model_name][i]
+                baseline_timing = baseline_entry.get("timing")
+
+                if pipeline_timing is None or baseline_timing is None:
+                    print(f"    Request {i}: timing unavailable")
+                    continue
+
+                pipeline_duration = pipeline_timing["end"] - pipeline_timing["start"]
+                baseline_duration = baseline_timing["end"] - baseline_timing["start"]
+                diff = pipeline_duration - baseline_duration
+
+                total_diff += diff
+                n_timed += 1
+                if diff < 0:
+                    faster_count += 1
+                else:
+                    slower_count += 1
+
+                print(f"    Request {i}: pipeline={pipeline_duration:.4f}s, "
+                      f"baseline={baseline_duration:.4f}s, diff={diff:+.4f}s")
+
+        if n_timed > 0:
+            avg_diff = total_diff / n_timed
+            print(f"\n  Summary: {faster_count} faster, {slower_count} slower, "
+                  f"avg diff={avg_diff:+.4f}s")
+        else:
+            print("\n  No timing data available for comparison.")
 
     print(f"rank:{dist.get_rank()} exiting!")
 

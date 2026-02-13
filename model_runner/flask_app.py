@@ -85,9 +85,9 @@ def create_flask_app(main_service: MainService) -> Flask:
         if result is None:
             return jsonify({"status": "pending"})
 
-        model_name, output = result
+        model_name, output, timing = result
         output_json = output.detach().cpu().tolist() if hasattr(output, 'tolist') else output
-        return jsonify({"status": "done", "model_name": model_name, "output": output_json})
+        return jsonify({"status": "done", "model_name": model_name, "output": output_json, "timing": timing})
 
     @app.route('/api/rebalance/<model_name>', methods=['POST'])
     def force_rebalance(model_name: str):

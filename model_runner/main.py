@@ -70,12 +70,12 @@ class MainService:
     #TODO(naming): find a more appropriate name for this
     # maybe AdaptivePipelineRunner? PipelineRuntime? PipelineOrchestrator?
 
-    def __init__(self, handle_output_fn: Callable[[uuid.UUID, str, Any], None], default_timing_depth: int = 3, verbose=False):
+    def __init__(self, handle_output_fn: Callable[[uuid.UUID, str, Any, dict | None], None], default_timing_depth: int = 3, verbose=False):
         """Initialise the service.
 
         Args:
             handle_output_fn: Callback invoked on the last rank when a request
-                completes. Signature: ``(request_id: uuid.UUID, model_name: str, output: Any) -> None``.
+                completes. Signature: ``(request_id: uuid.UUID, model_name: str, output: Any, timing: dict | None) -> None``.
             default_timing_depth: Default depth for TimedModule profiling.
             verbose: Enable verbose logging to stdout.
         """
@@ -85,8 +85,8 @@ class MainService:
         self.default_timing_depth = default_timing_depth
         self.verbose = verbose
 
-        # Result storage for async Flask API (request_id -> (model_name, output))
-        self._results: dict[uuid.UUID, tuple[str, Any]] = {}
+        # Result storage for async Flask API (request_id -> (model_name, output, timing))
+        self._results: dict[uuid.UUID, tuple[str, Any, dict | None]] = {}
         self._results_lock = threading.Lock()
 
         # Synchronization for cross-thread/process work submission
@@ -229,7 +229,9 @@ class MainService:
                 t_req_ids = uuids_to_tensor(req_ids, n_microbatches)
 
         # All ranks must call forward together
-        outputs = pipeline.forward(batched_input)
+        result = pipeline.forward(batched_input)
+        outputs = result["output"]
+        timing = result["timing"]
 
         # Send req_ids after forward so it doesn't interfere with the scheduler's P2P
         if rank == 0 and dist.get_world_size() != 1:
@@ -248,7 +250,7 @@ class MainService:
                 if req_id is None:
                     continue  # Skip padding entries (nil UUID sentinel)
                 output = outputs[i]
-                self.handle_output_fn(req_id, model_name, output)
+                self.handle_output_fn(req_id, model_name, output, timing)
 
         # Relay results back to rank 0 for the async Flask API
         world_size = dist.get_world_size()
@@ -259,7 +261,7 @@ class MainService:
                     continue
                 output = outputs[i].detach().cpu()
                 with self._results_lock:
-                    self._results[req_id] = (model_name, output)
+                    self._results[req_id] = (model_name, output, timing)
         else:
             # Last rank broadcasts results to all ranks (including rank 0)
             if rank == last_rank:
@@ -267,7 +269,7 @@ class MainService:
                 for i, req_id in enumerate(req_ids):
                     if req_id is None:
                         continue
-                    result_entries.append((req_id, model_name, outputs[i].detach().cpu()))
+                    result_entries.append((req_id, model_name, outputs[i].detach().cpu(), timing))
                 broadcast_list = [result_entries]
             else:
                 broadcast_list = [None]
@@ -278,8 +280,8 @@ class MainService:
             if rank == 0:
                 result_entries = broadcast_list[0]
                 with self._results_lock:
-                    for req_id, m_name, output in result_entries:
-                        self._results[req_id] = (m_name, output)
+                    for req_id, m_name, output, req_timing in result_entries:
+                        self._results[req_id] = (m_name, output, req_timing)
 
     def run(self, exit_when_done=False):
         """Run the main processing loop. Must be called on all ranks.
@@ -412,12 +414,13 @@ class MainService:
 
         return info
 
-    def get_result(self, request_id: uuid.UUID) -> tuple[str, Any] | None:
+    def get_result(self, request_id: uuid.UUID) -> tuple[str, Any, dict | None] | None:
         """Pop a completed result by request ID.
 
         Returns:
-            ``(model_name, output)`` if the result is ready, or ``None`` if
-            the request is still pending.
+            ``(model_name, output, timing)`` if the result is ready, or ``None`` if
+            the request is still pending. ``timing`` is a dict with ``"start"`` and
+            ``"end"`` wall-clock timestamps, or ``None``.
         """
         with self._results_lock:
             return self._results.pop(request_id, None)

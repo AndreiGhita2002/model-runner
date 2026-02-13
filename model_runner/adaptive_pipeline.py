@@ -1,5 +1,6 @@
 import multiprocessing as mp
 import queue
+import time
 import uuid
 import warnings
 from typing import Optional, Any
@@ -278,7 +279,7 @@ class AdaptivePipeline:
         """
         self._force_rebalance = True
 
-    def forward(self, x: Any) -> Any:
+    def forward(self, x: Any) -> dict[str, Any]:
         """Run one pipeline step across all ranks. Must be called on all ranks.
 
         Only rank 0 supplies the input; other ranks pass ``None``. After the
@@ -290,11 +291,20 @@ class AdaptivePipeline:
                 Ignored on other ranks.
 
         Returns:
-            On the last rank: list of per-microbatch output tensors.
-            On other ranks: ``None``.
+            Dict with keys:
+            - ``"output"``: On the last rank, list of per-microbatch output tensors;
+              on other ranks, ``None``.
+            - ``"timing"``: On the last rank, dict with ``"start"`` and ``"end"``
+              wall-clock timestamps; on other ranks, ``None``.
         """
         rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        last_rank = world_size - 1
         self._log(f"rank:{rank} in forward")
+
+        # Capture wall-clock start time on rank 0
+        if rank == 0:
+            start_time = time.time()
 
         # Only the first rank gets the input
         with torch.no_grad():
@@ -305,12 +315,28 @@ class AdaptivePipeline:
 
         self.update_logs()
 
+        # Send start_time from rank 0 to last rank
+        if world_size > 1:
+            if rank == 0:
+                t = torch.tensor([start_time], dtype=torch.float64)
+                dist.send(t, dst=last_rank)
+            elif rank == last_rank:
+                t = torch.tensor([0.0], dtype=torch.float64)
+                dist.recv(t, src=0)
+                start_time = t.item()
+
+        # Capture end time on last rank
+        timing = None
+        if rank == last_rank:
+            end_time = time.time()
+            timing = {"start": start_time, "end": end_time}
+
         if self.async_optimization:
             self._forward_async_optimization()
         else:
             self._forward_sync_optimization()
 
-        return output
+        return {"output": output, "timing": timing}
 
     def _forward_sync_optimization(self):
         """Check for rebalance and apply it synchronously.

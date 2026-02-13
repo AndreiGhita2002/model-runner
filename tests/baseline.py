@@ -1,5 +1,6 @@
 import json
 import sys
+import time
 import torch
 from tests.testing_models import evaluation_models
 
@@ -23,13 +24,16 @@ def baseline_main(num_requests: int = 5, seed: int = 37, output_file: str = DEFA
 
             # Run forward pass
             with torch.no_grad():
+                start = time.time()
                 output = model(x)
+                end = time.time()
 
             # Store input/output pair
             results[model_name].append({
                 "seed": seed + i,
                 "input": x.tolist(),
-                "output": output[0].tolist()
+                "output": output[0].tolist(),
+                "timing": {"start": start, "end": end}
             })
             print(f"  > Request {i}: input shape {list(x.shape)}, output shape {list(output[0].shape)}")
 
