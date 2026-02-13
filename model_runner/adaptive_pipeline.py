@@ -294,8 +294,8 @@ class AdaptivePipeline:
             Dict with keys:
             - ``"output"``: On the last rank, list of per-microbatch output tensors;
               on other ranks, ``None``.
-            - ``"timing"``: On the last rank, dict with ``"start"`` and ``"end"``
-              wall-clock timestamps; on other ranks, ``None``.
+            - ``"timing"``: On the last rank, dict with ``"forward"`` and
+              ``"rebalance"`` sub-dicts; on other ranks, ``None``.
         """
         rank = dist.get_rank()
         world_size = dist.get_world_size()
@@ -304,7 +304,7 @@ class AdaptivePipeline:
 
         # Capture wall-clock start time on rank 0
         if rank == 0:
-            start_time = time.time()
+            forward_start = time.time()
 
         # Only the first rank gets the input
         with torch.no_grad():
@@ -315,35 +315,46 @@ class AdaptivePipeline:
 
         self.update_logs()
 
-        # Send start_time from rank 0 to last rank
+        # Send forward_start from rank 0 to last rank
         if world_size > 1:
             if rank == 0:
-                t = torch.tensor([start_time], dtype=torch.float64)
+                t = torch.tensor([forward_start], dtype=torch.float64)
                 dist.send(t, dst=last_rank)
             elif rank == last_rank:
                 t = torch.tensor([0.0], dtype=torch.float64)
                 dist.recv(t, src=0)
-                start_time = t.item()
+                forward_start = t.item()
 
-        # Capture end time on last rank
-        timing = None
+        # Capture forward end time on last rank
         if rank == last_rank:
-            end_time = time.time()
-            timing = {"start": start_time, "end": end_time}
+            forward_end = time.time()
 
         if self.async_optimization:
-            self._forward_async_optimization()
+            rebalance_timing = self._forward_async_optimization()
         else:
-            self._forward_sync_optimization()
+            rebalance_timing = self._forward_sync_optimization()
+
+        timing = None
+        if rank == last_rank:
+            timing = {
+                "forward": {"start": forward_start, "end": forward_end},
+                "rebalance": rebalance_timing,
+            }
 
         return {"output": output, "timing": timing}
 
-    def _forward_sync_optimization(self):
+    def _forward_sync_optimization(self) -> dict[str, Any]:
         """Check for rebalance and apply it synchronously.
 
         Only rank 0 runs the optimiser; the decision and new config are
         broadcast so every rank takes the same path (no conditional collectives).
+
+        Returns:
+            Dict with ``"start"``, ``"end"`` wall-clock timestamps and
+            ``"did_rebalance"`` boolean.
         """
+        rebalance_start = time.time()
+
         # Rank 0 decides and computes; others receive via broadcast
         if dist.get_rank() == 0:
             force = self._force_rebalance
@@ -359,17 +370,27 @@ class AdaptivePipeline:
         dist.broadcast_object_list(config_list, src=0)
         new_config = config_list[0]
 
-        if new_config is not None:
+        did_rebalance = new_config is not None
+        if did_rebalance:
             self._log("Sync optimization: rebalancing pipeline")
             self.time_logs = {}
             self.rebuild_pipeline(new_config)
 
-    def _forward_async_optimization(self):
+        rebalance_end = time.time()
+        return {"start": rebalance_start, "end": rebalance_end, "did_rebalance": did_rebalance}
+
+    def _forward_async_optimization(self) -> dict[str, Any]:
         """Submit timing data to the background optimiser and apply any ready result.
 
         Only rank 0 manages the background process; results are broadcast so
         every rank rebuilds together.
+
+        Returns:
+            Dict with ``"start"``, ``"end"`` wall-clock timestamps and
+            ``"did_rebalance"`` boolean.
         """
+        rebalance_start = time.time()
+
         # Only rank 0 sends requests and polls for results
         if dist.get_rank() == 0:
             force = self._force_rebalance
@@ -389,10 +410,14 @@ class AdaptivePipeline:
         dist.broadcast_object_list(config_list, src=0)
         new_config = config_list[0]
 
-        if new_config is not None:
+        did_rebalance = new_config is not None
+        if did_rebalance:
             self._log("Async optimization: received new config, rebuilding pipeline")
             self.time_logs = {}
             self.rebuild_pipeline(new_config)
+
+        rebalance_end = time.time()
+        return {"start": rebalance_start, "end": rebalance_end, "did_rebalance": did_rebalance}
 
     def rebuild_pipeline(self, config: PipelineConfig):
         """Tear down the current pipeline and rebuild it from a new config.

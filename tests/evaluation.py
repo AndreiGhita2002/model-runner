@@ -171,9 +171,12 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
                     print(f"    Request {i}: timing unavailable")
                     continue
 
-                pipeline_duration = pipeline_timing["end"] - pipeline_timing["start"]
+                fwd = pipeline_timing["forward"]
+                reb = pipeline_timing["rebalance"]
+                pipeline_fwd = fwd["end"] - fwd["start"]
+                pipeline_reb = reb["end"] - reb["start"]
                 baseline_duration = baseline_timing["end"] - baseline_timing["start"]
-                diff = pipeline_duration - baseline_duration
+                diff = pipeline_fwd - baseline_duration
 
                 total_diff += diff
                 n_timed += 1
@@ -182,7 +185,9 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
                 else:
                     slower_count += 1
 
-                print(f"    Request {i}: pipeline={pipeline_duration:.4f}s, "
+                rebalanced = " (rebalanced)" if reb["did_rebalance"] else ""
+                print(f"    Request {i}: pipeline_fwd={pipeline_fwd:.4f}s, "
+                      f"rebalance={pipeline_reb:.4f}s{rebalanced}, "
                       f"baseline={baseline_duration:.4f}s, diff={diff:+.4f}s")
 
         if n_timed > 0:
