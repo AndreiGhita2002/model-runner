@@ -31,40 +31,41 @@ class PipelineOptimizer(ABC):
     """
 
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
-                 rebalance_interval: int = 10):
+                 depth: int = 1, rebalance_interval: int = 10):
         self.num_stages = num_stages
         self.device_manager = device_manager
         self.root_uuid = root_uuid
+        self.depth = depth
         self.rebalance_interval = rebalance_interval
         self._call_count = 0
-        self.children = self._compute_effective_children()
+        self.children = self._collect_leaf_children()
 
-    def _compute_effective_children(self) -> list[uuid.UUID]:
-        """Compute the effective children list for pipeline splitting.
+    def _collect_leaf_children(self) -> list[uuid.UUID]:
+        """Collect leaf modules of the timed hierarchy via DFS.
 
-        If the root module has fewer direct children than ``num_stages``,
-        iteratively expands the child with the most sub-children (replacing it
-        with its sub-children) until enough split candidates exist or no further
-        expansion is possible.
+        Leaves are modules with no children in the timed hierarchy — the
+        finest-grained timing points available. This gives the optimizer
+        maximum flexibility for splitting.
+
+        DFS preserves insertion order (``named_children()`` order) which
+        matches forward-pass order.
 
         Returns:
-            List of module UUIDs to use as pipeline split candidates.
+            List of leaf module UUIDs to use as pipeline split candidates.
         """
-        children = list(timed_module_hierarchy[self.root_uuid])
-        while len(children) < self.num_stages:
-            # Find the child with the most sub-children to expand
-            best_idx = None
-            best_count = 0
-            for i, c in enumerate(children):
-                sub = timed_module_hierarchy.get(c, [])
-                if len(sub) > 1 and len(sub) > best_count:
-                    best_count = len(sub)
-                    best_idx = i
-            if best_idx is None:
-                break  # No child can be expanded further
-            sub = list(timed_module_hierarchy[children[best_idx]])
-            children = children[:best_idx] + sub + children[best_idx + 1:]
-        return children
+        leaves: list[uuid.UUID] = []
+
+        def dfs(node_uuid: uuid.UUID, current_depth: int):
+            children = timed_module_hierarchy.get(node_uuid, [])
+            if not children or current_depth >= self.depth:
+                leaves.append(node_uuid)
+            else:
+                for child in children:
+                    dfs(child, current_depth + 1)
+
+        for child in timed_module_hierarchy.get(self.root_uuid, []):
+            dfs(child, 1)
+        return leaves
 
     @staticmethod
     def _uuid_to_path(module_uuid: uuid.UUID) -> str:
@@ -166,8 +167,8 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
     """
 
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
-                 rebalance_threshold: float = 0.1, rebalance_interval: int = 10):
-        super().__init__(num_stages, root_uuid, device_manager, rebalance_interval=rebalance_interval)
+                 depth: int = 1, rebalance_threshold: float = 0.1, rebalance_interval: int = 10):
+        super().__init__(num_stages, root_uuid, device_manager, depth=depth, rebalance_interval=rebalance_interval)
         self.rebalance_threshold = rebalance_threshold
 
     def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
@@ -343,12 +344,13 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
     #TODO(naming): TimeBasedShishaPipelineOptimizer is an awful name
 
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
+                 depth: int = 1,
                  alpha: int = 10,
                  assignment_choice: str = "rank_w",
                  balance_strategy: str = "nearest_lightest_fep",
                  rebalance_interval: int = 10):
 
-        super().__init__(num_stages, root_uuid, device_manager, rebalance_interval=rebalance_interval)
+        super().__init__(num_stages, root_uuid, device_manager, depth=depth, rebalance_interval=rebalance_interval)
         self.n = self.device_manager.num_devices()
         self.alpha = alpha
         self.assignment_choice = assignment_choice

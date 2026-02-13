@@ -6,15 +6,11 @@ from typing import Any
 
 import torch
 import torch.distributed as dist
-from torchvision.io import Timebase
 
 from model_runner import MainService, uuids_to_tensor, tensor_to_uuids
 from model_runner.pipeline_optimizer import TimeBasedShishaPipelineOptimizer
-from tests.testing_models import evaluation_models
 from tests.baseline import baseline_main, DEFAULT_BASELINE_FILE
-
-
-#TODO: record performance of baseline and compare it with the evaluation
+from tests.testing_models import evaluation_models
 
 
 def load_baseline(baseline_file: str):

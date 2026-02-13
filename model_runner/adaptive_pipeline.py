@@ -173,6 +173,7 @@ class AdaptivePipeline:
             num_stages=self.num_stages,
             root_uuid=model.uuid,
             device_manager=device_manager,
+            depth=model.depth,
             **(optimizer_kwargs or {}),
         )
 
