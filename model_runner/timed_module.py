@@ -7,12 +7,12 @@ from typing import Dict, List
 import torch
 import torch.nn as nn
 
-try:
-    from .cuda_timing_kernel import cuda_timing_kernel_cpp
-    print("cuda_timing_kernel imported successfully!")
-except ImportError:
-    print("Error: 'cuda_timing_kernel' module not found.")
-    cuda_timing_kernel_cpp = None
+from .cuda_timing_kernel import cuda_timing_kernel_cpp
+
+if torch.cuda.is_available() and cuda_timing_kernel_cpp is None:
+    import warnings
+    warnings.warn("CUDA is available but the cuda_timing_kernel extension failed to load. "
+                  "GPU-level timing will be unavailable; falling back to CPU timing.")
 
 
 _registry_lock = threading.Lock()
