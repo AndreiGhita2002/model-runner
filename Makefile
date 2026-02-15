@@ -1,18 +1,24 @@
 .PHONY: install test-flask test-pipeline eval quick-eval baseline clean
 
-TORCHRUN = uv run --no-sync torchrun --nproc_per_node=2 -m
+# Number of distributed ranks (processes). Override with: make eval NPROC=5
+NPROC ?= 2
+# CPU threads per rank — divides total cores evenly across ranks to avoid oversubscription
+#OMP_THREADS = $(shell echo $$(( $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) / $(NPROC) )))
+OMP_THREADS = 2
+# Common torchrun invocation with OMP_NUM_THREADS set to suppress the default warning
+TORCHRUN = OMP_NUM_THREADS=$(OMP_THREADS) uv run --no-sync torchrun --nproc_per_node=$(NPROC) -m
 
 install:
 	uv pip install -e .
 
 eval: install
-	uv run --no-sync torchrun --nproc_per_node=5 -m tests.evaluation
+	$(TORCHRUN) tests.evaluation
 
 quick-eval: install
 	$(TORCHRUN) tests.quick_evaluation
 
 baseline: install
-	uv run --no-sync torchrun --nproc_per_node=1 -m tests.baseline
+	OMP_NUM_THREADS=$(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) uv run --no-sync torchrun --nproc_per_node=1 -m tests.baseline
 
 test-flask: install
 	uv run --no-sync python -m tests.flask_test
