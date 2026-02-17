@@ -70,12 +70,15 @@ class MainService:
     #TODO(naming): find a more appropriate name for this
     # maybe AdaptivePipelineRunner? PipelineRuntime? PipelineOrchestrator?
 
-    def __init__(self, handle_output_fn: Callable[[uuid.UUID, str, Any, dict | None], None], default_timing_depth: int = 3, verbose=False):
+    def __init__(self, handle_output_fn: Callable[[uuid.UUID, str, Any, dict | None], None] | None = None, default_timing_depth: int = 3, verbose=False):
         """Initialise the service.
 
         Args:
-            handle_output_fn: Callback invoked on the last rank when a request
-                completes. Signature: ``(request_id: uuid.UUID, model_name: str, output: Any, timing: dict | None) -> None``.
+            handle_output_fn: Optional callback invoked on the last rank when a
+                request completes. Signature:
+                ``(request_id, model_name, output, timing) -> None``.
+                If ``None`` (default), outputs are only stored internally for
+                retrieval via ``get_result()`` (the Flask API path).
             default_timing_depth: Default depth for TimedModule profiling.
             verbose: Enable verbose logging to stdout.
         """
@@ -254,7 +257,8 @@ class MainService:
                 if req_id is None:
                     continue  # Skip padding entries (nil UUID sentinel)
                 output = outputs[i]
-                self.handle_output_fn(req_id, model_name, output, timing)
+                if self.handle_output_fn is not None:
+                    self.handle_output_fn(req_id, model_name, output, timing)
 
         # Relay results back to rank 0 for the async Flask API
         world_size = dist.get_world_size()
@@ -428,6 +432,18 @@ class MainService:
         """
         with self._results_lock:
             return self._results.pop(request_id, None)
+
+    def get_results(self) -> dict[uuid.UUID, tuple[str, Any, dict | None]]:
+        """Pop all completed results.
+
+        Returns:
+            Dict mapping request UUIDs to ``(model_name, output, timing)`` tuples.
+            The returned results are removed from internal storage.
+        """
+        with self._results_lock:
+            results = dict(self._results)
+            self._results.clear()
+            return results
 
     def force_rebalance(self, model_name: str):
         """Request a forced rebalance of the named pipeline.

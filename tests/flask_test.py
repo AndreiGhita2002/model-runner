@@ -1,8 +1,6 @@
 import json
 import os
-import sys
 import threading
-import time
 import uuid
 
 import torch
@@ -12,11 +10,6 @@ from model_runner.main import MainService
 from model_runner.flask_app import create_flask_app
 from model_runner.timed_module import timed_module_registry, timed_module_hierarchy
 from tests.testing_models import evaluation_models
-
-
-def handle_output(request_id, model_name, output, timing):
-    """Dummy callback — results are consumed via MainService._results instead."""
-    pass
 
 
 def test_flask_endpoints():
@@ -39,7 +32,7 @@ def test_flask_endpoints():
 
     try:
         # --- set up MainService and register models ---
-        main_service = MainService(handle_output, verbose=True)
+        main_service = MainService(verbose=True)
 
         for model_name, load_model, rand_input in evaluation_models:
             print(f"  Registering model: {model_name}")
