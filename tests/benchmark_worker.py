@@ -15,7 +15,7 @@ from typing import Any
 import torch
 import torch.distributed as dist
 
-from model_runner import MainService, uuids_to_tensor, tensor_to_uuids
+from model_runner import PipelineServer, uuids_to_tensor, tensor_to_uuids
 from model_runner.pipeline_optimizer import TimeBasedShishaPipelineOptimizer
 from tests.testing_models import evaluation_models
 
@@ -48,7 +48,7 @@ def worker_main(config_path: str):
     rank = dist.get_rank()
     last_rank = dist.get_world_size() - 1
 
-    main = MainService(handle_output, default_timing_depth=depth, verbose=False)
+    main = PipelineServer(handle_output, default_timing_depth=depth, verbose=False)
 
     # Register models (all ranks)
     for model_name, load_model, rand_input_fn in models:

@@ -3,18 +3,18 @@ import uuid
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from .main import MainService
+from .pipeline_server import PipelineServer
 from .timed_module import timed_module_registry
 
 
-def create_flask_app(main_service: MainService) -> Flask:
-    """Create a Flask app wired to an existing MainService instance.
+def create_flask_app(main_service: PipelineServer) -> Flask:
+    """Create a Flask app wired to an existing PipelineServer instance.
 
     The app exposes an async inference API (POST to submit, GET to poll)
     and utility endpoints for logs, models, devices, and rebalancing.
 
     Args:
-        main_service: A fully initialised ``MainService`` (models already
+        main_service: A fully initialised ``PipelineServer`` (models already
             registered via ``add_model``).
 
     Returns:

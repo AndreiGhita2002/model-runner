@@ -7,7 +7,7 @@ from typing import Any
 import torch
 import torch.distributed as dist
 
-from model_runner import MainService, uuids_to_tensor, tensor_to_uuids
+from model_runner import PipelineServer, uuids_to_tensor, tensor_to_uuids
 from model_runner.pipeline_optimizer import TimeBasedShishaPipelineOptimizer
 from tests.baseline import baseline_main, DEFAULT_BASELINE_FILE
 from tests.testing_models import evaluation_models
@@ -51,7 +51,7 @@ evaluation_timings: dict[uuid.UUID, dict | None] = {}
 
 
 def handle_output(request_id: uuid.UUID, model_name: str, output: Any, timing: dict | None):
-    """Callback passed to ``MainService`` to collect pipeline outputs.
+    """Callback passed to ``PipelineServer`` to collect pipeline outputs.
 
     Stores the output and timing in the global dicts for later comparison.
     In verbose mode, prints each received output. In quiet mode, prints
@@ -114,7 +114,7 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE,
     if is_print_rank:
         print(f"Evaluation: {len(evaluation_models)} model(s), "
               f"{num_requests} requests each, world_size={dist.get_world_size()}")
-    main = MainService(handle_output, verbose=(verbose and is_print_rank))
+    main = PipelineServer(handle_output, verbose=(verbose and is_print_rank))
 
     # Adding models (all ranks)
     if not verbose and is_print_rank:

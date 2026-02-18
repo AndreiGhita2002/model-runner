@@ -6,7 +6,7 @@ import uuid
 import torch
 import torch.distributed as dist
 
-from model_runner.main import MainService
+from model_runner.pipeline_server import PipelineServer
 from model_runner.flask_app import create_flask_app
 from model_runner.timed_module import timed_module_registry, timed_module_hierarchy
 from tests.testing_models import evaluation_models
@@ -31,8 +31,8 @@ def test_flask_endpoints():
     dist.init_process_group(backend="gloo", rank=0, world_size=1)
 
     try:
-        # --- set up MainService and register models ---
-        main_service = MainService(verbose=True)
+        # --- set up PipelineServer and register models ---
+        main_service = PipelineServer(verbose=True)
 
         for model_name, load_model, rand_input in evaluation_models:
             print(f"  Registering model: {model_name}")
@@ -40,7 +40,6 @@ def test_flask_endpoints():
                 model_name,
                 load_model(),
                 rand_input(),
-                model_output_is_static=True,
             )
 
         # --- create Flask test client ---

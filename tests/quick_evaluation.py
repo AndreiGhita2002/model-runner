@@ -7,7 +7,7 @@ from typing import Any
 import torch
 import torch.distributed as dist
 
-from model_runner import MainService, uuids_to_tensor, tensor_to_uuids
+from model_runner import PipelineServer, uuids_to_tensor, tensor_to_uuids
 from model_runner.pipeline_optimizer import TimeBasedShishaPipelineOptimizer
 from tests.baseline import baseline_main, DEFAULT_BASELINE_FILE
 from tests.testing_models import load_conv_next, conv_next_rand_inputs
@@ -50,7 +50,7 @@ def quick_evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE):
     model_baseline = baseline_data[QUICK_MODEL_NAME][:4]
 
     print("Initialising main service...")
-    main = MainService(handle_output, verbose=True)
+    main = PipelineServer(handle_output, verbose=True)
 
     print(f"> Adding model {QUICK_MODEL_NAME}")
     main.add_model(QUICK_MODEL_NAME, load_conv_next(), conv_next_rand_inputs(),
