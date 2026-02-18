@@ -30,6 +30,8 @@ class PipelineOptimizer(ABC):
     ``rebalance_interval=1``.
     """
 
+    # TODO(improvement): figure out why this makes models get worse sometimes
+
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
                  depth: int = 1, rebalance_interval: int = 10):
         self.num_stages = num_stages
