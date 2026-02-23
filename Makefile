@@ -17,8 +17,8 @@ eval: install
 quick-eval: install
 	$(TORCHRUN) tests.quick_evaluation
 
-baseline: install
-	OMP_NUM_THREADS=$(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) uv run --no-sync torchrun --nproc_per_node=1 -m tests.baseline
+old-baseline: install
+	OMP_NUM_THREADS=$(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) uv run --no-sync torchrun --nproc_per_node=1 -m tests.baselines.old_baseline
 
 test-flask: install
 	uv run --no-sync python -m tests.flask_test
