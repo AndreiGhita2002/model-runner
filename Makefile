@@ -1,4 +1,4 @@
-.PHONY: install test-flask test-pipeline eval quick-eval baseline benchmark clean
+.PHONY: install test-flask test-pipeline eval quick-eval simple-baseline pipeline-baseline benchmark clean
 
 # Number of distributed ranks (processes). Override with: make eval NPROC=5
 NPROC ?= 8
@@ -17,8 +17,11 @@ eval: install
 quick-eval: install
 	$(TORCHRUN) tests.quick_evaluation
 
-old-baseline: install
-	OMP_NUM_THREADS=$(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) uv run --no-sync torchrun --nproc_per_node=1 -m tests.baselines.old_baseline
+simple-baseline: install
+	OMP_NUM_THREADS=$(OMP_THREADS) uv run --no-sync python -m tests.baseline simple
+
+pipeline-baseline: install
+	$(TORCHRUN) tests.baseline pipeline
 
 test-flask: install
 	uv run --no-sync python -m tests.flask_test
