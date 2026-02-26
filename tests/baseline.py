@@ -152,5 +152,8 @@ if __name__ == '__main__':
         baseline_simple(num_requests=args.num_requests, seed=args.seed,
                         output_file=args.output, batch_size=args.batch_size)
     elif args.mode == "pipeline":
+        device = torch.accelerator.current_accelerator()
+        backend = torch.distributed.get_default_backend_for_device(device)
+        dist.init_process_group(backend=backend)
         baseline_pipeline(num_requests=args.num_requests, seed=args.seed,
                           output_file=args.output, batch_size=args.batch_size)
