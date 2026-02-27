@@ -7,6 +7,10 @@ from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer, Pipe
 from .adaptive_pipeline import AdaptivePipeline
 from .device_manager import DeviceManager
 from .flask_app import create_flask_app
+import warnings
+
+# Suppress PyTorch internal FutureWarning about LeafSpec deprecation
+warnings.filterwarnings("ignore", message=".*LeafSpec.*is deprecated.*", category=FutureWarning)
 
 __all__ = [
     "PipelineServer",
