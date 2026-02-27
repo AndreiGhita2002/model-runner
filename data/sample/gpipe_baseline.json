@@ -1,0 +1,130 @@
+{
+  "meta": {
+    "mode": "gpipe",
+    "num_requests": 3,
+    "seed": 37,
+    "batch_size": 2,
+    "store_hashes": false,
+    "output_file": "gpipe_baseline.json",
+    "omp_num_threads": "1",
+    "world_size": 2,
+    "device": "cpu",
+    "clock": "time.perf_counter (last rank)",
+    "argv": [
+      "/Users/andrei/Documents/Uni5/Masters/model-runner/tests/baseline.py",
+      "gpipe",
+      "-n",
+      "3",
+      "-b",
+      "2",
+      "-o",
+      "gpipe_baseline.json"
+    ]
+  },
+  "results": {
+    "conv_next": {
+      "batches": [
+        {
+          "seed": 37,
+          "timing": {
+            "start": 586261.623131416,
+            "end": 586262.844429625
+          }
+        },
+        {
+          "seed": 38,
+          "timing": {
+            "start": 586262.844433458,
+            "end": 586264.076836
+          }
+        },
+        {
+          "seed": 39,
+          "timing": {
+            "start": 586264.076837333,
+            "end": 586265.315190666
+          }
+        }
+      ],
+      "requests_per_second": 1.6251093478672085
+    },
+    "conv_next_base": {
+      "batches": [
+        {
+          "seed": 37,
+          "timing": {
+            "start": 586270.021131208,
+            "end": 586271.669537958
+          }
+        },
+        {
+          "seed": 38,
+          "timing": {
+            "start": 586271.669539041,
+            "end": 586273.325669375
+          }
+        },
+        {
+          "seed": 39,
+          "timing": {
+            "start": 586273.325670333,
+            "end": 586274.991758875
+          }
+        }
+      ],
+      "requests_per_second": 1.2070910158760344
+    },
+    "efficientnet_b6": {
+      "batches": [
+        {
+          "seed": 37,
+          "timing": {
+            "start": 586278.332677333,
+            "end": 586279.307892666
+          }
+        },
+        {
+          "seed": 38,
+          "timing": {
+            "start": 586279.307893875,
+            "end": 586280.296769625
+          }
+        },
+        {
+          "seed": 39,
+          "timing": {
+            "start": 586280.296770625,
+            "end": 586281.281864666
+          }
+        }
+      ],
+      "requests_per_second": 2.0344587584751785
+    },
+    "regnet_x_16gf": {
+      "batches": [
+        {
+          "seed": 37,
+          "timing": {
+            "start": 586282.554891583,
+            "end": 586282.663387
+          }
+        },
+        {
+          "seed": 38,
+          "timing": {
+            "start": 586282.663387958,
+            "end": 586282.771979458
+          }
+        },
+        {
+          "seed": 39,
+          "timing": {
+            "start": 586282.771981,
+            "end": 586282.883537291
+          }
+        }
+      ],
+      "requests_per_second": 18.25674230745163
+    }
+  }
+}

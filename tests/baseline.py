@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import time
 
@@ -32,7 +33,11 @@ def gpipe_baseline(num_requests: int = 100, seed: int = 37,
         import hashlib
     is_first_rank = dist.get_rank() == 0
     is_last_rank = dist.get_rank() == (dist.get_world_size() - 1)
-    device = torch.accelerator.current_accelerator()
+    # Use CUDA when available (nccl backend), otherwise CPU (gloo).
+    # torch.accelerator.current_accelerator() can return MPS which doesn't
+    # support distributed P2P, so we derive the device from the backend.
+    backend = dist.get_backend()
+    device = torch.device("cuda" if backend == "nccl" else "cpu")
     meta = {
         "mode": "gpipe",
         "num_requests": num_requests,
@@ -40,6 +45,7 @@ def gpipe_baseline(num_requests: int = 100, seed: int = 37,
         "batch_size": batch_size,
         "store_hashes": store_hashes,
         "output_file": output_file,
+        "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
         "world_size": dist.get_world_size(),
         "device": str(device),
         "clock": "time.perf_counter (last rank)",
@@ -124,6 +130,7 @@ def simple_baseline(num_requests: int = 100, seed: int = 37,
         "batch_size": batch_size,
         "store_hashes": store_hashes,
         "output_file": output_file,
+        "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
         "clock": "time.perf_counter",
         "argv": sys.argv,
     }
