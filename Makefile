@@ -20,7 +20,7 @@ quick-eval: install
 simple-baseline: install
 	OMP_NUM_THREADS=$(OMP_THREADS) uv run --no-sync python -m tests.baseline simple
 
-pipeline-baseline: install
+gpipe-baseline: install
 	$(TORCHRUN) tests.baseline pipeline
 
 test-flask: install
