@@ -46,6 +46,9 @@ eval-gpipe: install
 
 eval-all-baselines: eval-sequential eval-tensor-parallel eval-gpipe
 
+graph-baselines: install
+	uv run python data/baseline_graphs.py
+
 clean:
 	rm -rf build/ *.egg-info/ __pycache__/ .pytest_cache/
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

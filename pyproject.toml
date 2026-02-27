@@ -13,6 +13,7 @@ dependencies = [
     "flask-cors>=6.0.1",
     "setuptools<=70.2.0",
     "ninja",
+    "matplotlib>=3.10.8",
 ]
 
 [build-system]
