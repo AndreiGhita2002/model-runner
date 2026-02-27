@@ -1,4 +1,5 @@
 import json
+import sys
 import time
 
 import torch
@@ -32,6 +33,18 @@ def gpipe_baseline(num_requests: int = 100, seed: int = 37,
     is_first_rank = dist.get_rank() == 0
     is_last_rank = dist.get_rank() == (dist.get_world_size() - 1)
     device = torch.accelerator.current_accelerator()
+    meta = {
+        "mode": "gpipe",
+        "num_requests": num_requests,
+        "seed": seed,
+        "batch_size": batch_size,
+        "store_hashes": store_hashes,
+        "output_file": output_file,
+        "world_size": dist.get_world_size(),
+        "device": str(device),
+        "clock": "time.perf_counter (last rank)",
+        "argv": sys.argv,
+    }
     results = {}
 
     for model_name, load_model, rand_inputs in evaluation_models:
@@ -93,20 +106,27 @@ def gpipe_baseline(num_requests: int = 100, seed: int = 37,
             wall_clock = batches[-1]["timing"]["end"] - batches[0]["timing"]["start"]
             total_samples = num_requests * batch_size
             results[model_name]["requests_per_second"] = total_samples / wall_clock
-            results[model_name]["clock"] = "time.perf_counter (last rank)"
 
     # Only the last rank has meaningful results
     if is_last_rank:
         with open(output_file, "w") as f:
-            json.dump(results, f, indent=2)
+            json.dump({"meta": meta, "results": results}, f, indent=2)
         print(f"Baseline outputs saved to {output_file}")
 
 
 def simple_baseline(num_requests: int = 100, seed: int = 37,
                     output_file: str = DEFAULT_BASELINE_FILE, batch_size: int = 32,
                     store_hashes: bool = False):
-    if store_hashes:
-        import hashlib
+    meta = {
+        "mode": "simple",
+        "num_requests": num_requests,
+        "seed": seed,
+        "batch_size": batch_size,
+        "store_hashes": store_hashes,
+        "output_file": output_file,
+        "clock": "time.perf_counter",
+        "argv": sys.argv,
+    }
     results = {}
 
     for model_name, load_model, rand_inputs in evaluation_models:
@@ -144,11 +164,10 @@ def simple_baseline(num_requests: int = 100, seed: int = 37,
         wall_clock = batches[-1]["timing"]["end"] - batches[0]["timing"]["start"]
         total_samples = num_requests * batch_size
         results[model_name]["requests_per_second"] = total_samples / wall_clock
-        results[model_name]["clock"] = "time.perf_counter"
 
     # Save to JSON
     with open(output_file, "w") as f:
-        json.dump(results, f, indent=2)
+        json.dump({"meta": meta, "results": results}, f, indent=2)
     print(f"Baseline outputs saved to {output_file}")
 
 
