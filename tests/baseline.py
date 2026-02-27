@@ -123,6 +123,8 @@ def gpipe_baseline(num_requests: int = 100, seed: int = 37,
 def simple_baseline(num_requests: int = 100, seed: int = 37,
                     output_file: str = DEFAULT_BASELINE_FILE, batch_size: int = 32,
                     store_hashes: bool = False):
+    if store_hashes:
+        import hashlib
     meta = {
         "mode": "simple",
         "num_requests": num_requests,
