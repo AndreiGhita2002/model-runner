@@ -43,6 +43,8 @@ eval-gpipe: install
 
 eval-all-baselines: eval-sequential eval-tensor-parallel eval-gpipe
 
+eval-all: install eval-all-baselines eval
+
 sample-graphs: install
 	uv run python data/graphs.py -i $(DATA_OUTPUT_DIR)
 
