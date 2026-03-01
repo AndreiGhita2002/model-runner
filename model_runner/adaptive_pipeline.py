@@ -318,7 +318,7 @@ class AdaptivePipeline:
 
         # Capture wall-clock start time on rank 0
         if rank == 0:
-            forward_start = time.time()
+            forward_start = time.perf_counter()
 
         # Only the first rank gets the input
         with torch.no_grad():
@@ -330,7 +330,7 @@ class AdaptivePipeline:
         # Capture forward end time on last rank immediately after the step,
         # before update_logs / P2P so it only measures actual computation.
         if rank == last_rank:
-            forward_end = time.time()
+            forward_end = time.perf_counter()
 
         self.update_logs()
 
@@ -368,7 +368,7 @@ class AdaptivePipeline:
             Dict with ``"start"``, ``"end"`` wall-clock timestamps and
             ``"did_rebalance"`` boolean.
         """
-        rebalance_start = time.time()
+        rebalance_start = time.perf_counter()
 
         # Rank 0 decides and computes; others receive via broadcast
         if dist.get_rank() == 0:
@@ -392,7 +392,7 @@ class AdaptivePipeline:
             self.time_logs = {}
             self.rebuild_pipeline(new_config)
 
-        rebalance_end = time.time()
+        rebalance_end = time.perf_counter()
         return {"start": rebalance_start, "end": rebalance_end, "did_rebalance": did_rebalance}
 
     def _forward_async_optimization(self) -> dict[str, Any]:
@@ -405,7 +405,7 @@ class AdaptivePipeline:
             Dict with ``"start"``, ``"end"`` wall-clock timestamps and
             ``"did_rebalance"`` boolean.
         """
-        rebalance_start = time.time()
+        rebalance_start = time.perf_counter()
 
         # Only rank 0 sends requests and polls for results
         if dist.get_rank() == 0:
@@ -433,7 +433,7 @@ class AdaptivePipeline:
             self.time_logs = {}
             self.rebuild_pipeline(new_config)
 
-        rebalance_end = time.time()
+        rebalance_end = time.perf_counter()
         return {"start": rebalance_start, "end": rebalance_end, "did_rebalance": did_rebalance}
 
     def _cleanup_split_annotations(self):

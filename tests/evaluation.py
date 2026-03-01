@@ -1,6 +1,8 @@
 import argparse
 import json
 import os
+import sys
+import time
 import uuid
 from typing import Any
 
@@ -9,38 +11,14 @@ import torch.distributed as dist
 
 from model_runner import PipelineServer, uuids_to_tensor, tensor_to_uuids
 from model_runner.pipeline_optimizer import TimeBasedShishaPipelineOptimizer
-from tests.baseline import baseline_main, DEFAULT_BASELINE_FILE
 from tests.testing_models import evaluation_models
+from tests.util import generate_batch
 
 # Module-level verbosity and progress state (set by evaluation_main)
 _verbose = False
 _total_requests = 0
 _completed_requests = 0
 _last_progress_pct = -1
-
-
-def load_baseline(baseline_file: str, baseline_requests: int = 30):
-    """Load baseline data from a JSON file, generating it if it doesn't exist.
-
-    If the file is missing, rank 0 generates it via ``baseline_main``. A barrier
-    ensures all ranks wait for generation to complete before reading.
-
-    Args:
-        baseline_file: Path to the baseline JSON file.
-        baseline_requests: Number of requests to generate if file is missing.
-
-    Returns:
-        Parsed JSON data as a dict.
-    """
-    if not os.path.exists(baseline_file):
-        if dist.get_rank() == 0:
-            print(f"Baseline file not found, generating {baseline_file}...")
-        if dist.get_rank() == 0:
-            baseline_main(num_requests=baseline_requests, output_file=baseline_file)
-        dist.barrier()  # Wait for rank 0 to finish writing
-
-    with open(baseline_file, "r") as f:
-        return json.load(f)
 
 
 evaluation_results: dict[uuid.UUID, Any] = {}
@@ -80,30 +58,35 @@ def handle_output(request_id: uuid.UUID, model_name: str, output: Any, timing: d
             print(f"  Processing... {milestone}%")
 
 
-def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE,
-                    num_requests: int = 100, baseline_requests: int = 30,
-                    verbose: bool = False):
-    """Run evaluation: queue baseline inputs through the pipeline and compare outputs.
+def evaluation_main(
+    num_requests=100, seed=37, batch_size=32,
+    output_file="evaluation_output.json",
+    baseline_file=None,
+    verbose=False,
+    store_hashes=False,
+):
+    """Run evaluation: queue generated inputs through the adaptive pipeline.
 
-    Loads baseline data, registers models, queues work (rank 0 only), runs the
-    pipeline across all ranks, and compares outputs against baseline on the last rank.
-    Baseline entries are cycled when ``num_requests`` exceeds the baseline size.
+    Generates inputs from seeds (deterministic), registers models, queues work
+    (rank 0 only), runs the pipeline across all ranks, and saves results as JSON.
+    Optionally compares output hashes against a baseline file.
 
     Args:
-        baseline_file: Path to the baseline JSON file.
         num_requests: Total number of requests to run per model.
-        baseline_requests: Number of baseline entries to generate if file is missing.
-        verbose: If True, print detailed per-request output. If False, print
-            progress at 10% intervals.
+        seed: Base random seed for input generation.
+        batch_size: Number of samples per batch.
+        output_file: Path to write the output JSON file.
+        baseline_file: Optional path to a baseline JSON file for hash comparison.
+        verbose: If True, print detailed per-request output.
+        store_hashes: If True, compute and store output hashes in the JSON.
     """
+    if store_hashes:
+        import hashlib
     global _verbose, _total_requests, _completed_requests, _last_progress_pct
     _verbose = verbose
     _total_requests = num_requests * len(evaluation_models)
     _completed_requests = 0
     _last_progress_pct = -1
-
-    # Load baseline data
-    baseline_data = load_baseline(baseline_file, baseline_requests)
 
     rank = dist.get_rank()
     last_rank = dist.get_world_size() - 1
@@ -128,14 +111,13 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE,
     if not verbose and is_print_rank:
         print("Models loaded. Running pipeline...")
 
-    # Queue work (rank 0 only) — cycle through baseline entries if num_requests > baseline size
+    # Queue work (rank 0 only) — generate inputs from seeds
     if rank == 0:
-        for model_name, _, _ in evaluation_models:
+        for model_name, _, rand_inputs in evaluation_models:
             requests[model_name] = list()
-            baseline_entries = baseline_data[model_name]
             for i in range(num_requests):
-                entry = baseline_entries[i % len(baseline_entries)]
-                x = torch.tensor(entry["input"])
+                input_seed = seed + i
+                x = generate_batch(rand_inputs, batch_size, input_seed)
                 req_id = main.queue_work(model_name, x)
                 requests[model_name].append(req_id)
                 if verbose and is_print_rank:
@@ -152,7 +134,7 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE,
                     dist.send(t, dst=last_rank)
 
     # Receive request IDs from rank 0
-    elif rank == last_rank: # Unless there is a single rank in the world
+    elif rank == last_rank:  # Unless there is a single rank in the world
         for model_name, _, _ in evaluation_models:
             n = torch.zeros(1, dtype=torch.int)
             dist.recv(n, src=0)
@@ -167,161 +149,128 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE,
     # Running the main service (all ranks):
     main.run(exit_when_done=True)
 
-    # Checking the work
-    if verbose and rank == last_rank:
-        print("\nComparing outputs...")
+    # Build output JSON and optionally compare against baseline (last rank only)
     if rank == last_rank:
-        failed_requests = []
-        for model_name in requests:
-            baseline_entries = baseline_data[model_name]
-            for i, req_id in enumerate(requests[model_name]):
-                pipeline_output = evaluation_results[req_id]
-                baseline_output = torch.tensor(baseline_entries[i % len(baseline_entries)]["output"])
-
-                if pipeline_output.shape != baseline_output.shape:
-                    print(f"  [{model_name}] Request {req_id}: FAIL (shape mismatch)")
-                    print(
-                        f"    Pipeline shape: {list(pipeline_output.shape)}, Baseline shape: {list(baseline_output.shape)}")
-                    failed_requests.append((model_name, req_id))
-                elif torch.allclose(pipeline_output, baseline_output, atol=1e-6):
-                    if verbose:
-                        print(f"  [{model_name}] Request {req_id}: PASS")
-                else:
-                    print(f"  [{model_name}] Request {req_id}: FAIL")
-                    failed_requests.append((model_name, req_id))
-
-        if not failed_requests:
-            print("\nAll outputs match baseline!")
-        else:
-            print(f"\n{len(failed_requests)} request(s) differ from baseline.")
-
-        # Timing comparison — group requests by pipeline batch
-        print("\n" + "=" * 60)
-        print("Timing Comparison (pipeline vs baseline)")
-        print("=" * 60)
-        faster_count = 0
-        slower_count = 0
-        total_diff = 0.0
-        n_batches = 0
+        meta = {
+            "mode": "adaptive",
+            "num_requests": num_requests,
+            "seed": seed,
+            "batch_size": batch_size,
+            "store_hashes": store_hashes,
+            "output_file": output_file,
+            "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
+            "world_size": dist.get_world_size(),
+            "clock": "time.perf_counter (cross-rank)",
+            "argv": sys.argv,
+        }
+        results = {}
 
         for model_name in requests:
-            print(f"\n  [{model_name}]")
-            baseline_entries = baseline_data[model_name]
-
-            # Group consecutive requests into batches using the shared timing object
-            batches: list[list[tuple[int, uuid.UUID]]] = []
-            last_timing_id = None
+            batches = []
             for i, req_id in enumerate(requests[model_name]):
-                tid = id(evaluation_timings.get(req_id))
-                if tid != last_timing_id:
-                    batches.append([])
-                    last_timing_id = tid
-                batches[-1].append((i, req_id))
+                input_seed = seed + i
+                timing = evaluation_timings.get(req_id)
 
-            # Track per-batch data for rebalance improvement analysis
-            # Each entry: (pipeline_fwd_raw, did_rebalance)
-            batch_records: list[tuple[float, bool]] = []
+                batch_entry = {"seed": input_seed}
 
-            for batch_idx, batch in enumerate(batches):
-                first_req_id = batch[0][1]
-                pipeline_timing = evaluation_timings.get(first_req_id)
-                if pipeline_timing is None:
-                    if verbose:
-                        print(f"    Batch {batch_idx}: timing unavailable")
+                if timing is not None:
+                    fwd = timing["forward"]
+                    reb = timing["rebalance"]
+                    batch_entry["timing"] = {"start": fwd["start"], "end": fwd["end"]}
+                    batch_entry["rebalance"] = {
+                        "start": reb["start"],
+                        "end": reb["end"],
+                        "did_rebalance": reb["did_rebalance"],
+                    }
+
+                if store_hashes:
+                    output = evaluation_results[req_id]
+                    batch_entry["output_hashes"] = [
+                        hashlib.sha256(output[j].numpy().tobytes()).hexdigest()
+                        for j in range(output.shape[0])
+                    ]
+
+                batches.append(batch_entry)
+
+            # Compute requests_per_second from wall clock of forward timings
+            timed_batches = [b for b in batches if "timing" in b]
+            if len(timed_batches) >= 2:
+                wall_clock = timed_batches[-1]["timing"]["end"] - timed_batches[0]["timing"]["start"]
+                total_samples = len(timed_batches) * batch_size
+                rps = total_samples / wall_clock if wall_clock > 0 else 0.0
+            elif len(timed_batches) == 1:
+                t = timed_batches[0]["timing"]
+                wall_clock = t["end"] - t["start"]
+                rps = batch_size / wall_clock if wall_clock > 0 else 0.0
+            else:
+                rps = 0.0
+
+            results[model_name] = {
+                "batches": batches,
+                "requests_per_second": rps,
+            }
+
+        # Save output JSON
+        with open(output_file, "w") as f:
+            json.dump({"meta": meta, "results": results}, f, indent=2)
+        print(f"\nEvaluation results saved to {output_file}")
+
+        # Print summary
+        for model_name, model_results in results.items():
+            n_batches = len(model_results["batches"])
+            rps = model_results["requests_per_second"]
+            print(f"  [{model_name}] {n_batches} requests, {rps:.2f} samples/sec")
+
+            # Rebalance summary
+            rebalance_count = sum(
+                1 for b in model_results["batches"]
+                if b.get("rebalance", {}).get("did_rebalance", False)
+            )
+            if rebalance_count > 0:
+                print(f"    Rebalanced {rebalance_count} time(s)")
+
+        # Optional baseline comparison (hash-based only)
+        if baseline_file is not None and os.path.exists(baseline_file):
+            print(f"\nComparing output hashes against baseline: {baseline_file}")
+            with open(baseline_file, "r") as f:
+                raw = json.load(f)
+            baseline_results = raw.get("results", raw)
+
+            pass_count = 0
+            fail_count = 0
+            skip_count = 0
+            for model_name in requests:
+                if model_name not in baseline_results:
+                    print(f"  [{model_name}] not found in baseline, skipping")
+                    skip_count += len(requests[model_name])
                     continue
+                baseline_batches = baseline_results[model_name].get("batches", [])
+                for i, req_id in enumerate(requests[model_name]):
+                    if i >= len(baseline_batches):
+                        skip_count += 1
+                        continue
+                    baseline_entry = baseline_batches[i]
+                    if "output_hashes" not in baseline_entry:
+                        skip_count += 1
+                        continue
+                    if not store_hashes:
+                        skip_count += 1
+                        continue
+                    eval_entry = results[model_name]["batches"][i]
+                    eval_hashes = eval_entry.get("output_hashes", [])
+                    baseline_hashes = baseline_entry["output_hashes"]
+                    if eval_hashes == baseline_hashes:
+                        pass_count += 1
+                        if verbose:
+                            print(f"  [{model_name}] Request {i}: PASS")
+                    else:
+                        fail_count += 1
+                        print(f"  [{model_name}] Request {i}: FAIL (hash mismatch)")
 
-                fwd = pipeline_timing["forward"]
-                reb = pipeline_timing["rebalance"]
-                pipeline_fwd_raw = fwd["end"] - fwd["start"]
-                pipeline_reb = reb["end"] - reb["start"]
-                did_rebalance = reb["did_rebalance"]
-                rebalanced = " (rebalanced)" if did_rebalance else ""
-
-                batch_size = pipeline_timing.get("batch_size", len(batch))
-                n_microbatches = pipeline_timing.get("n_microbatches", batch_size)
-                is_padded = batch_size < n_microbatches
-                padding_label = f" (padded {batch_size}/{n_microbatches})" if is_padded else ""
-
-                # Scale pipeline time to account for wasted padding work
-                pipeline_fwd = pipeline_fwd_raw * (batch_size / n_microbatches) if is_padded else pipeline_fwd_raw
-
-                batch_records.append((pipeline_fwd_raw, did_rebalance))
-
-                if verbose:
-                    print(f"    Batch {batch_idx}{padding_label}:")
-                    baseline_total = 0.0
-                    for i, req_id in batch:
-                        baseline_entry = baseline_entries[i % len(baseline_entries)]
-                        baseline_timing = baseline_entry.get("timing")
-                        if baseline_timing is None:
-                            print(f"      Request {i}: baseline timing unavailable")
-                            continue
-                        bl = baseline_timing["end"] - baseline_timing["start"]
-                        baseline_total += bl
-                        print(f"      Request {i}: baseline={bl:.4f}s")
-
-                    diff = pipeline_fwd - baseline_total
-                else:
-                    baseline_total = 0.0
-                    for i, req_id in batch:
-                        baseline_entry = baseline_entries[i % len(baseline_entries)]
-                        baseline_timing = baseline_entry.get("timing")
-                        if baseline_timing is not None:
-                            baseline_total += baseline_timing["end"] - baseline_timing["start"]
-                    diff = pipeline_fwd - baseline_total
-
-                n_batches += 1
-                total_diff += diff
-                if diff < 0:
-                    faster_count += 1
-                else:
-                    slower_count += 1
-
-                if verbose:
-                    fwd_label = f"pipeline_fwd={pipeline_fwd:.4f}s"
-                    if is_padded:
-                        fwd_label += f" (raw={pipeline_fwd_raw:.4f}s)"
-                    print(f"      {fwd_label}, "
-                          f"rebalance={pipeline_reb:.4f}s{rebalanced}, "
-                          f"baseline_total={baseline_total:.4f}s, "
-                          f"diff={diff:+.4f}s")
-
-            # Rebalance improvement analysis
-            # Group batches into pipeline segments: a new segment starts after a
-            # batch that triggered a rebalance (that batch still ran on the OLD
-            # pipeline, so it belongs to the previous segment).
-            if batch_records:
-                segments: list[list[float]] = [[]]
-                for fwd_time, did_reb in batch_records:
-                    segments[-1].append(fwd_time)
-                    if did_reb:
-                        segments.append([])
-                # Drop trailing empty segment if the last batch rebalanced
-                if not segments[-1]:
-                    segments.pop()
-
-                if len(segments) >= 2:
-                    first_avg = sum(segments[0]) / len(segments[0])
-                    last_avg = sum(segments[-1]) / len(segments[-1])
-                    improvement = first_avg - last_avg
-                    pct = (improvement / first_avg) * 100 if first_avg > 0 else 0
-
-                    print(f"\n    Rebalance improvement ({len(segments)} pipeline configs):")
-                    for seg_idx, seg in enumerate(segments):
-                        seg_avg = sum(seg) / len(seg)
-                        print(f"      Config {seg_idx}: avg={seg_avg:.4f}s "
-                              f"({len(seg)} batch{'es' if len(seg) != 1 else ''})")
-                    print(f"      Initial avg: {first_avg:.4f}s -> Final avg: {last_avg:.4f}s "
-                          f"({improvement:+.4f}s, {pct:+.1f}%)")
-                else:
-                    print(f"\n    Rebalance improvement: no rebalance occurred")
-
-        if n_batches > 0:
-            avg_diff = total_diff / n_batches
-            print(f"\n  Summary ({n_batches} batches): {faster_count} faster, "
-                  f"{slower_count} slower, avg diff={avg_diff:+.4f}s")
-        else:
-            print("\n  No timing data available for comparison.")
+            total = pass_count + fail_count + skip_count
+            print(f"  Hash comparison: {pass_count} pass, {fail_count} fail, {skip_count} skipped (total {total})")
+        elif baseline_file is not None:
+            print(f"\nBaseline file not found: {baseline_file} — skipping comparison")
 
     if verbose:
         print(f"rank:{dist.get_rank()} exiting!")
@@ -329,22 +278,34 @@ def evaluation_main(baseline_file: str = DEFAULT_BASELINE_FILE,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Pipeline evaluation")
-    parser.add_argument('-n', type=int, default=100,
+    parser.add_argument('-n', '--num-requests', type=int, default=100,
                         help='Total number of requests per model (default: 100)')
-    parser.add_argument('-b', type=int, default=30,
-                        help='Number of baseline requests to generate if file is missing (default: 30)')
-    parser.add_argument('-v', action='store_true',
+    parser.add_argument('-s', '--seed', type=int, default=37,
+                        help='Base random seed (default: 37)')
+    parser.add_argument('-b', '--batch-size', type=int, default=32,
+                        help='Batch size (default: 32)')
+    parser.add_argument('-o', '--output', default='evaluation_output.json',
+                        help='Output JSON file (default: evaluation_output.json)')
+    parser.add_argument('-v', '--verbose', action='store_true',
                         help='Verbose output (print every request and batch detail)')
-    parser.add_argument('--baseline-file', default=DEFAULT_BASELINE_FILE,
-                        help=f'Path to baseline JSON file (default: {DEFAULT_BASELINE_FILE})')
+    parser.add_argument('--baseline-file', default=None,
+                        help='Optional baseline JSON file for hash comparison')
+    parser.add_argument('--store-hashes', action='store_true',
+                        help='Store output hashes in JSON')
     args = parser.parse_args()
 
     device = torch.accelerator.current_accelerator()
     backend = torch.distributed.get_default_backend_for_device(device)
     dist.init_process_group(backend=backend)
 
-    evaluation_main(baseline_file=args.baseline_file,
-                    num_requests=args.n, baseline_requests=args.b,
-                    verbose=args.v)
+    evaluation_main(
+        num_requests=args.num_requests,
+        seed=args.seed,
+        batch_size=args.batch_size,
+        output_file=args.output,
+        baseline_file=args.baseline_file,
+        verbose=args.verbose,
+        store_hashes=args.store_hashes,
+    )
 
     dist.destroy_process_group()

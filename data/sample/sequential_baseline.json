@@ -1,22 +1,22 @@
 {
   "meta": {
     "mode": "simple",
-    "num_requests": 3,
+    "num_requests": 5,
     "seed": 37,
-    "batch_size": 2,
+    "batch_size": 8,
     "store_hashes": false,
-    "output_file": "sequential_baseline.json",
+    "output_file": "./data/sample/sequential_baseline.json",
     "omp_num_threads": "1",
     "clock": "time.perf_counter",
     "argv": [
       "/Users/andrei/Documents/Uni5/Masters/model-runner/tests/baseline.py",
       "simple",
       "-n",
-      "3",
+      "5",
       "-b",
-      "2",
+      "8",
       "-o",
-      "sequential_baseline.json"
+      "./data/sample/sequential_baseline.json"
     ]
   },
   "results": {
@@ -25,104 +25,160 @@
         {
           "seed": 37,
           "timing": {
-            "start": 586180.967069333,
-            "end": 586182.147384583
+            "start": 600165.542592541,
+            "end": 600169.665581625
           }
         },
         {
           "seed": 38,
           "timing": {
-            "start": 586182.149460583,
-            "end": 586183.336357041
+            "start": 600169.673336041,
+            "end": 600173.748607083
           }
         },
         {
           "seed": 39,
           "timing": {
-            "start": 586183.338426166,
-            "end": 586184.528053833
+            "start": 600173.756115125,
+            "end": 600177.866041083
+          }
+        },
+        {
+          "seed": 40,
+          "timing": {
+            "start": 600177.873491375,
+            "end": 600181.997617958
+          }
+        },
+        {
+          "seed": 41,
+          "timing": {
+            "start": 600182.005086583,
+            "end": 600186.138926166
           }
         }
       ],
-      "requests_per_second": 1.6849273002532106
+      "requests_per_second": 1.9420932253395558
     },
     "conv_next_base": {
       "batches": [
         {
           "seed": 37,
           "timing": {
-            "start": 586187.687259041,
-            "end": 586189.282582
+            "start": 600193.219862708,
+            "end": 600198.79018325
           }
         },
         {
           "seed": 38,
           "timing": {
-            "start": 586189.284667375,
-            "end": 586190.870610708
+            "start": 600198.797723458,
+            "end": 600204.397262958
           }
         },
         {
           "seed": 39,
           "timing": {
-            "start": 586190.87263675,
-            "end": 586192.464443083
+            "start": 600204.40481075,
+            "end": 600210.013119166
+          }
+        },
+        {
+          "seed": 40,
+          "timing": {
+            "start": 600210.020835416,
+            "end": 600215.637696208
+          }
+        },
+        {
+          "seed": 41,
+          "timing": {
+            "start": 600215.645275583,
+            "end": 600221.252781583
           }
         }
       ],
-      "requests_per_second": 1.2559700332265247
+      "requests_per_second": 1.4268938663996087
     },
     "efficientnet_b6": {
       "batches": [
         {
           "seed": 37,
           "timing": {
-            "start": 586193.829908958,
-            "end": 586194.751595666
+            "start": 600225.215410041,
+            "end": 600228.5154125
           }
         },
         {
           "seed": 38,
           "timing": {
-            "start": 586194.762434833,
-            "end": 586195.681451041
+            "start": 600228.558198291,
+            "end": 600231.866338833
           }
         },
         {
           "seed": 39,
           "timing": {
-            "start": 586195.6923145,
-            "end": 586196.613888041
+            "start": 600231.909506541,
+            "end": 600235.208726208
+          }
+        },
+        {
+          "seed": 40,
+          "timing": {
+            "start": 600235.251806125,
+            "end": 600238.550975666
+          }
+        },
+        {
+          "seed": 41,
+          "timing": {
+            "start": 600238.5935955,
+            "end": 600241.915695041
           }
         }
       ],
-      "requests_per_second": 2.1551886063926124
+      "requests_per_second": 2.3951687052173996
     },
     "regnet_x_16gf": {
       "batches": [
         {
           "seed": 37,
           "timing": {
-            "start": 586197.208250208,
-            "end": 586197.303763125
+            "start": 600242.850289958,
+            "end": 600243.231746833
           }
         },
         {
           "seed": 38,
           "timing": {
-            "start": 586197.3058305,
-            "end": 586197.400928208
+            "start": 600243.239686375,
+            "end": 600243.615678625
           }
         },
         {
           "seed": 39,
           "timing": {
-            "start": 586197.403020833,
-            "end": 586197.498109333
+            "start": 600243.623390708,
+            "end": 600244.000100458
+          }
+        },
+        {
+          "seed": 40,
+          "timing": {
+            "start": 600244.008075666,
+            "end": 600244.384184666
+          }
+        },
+        {
+          "seed": 41,
+          "timing": {
+            "start": 600244.392143833,
+            "end": 600244.772402291
           }
         }
       ],
-      "requests_per_second": 20.69971058921458
+      "requests_per_second": 20.810438241889397
     }
   }
 }
