@@ -294,8 +294,10 @@ if __name__ == '__main__':
                         help='Store output hashes in JSON')
     args = parser.parse_args()
 
-    device = torch.accelerator.current_accelerator()
-    backend = torch.distributed.get_default_backend_for_device(device)
+    if torch.cuda.is_available():
+        backend = "nccl"
+    else:
+        backend = "gloo"
     dist.init_process_group(backend=backend)
 
     evaluation_main(
