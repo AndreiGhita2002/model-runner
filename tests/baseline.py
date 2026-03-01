@@ -196,8 +196,10 @@ if __name__ == '__main__':
                         output_file=args.output, batch_size=args.batch_size,
                         store_hashes=args.store_hashes)
     elif args.mode == "gpipe":
-        device = torch.accelerator.current_accelerator()
-        backend = torch.distributed.get_default_backend_for_device(device)
+        if torch.cuda.is_available():
+            backend = "nccl"
+        else:
+            backend = "gloo"
         dist.init_process_group(backend=backend)
         gpipe_baseline(num_requests=args.num_requests, seed=args.seed,
                        output_file=args.output, batch_size=args.batch_size,
