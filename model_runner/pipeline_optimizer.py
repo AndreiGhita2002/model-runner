@@ -31,7 +31,7 @@ class PipelineOptimizer(ABC):
     """
 
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
-                 depth: int = 1, rebalance_interval: int = 10):
+                 depth: int = 1, rebalance_interval: int = None):
         self.num_stages = num_stages
         self.device_manager = device_manager
         self.root_uuid = root_uuid
@@ -147,11 +147,12 @@ class PipelineOptimizer(ABC):
         Returns:
             True if the pipeline should be rebalanced
         """
-        self._call_count += 1
-        #TODO: remove rebalance_interval
-        if self._call_count < self.rebalance_interval:
-            return False
-        self._call_count = 0
+
+        if self.rebalance_interval is not None:
+            self._call_count += 1
+            if self._call_count < self.rebalance_interval:
+                self._call_count = 0
+                return False
         return self._should_rebalance(time_logs, current_config)
 
     def initial_setup(self) -> PipelineConfig:
@@ -375,7 +376,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  alpha: int = 10,
                  assignment_choice: str = "rank_w",
                  balance_strategy: str = "nearest_lightest_fep",
-                 rebalance_interval: int = 10):
+                 rebalance_interval: int = None):
 
         super().__init__(num_stages, root_uuid, device_manager, depth=depth, rebalance_interval=rebalance_interval)
         self.n = self.device_manager.num_devices()
@@ -388,7 +389,15 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         self._best_throughput = 0.0        # best 1/max_stage_time seen
         self._is_seeded = False            # whether seed has been used at least once
 
+        # Caches
+        self._stage_times_cache = None
+        self._max_stage_time = None
+
     # ── Helpers ──────────────────────────────────────────────────────────
+
+    def _config_changed(self):
+        self._stage_times_cache = None
+        self._max_stage_time = None
 
     def _children_to_stages(self, config: PipelineConfig) -> list[list[uuid.UUID]]:
         """Reconstruct which children are in which stage from the split_spec."""
@@ -402,18 +411,28 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         return stages
 
     def _compute_stage_times(self, time_logs: dict[uuid.UUID, list[float]],
-                             config: PipelineConfig) -> list[float]:
+                             config: PipelineConfig) -> tuple[list[float], float]:
         """Compute per-stage times by summing average child times."""
-        stages = self._children_to_stages(config)
-        stage_times = []
-        for stage in stages:
-            total = 0.0
-            for child_uuid in stage:
-                times = time_logs.get(child_uuid, [])
-                if times:
-                    total += sum(times) / len(times)
-            stage_times.append(total)
-        return stage_times
+
+        if self._stage_times_cache is None:
+            stages = self._children_to_stages(config)
+            max_stage_time = 0
+            stage_times = []
+            for stage in stages:
+                total = 0.0
+                for child_uuid in stage:
+                    times = time_logs.get(child_uuid, [])
+                    if times:
+                        total += sum(times) / len(times)
+                stage_times.append(total)
+                # update max
+                if total > max_stage_time:
+                    max_stage_time = total
+
+            self._stage_times_cache = stage_times
+            self._max_stage_time = max_stage_time
+
+        return self._stage_times_cache, self._max_stage_time
 
     def _get_child_weight(self, child_uuid: uuid.UUID) -> int:
         """Return parameter count for a child module (proxy for computational weight)."""
@@ -500,7 +519,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
     def _online_tuning(self, time_logs: dict[uuid.UUID, list[float]],
                        old_config: PipelineConfig) -> PipelineConfig:
         """One iteration of online tuning: move one child from the slowest stage."""
-        stage_times = self._compute_stage_times(time_logs, old_config)
+        stage_times, _ = self._compute_stage_times(time_logs, old_config)
         stages = self._children_to_stages(old_config)
 
         slowest_idx = max(range(len(stage_times)), key=lambda i: stage_times[i])
@@ -523,12 +542,12 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
         # Move one child from slowest to adjacent (in the direction of target)
         if adjacent_idx < slowest_idx:
-            # Move first child of slowest to end of adjacent (left neighbor)
+            # Move first child of slowest to end of adjacent (left neighbour)
             child_to_move = stages[slowest_idx][0]
             stages[adjacent_idx].append(child_to_move)
             stages[slowest_idx] = stages[slowest_idx][1:]
         else:
-            # Move last child of slowest to beginning of adjacent (right neighbor)
+            # Move last child of slowest to beginning of adjacent (right neighbour)
             child_to_move = stages[slowest_idx][-1]
             stages[adjacent_idx].insert(0, child_to_move)
             stages[slowest_idx] = stages[slowest_idx][:-1]
@@ -538,6 +557,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         for stage_idx, stage_uuids in enumerate(stages):
             if stage_idx > 0 and stage_uuids:
                 new_split_spec[self._uuid_to_path(stage_uuids[0])] = SplitPoint.BEGINNING
+
+        self._config_changed()
 
         return PipelineConfig(split_spec=new_split_spec, device_mapping=old_config.device_mapping)
 
@@ -616,14 +637,12 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         if not time_logs:
             return True
 
-        #TODO: figure out how this works
-
-        stage_times = self._compute_stage_times(time_logs, current_config)
+        stage_times, max_stage_time = self._compute_stage_times(time_logs, current_config)
 
         if any(t == 0 for t in stage_times):
             return True
 
-        throughput = 1.0 / max(stage_times)
+        throughput = 1.0 / max_stage_time
 
         if self._best_throughput == 0.0:
             self._best_throughput = throughput
@@ -636,6 +655,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         else:
             self._gamma += 1
             if self._gamma >= self.alpha:
+                # Optimum was probably found
                 return False
             return True
 
