@@ -4,8 +4,11 @@
 MAX_CORES ?= 32  # should be 32 on fisherman
 MAX_NPROC ?= $(MAX_CORES)
 REQUEST_NUM ?= 100  # should be 100+
-BATCH_COUNT ?= 32  # should be 32
-COMMON_ARGS ?= -n $(REQUEST_NUM) -b $(BATCH_COUNT)
+BASELINE_REQUEST_NUM ?= 10  # baselines don't change over time, fewer runs suffice
+BATCH_COUNT ?= 1  # samples per request (1 image each)
+N_MICROBATCHES ?= 32  # requests grouped per forward pass
+COMMON_ARGS ?= -n $(REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES)
+BASELINE_ARGS ?= -n $(BASELINE_REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES)
 DATA_OUTPUT_DIR ?= ./data/run1
 
 # Number of distributed ranks (processes). Override with: make eval NPROC=5
@@ -33,13 +36,13 @@ benchmark: install
 	uv run --no-sync python -m tests.benchmark
 
 eval-sequential: install
-	OMP_NUM_THREADS=1 uv run --no-sync python -m tests.baseline simple $(COMMON_ARGS) -o $(DATA_OUTPUT_DIR)/sequential_baseline.json
+	OMP_NUM_THREADS=1 uv run --no-sync python -m tests.baseline simple $(BASELINE_ARGS) -o $(DATA_OUTPUT_DIR)/sequential_baseline.json
 
 eval-tensor-parallel: install
-	OMP_NUM_THREADS=$(MAX_CORES) uv run --no-sync python -m tests.baseline simple $(COMMON_ARGS) -o $(DATA_OUTPUT_DIR)/tensor_parallel_baseline.json
+	OMP_NUM_THREADS=$(MAX_CORES) uv run --no-sync python -m tests.baseline simple $(BASELINE_ARGS) -o $(DATA_OUTPUT_DIR)/tensor_parallel_baseline.json
 
 eval-gpipe: install
-	OMP_NUM_THREADS=1 uv run --no-sync torchrun --nproc_per_node=$(MAX_NPROC) -m tests.baseline gpipe $(COMMON_ARGS) -o $(DATA_OUTPUT_DIR)/gpipe_baseline.json
+	OMP_NUM_THREADS=1 uv run --no-sync torchrun --nproc_per_node=$(MAX_NPROC) -m tests.baseline gpipe $(BASELINE_ARGS) -o $(DATA_OUTPUT_DIR)/gpipe_baseline.json
 
 eval-all-baselines: eval-sequential eval-tensor-parallel eval-gpipe
 

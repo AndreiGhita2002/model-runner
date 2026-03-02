@@ -64,6 +64,7 @@ def evaluation_main(
     baseline_file=None,
     verbose=False,
     store_hashes=False,
+    n_microbatches=32,
 ):
     """Run evaluation: queue generated inputs through the adaptive pipeline.
 
@@ -107,7 +108,7 @@ def evaluation_main(
             print(f"> Adding model {model_name} with load function {load_model.__name__}")
         main.add_model(model_name, load_model(), rand_input(),
                        optimizer_class=TimeBasedShishaPipelineOptimizer,
-                       rebalance_interval=4, n_microbatches=5, async_optimization=False)
+                       rebalance_interval=4, n_microbatches=n_microbatches, async_optimization=False)
     if not verbose and is_print_rank:
         print("Models loaded. Running pipeline...")
 
@@ -290,6 +291,8 @@ if __name__ == '__main__':
                         help='Verbose output (print every request and batch detail)')
     parser.add_argument('--baseline-file', default=None,
                         help='Optional baseline JSON file for hash comparison')
+    parser.add_argument('-m', '--n-microbatches', type=int, default=32,
+                        help='Requests per forward pass (default: 32)')
     parser.add_argument('--store-hashes', action='store_true',
                         help='Store output hashes in JSON')
     args = parser.parse_args()
@@ -308,6 +311,7 @@ if __name__ == '__main__':
         baseline_file=args.baseline_file,
         verbose=args.verbose,
         store_hashes=args.store_hashes,
+        n_microbatches=args.n_microbatches,
     )
 
     dist.destroy_process_group()

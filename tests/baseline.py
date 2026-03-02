@@ -28,7 +28,7 @@ class _ContiguousStageWrapper(torch.nn.Module):
 
 def gpipe_baseline(num_requests: int = 100, seed: int = 37,
                    output_file: str = DEFAULT_BASELINE_FILE, batch_size: int = 32,
-                   store_hashes: bool = False):
+                   store_hashes: bool = False, n_microbatches: int = 32):
     if store_hashes:
         import hashlib
     is_first_rank = dist.get_rank() == 0
@@ -43,6 +43,7 @@ def gpipe_baseline(num_requests: int = 100, seed: int = 37,
         "num_requests": num_requests,
         "seed": seed,
         "batch_size": batch_size,
+        "n_microbatches": n_microbatches,
         "store_hashes": store_hashes,
         "output_file": output_file,
         "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
@@ -68,20 +69,26 @@ def gpipe_baseline(num_requests: int = 100, seed: int = 37,
             num_stages=pipe.num_stages,
             device=device,
         )
-        scheduler = ScheduleGPipe(stage, n_microbatches=batch_size)
+        scheduler = ScheduleGPipe(stage, n_microbatches=n_microbatches)
 
         # Warmup pass (not recorded) to avoid lazy-init / CUDA kernel caching overhead
+        warmup_inputs = [generate_batch(rand_inputs, batch_size, seed) for _ in range(n_microbatches)]
         with torch.no_grad():
             if is_first_rank:
-                scheduler.step(generate_batch(rand_inputs, batch_size, seed))
+                scheduler.step(torch.cat(warmup_inputs, dim=0))
             else:
                 scheduler.step()
 
-        for i in range(num_requests):
-            input_seed = seed + i
+        for chunk_start in range(0, num_requests, n_microbatches):
+            chunk_size = min(n_microbatches, num_requests - chunk_start)
+            seeds = [seed + chunk_start + j for j in range(chunk_size)]
 
             if is_first_rank:
-                x = generate_batch(rand_inputs, batch_size, input_seed)
+                inputs = [generate_batch(rand_inputs, batch_size, s) for s in seeds]
+                # Pad to n_microbatches by replicating last input (matches pipeline_runner.py)
+                while len(inputs) < n_microbatches:
+                    inputs.append(inputs[-1])
+                x = torch.cat(inputs, dim=0)
 
             # Run forward pass — time on last rank only to avoid cross-process clock skew
             if is_last_rank:
@@ -96,13 +103,15 @@ def gpipe_baseline(num_requests: int = 100, seed: int = 37,
             if is_last_rank:
                 forward_end = time.perf_counter()
                 batch_entry = {
-                    "seed": input_seed,
+                    "seeds": seeds,
                     "timing": {"start": forward_start, "end": forward_end},
                 }
                 if store_hashes:
+                    # Only hash the real outputs (not padded ones)
+                    real_count = chunk_size * batch_size
                     batch_entry["output_hashes"] = [
                         hashlib.sha256(output[0][j].numpy().tobytes()).hexdigest()
-                        for j in range(output[0].shape[0])
+                        for j in range(real_count)
                     ]
                 results[model_name]["batches"].append(batch_entry)
 
@@ -122,7 +131,7 @@ def gpipe_baseline(num_requests: int = 100, seed: int = 37,
 
 def simple_baseline(num_requests: int = 100, seed: int = 37,
                     output_file: str = DEFAULT_BASELINE_FILE, batch_size: int = 32,
-                    store_hashes: bool = False):
+                    store_hashes: bool = False, n_microbatches: int = 32):
     if store_hashes:
         import hashlib
     meta = {
@@ -130,6 +139,7 @@ def simple_baseline(num_requests: int = 100, seed: int = 37,
         "num_requests": num_requests,
         "seed": seed,
         "batch_size": batch_size,
+        "n_microbatches": n_microbatches,
         "store_hashes": store_hashes,
         "output_file": output_file,
         "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
@@ -147,9 +157,11 @@ def simple_baseline(num_requests: int = 100, seed: int = 37,
         with torch.no_grad():
             model(generate_batch(rand_inputs, batch_size, seed))
 
-        for i in range(num_requests):
-            input_seed = seed + i
-            x = generate_batch(rand_inputs, batch_size, input_seed)
+        for chunk_start in range(0, num_requests, n_microbatches):
+            chunk_size = min(n_microbatches, num_requests - chunk_start)
+            seeds = [seed + chunk_start + j for j in range(chunk_size)]
+            inputs = [generate_batch(rand_inputs, batch_size, s) for s in seeds]
+            x = torch.cat(inputs, dim=0)
 
             # Run forward pass
             with torch.no_grad():
@@ -158,7 +170,7 @@ def simple_baseline(num_requests: int = 100, seed: int = 37,
                 end = time.perf_counter()
 
             batch_entry = {
-                "seed": input_seed,
+                "seeds": seeds,
                 "timing": {"start": start, "end": end},
             }
             if store_hashes:
@@ -188,13 +200,14 @@ if __name__ == '__main__':
     parser.add_argument("-n", "--num-requests", type=int, default=100, help="Number of requests")
     parser.add_argument("-b", "--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument("-s", "--seed", type=int, default=37, help="Base random seed")
+    parser.add_argument("-m", "--n-microbatches", type=int, default=32, help="Requests per forward pass (default: 32)")
     parser.add_argument("--store-hashes", action="store_true", help="Store output hashes (disabled by default)")
     args = parser.parse_args()
 
     if args.mode == "simple":
         simple_baseline(num_requests=args.num_requests, seed=args.seed,
                         output_file=args.output, batch_size=args.batch_size,
-                        store_hashes=args.store_hashes)
+                        store_hashes=args.store_hashes, n_microbatches=args.n_microbatches)
     elif args.mode == "gpipe":
         if torch.cuda.is_available():
             backend = "nccl"
@@ -203,4 +216,4 @@ if __name__ == '__main__':
         dist.init_process_group(backend=backend)
         gpipe_baseline(num_requests=args.num_requests, seed=args.seed,
                        output_file=args.output, batch_size=args.batch_size,
-                       store_hashes=args.store_hashes)
+                       store_hashes=args.store_hashes, n_microbatches=args.n_microbatches)

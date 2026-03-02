@@ -84,6 +84,8 @@ def plot_batch_times(datasets: dict[str, dict], output_path: Path | None = None)
 
     fig, axes = plt.subplots(rows, cols, figsize=(6 * cols, 4 * rows), squeeze=False)
 
+    prev_did_rebalance = False
+
     for idx, model in enumerate(model_names):
         ax = axes[idx // cols][idx % cols]
         for ds_name, ds in datasets.items():
@@ -99,12 +101,17 @@ def plot_batch_times(datasets: dict[str, dict], output_path: Path | None = None)
             if ds_name == "adaptive":
                 for i, b in enumerate(batches):
                     rb = b.get("rebalance", {})
+
                     if rb.get("did_rebalance"):
-                        ax.axvline(i, color="red", linestyle="--", alpha=0.6,
-                                   label="rebalance" if i == next(
-                                       j for j, bb in enumerate(batches)
-                                       if bb.get("rebalance", {}).get("did_rebalance")
-                                   ) else None)
+                        if not prev_did_rebalance:
+                            prev_did_rebalance = True
+                            ax.axvline(i, color="red", linestyle="--", alpha=0.6,
+                                       label="rebalance" if i == next(
+                                           j for j, bb in enumerate(batches)
+                                           if bb.get("rebalance", {}).get("did_rebalance")
+                                       ) else None)
+                    else:
+                        prev_did_rebalance = False
 
         ax.set_title(model)
         ax.set_xlabel("Batch index")
