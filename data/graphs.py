@@ -86,6 +86,21 @@ def plot_batch_times(datasets: dict[str, dict], output_path: Path | None = None)
 
     prev_did_rebalance = False
 
+    DATASET_COLORS = {
+        "sequential": "red",
+        "tensor_parallel": "blue",
+        "gpipe": "green",
+        "adaptive": "purple",
+    }
+
+    # Find the longest batch series to set x-axis range for horizontal lines
+    max_batches = 0
+    for ds in datasets.values():
+        for model in model_names:
+            if model in ds["results"]:
+                n = len(ds["results"][model].get("batches", []))
+                max_batches = max(max_batches, n)
+
     for idx, model in enumerate(model_names):
         ax = axes[idx // cols][idx % cols]
         for ds_name, ds in datasets.items():
@@ -94,8 +109,18 @@ def plot_batch_times(datasets: dict[str, dict], output_path: Path | None = None)
             batches = ds["results"][model].get("batches", [])
             if not batches:
                 continue
-            elapsed = [b["timing"]["end"] - b["timing"]["start"] for b in batches]
-            ax.plot(range(len(elapsed)), elapsed, label=ds_name, marker=".", markersize=4)
+            elapsed = [b["timing"]["end"] - b["timing"]["start"] for b in batches if "timing" in b]
+            if not elapsed:
+                continue
+
+            color = DATASET_COLORS.get(ds_name)
+
+            # Baselines with few batches: draw as horizontal line at mean elapsed time
+            if ds_name != "adaptive" and len(elapsed) < max_batches // 2:
+                mean_elapsed = sum(elapsed) / len(elapsed)
+                ax.axhline(mean_elapsed, color=color, linestyle="--", alpha=0.7, label=ds_name)
+            else:
+                ax.plot(range(len(elapsed)), elapsed, color=color, label=ds_name, marker=".", markersize=4)
 
             # Mark rebalance points for adaptive dataset
             if ds_name == "adaptive":

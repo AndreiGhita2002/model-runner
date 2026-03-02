@@ -3,7 +3,7 @@
 
 MAX_CORES ?= 32  # should be 32 on fisherman
 MAX_NPROC ?= $(MAX_CORES)
-REQUEST_NUM ?= 100  # should be 100+
+REQUEST_NUM ?= 5000  # should be 100+
 BASELINE_REQUEST_NUM ?= 10  # baselines don't change over time, fewer runs suffice
 BATCH_COUNT ?= 1  # samples per request (1 image each)
 N_MICROBATCHES ?= 32  # requests grouped per forward pass
@@ -48,7 +48,7 @@ eval-all-baselines: eval-sequential eval-tensor-parallel eval-gpipe
 
 eval-all: install eval-all-baselines eval
 
-sample-graphs: install
+graphs: install
 	uv run python data/graphs.py -i $(DATA_OUTPUT_DIR)
 
 

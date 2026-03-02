@@ -1,0 +1,4846 @@
+{
+  "meta": {
+    "mode": "adaptive",
+    "num_requests": 100,
+    "seed": 37,
+    "batch_size": 1,
+    "store_hashes": false,
+    "output_file": "./data/run1/evaluation_output.json",
+    "omp_num_threads": "8",
+    "world_size": 4,
+    "clock": "time.perf_counter (cross-rank)",
+    "argv": [
+      "/home/users/andrei/model-runner/tests/evaluation.py",
+      "-n",
+      "100",
+      "-b",
+      "1",
+      "-m",
+      "32",
+      "-o",
+      "./data/run1/evaluation_output.json"
+    ]
+  },
+  "results": {
+    "conv_next": {
+      "batches": [
+        {
+          "seed": 37,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 38,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 39,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 40,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 41,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 42,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 43,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 44,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 45,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 46,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 47,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 48,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 49,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 50,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 51,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 52,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 53,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 54,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 55,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 56,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 57,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 58,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 59,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 60,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 61,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 62,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 63,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 64,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 65,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 66,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 67,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 68,
+          "timing": {
+            "start": 8377770.030480481,
+            "end": 8377771.051655999
+          },
+          "rebalance": {
+            "start": 8377771.057969305,
+            "end": 8377771.060751177,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 69,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 70,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 71,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 72,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 73,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 74,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 75,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 76,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 77,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 78,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 79,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 80,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 81,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 82,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 83,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 84,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 85,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 86,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 87,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 88,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 89,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 90,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 91,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 92,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 93,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 94,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 95,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 96,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 97,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 98,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 99,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 100,
+          "timing": {
+            "start": 8377771.103264985,
+            "end": 8377772.034645478
+          },
+          "rebalance": {
+            "start": 8377772.040215499,
+            "end": 8377772.042270852,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 101,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 102,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 103,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 104,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 105,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 106,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 107,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 108,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 109,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 110,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 111,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 112,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 113,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 114,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 115,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 116,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 117,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 118,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 119,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 120,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 121,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 122,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 123,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 124,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 125,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 126,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 127,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 128,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 129,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 130,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 131,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 132,
+          "timing": {
+            "start": 8377772.065582838,
+            "end": 8377773.166391936
+          },
+          "rebalance": {
+            "start": 8377773.17196985,
+            "end": 8377773.174219809,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 133,
+          "timing": {
+            "start": 8377773.201137968,
+            "end": 8377774.252286649
+          },
+          "rebalance": {
+            "start": 8377774.258192929,
+            "end": 8377776.922912278,
+            "did_rebalance": true
+          }
+        },
+        {
+          "seed": 134,
+          "timing": {
+            "start": 8377773.201137968,
+            "end": 8377774.252286649
+          },
+          "rebalance": {
+            "start": 8377774.258192929,
+            "end": 8377776.922912278,
+            "did_rebalance": true
+          }
+        },
+        {
+          "seed": 135,
+          "timing": {
+            "start": 8377773.201137968,
+            "end": 8377774.252286649
+          },
+          "rebalance": {
+            "start": 8377774.258192929,
+            "end": 8377776.922912278,
+            "did_rebalance": true
+          }
+        },
+        {
+          "seed": 136,
+          "timing": {
+            "start": 8377773.201137968,
+            "end": 8377774.252286649
+          },
+          "rebalance": {
+            "start": 8377774.258192929,
+            "end": 8377776.922912278,
+            "did_rebalance": true
+          }
+        }
+      ],
+      "requests_per_second": 23.68654457535134
+    },
+    "conv_next_base": {
+      "batches": [
+        {
+          "seed": 37,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 38,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 39,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 40,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 41,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 42,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 43,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 44,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 45,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 46,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 47,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 48,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 49,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 50,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 51,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 52,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 53,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 54,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 55,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 56,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 57,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 58,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 59,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 60,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 61,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 62,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 63,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 64,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 65,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 66,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 67,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 68,
+          "timing": {
+            "start": 8377777.008556069,
+            "end": 8377778.352602048
+          },
+          "rebalance": {
+            "start": 8377778.357975591,
+            "end": 8377778.360869655,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 69,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 70,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 71,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 72,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 73,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 74,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 75,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 76,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 77,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 78,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 79,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 80,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 81,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 82,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 83,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 84,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 85,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 86,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 87,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 88,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 89,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 90,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 91,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 92,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 93,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 94,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 95,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 96,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 97,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 98,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 99,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 100,
+          "timing": {
+            "start": 8377778.396225914,
+            "end": 8377779.691349534
+          },
+          "rebalance": {
+            "start": 8377779.697966871,
+            "end": 8377779.700133547,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 101,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 102,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 103,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 104,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 105,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 106,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 107,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 108,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 109,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 110,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 111,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 112,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 113,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 114,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 115,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 116,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 117,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 118,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 119,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 120,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 121,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 122,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 123,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 124,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 125,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 126,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 127,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 128,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 129,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 130,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 131,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 132,
+          "timing": {
+            "start": 8377779.745605483,
+            "end": 8377781.064877365
+          },
+          "rebalance": {
+            "start": 8377781.070461641,
+            "end": 8377781.073023728,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 133,
+          "timing": {
+            "start": 8377781.098965558,
+            "end": 8377782.439030891
+          },
+          "rebalance": {
+            "start": 8377782.444367497,
+            "end": 8377783.904373204,
+            "did_rebalance": true
+          }
+        },
+        {
+          "seed": 134,
+          "timing": {
+            "start": 8377781.098965558,
+            "end": 8377782.439030891
+          },
+          "rebalance": {
+            "start": 8377782.444367497,
+            "end": 8377783.904373204,
+            "did_rebalance": true
+          }
+        },
+        {
+          "seed": 135,
+          "timing": {
+            "start": 8377781.098965558,
+            "end": 8377782.439030891
+          },
+          "rebalance": {
+            "start": 8377782.444367497,
+            "end": 8377783.904373204,
+            "did_rebalance": true
+          }
+        },
+        {
+          "seed": 136,
+          "timing": {
+            "start": 8377781.098965558,
+            "end": 8377782.439030891
+          },
+          "rebalance": {
+            "start": 8377782.444367497,
+            "end": 8377783.904373204,
+            "did_rebalance": true
+          }
+        }
+      ],
+      "requests_per_second": 18.414596010525454
+    },
+    "efficientnet_b6": {
+      "batches": [
+        {
+          "seed": 37,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 38,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 39,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 40,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 41,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 42,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 43,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 44,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 45,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 46,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 47,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 48,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 49,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 50,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 51,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 52,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 53,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 54,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 55,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 56,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 57,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 58,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 59,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 60,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 61,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 62,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 63,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 64,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 65,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 66,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 67,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 68,
+          "timing": {
+            "start": 8377784.828249839,
+            "end": 8377790.379174727
+          },
+          "rebalance": {
+            "start": 8377790.385634353,
+            "end": 8377790.388080813,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 69,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 70,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 71,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 72,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 73,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 74,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 75,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 76,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 77,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 78,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 79,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 80,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 81,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 82,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 83,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 84,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 85,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 86,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 87,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 88,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 89,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 90,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 91,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 92,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 93,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 94,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 95,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 96,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 97,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 98,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 99,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 100,
+          "timing": {
+            "start": 8377790.418364952,
+            "end": 8377795.677619811
+          },
+          "rebalance": {
+            "start": 8377795.685107983,
+            "end": 8377795.687191308,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 101,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 102,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 103,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 104,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 105,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 106,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 107,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 108,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 109,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 110,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 111,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 112,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 113,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 114,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 115,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 116,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 117,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 118,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 119,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 120,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 121,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 122,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 123,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 124,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 125,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 126,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 127,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 128,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 129,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 130,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 131,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 132,
+          "timing": {
+            "start": 8377795.72440691,
+            "end": 8377800.697315378
+          },
+          "rebalance": {
+            "start": 8377800.704284806,
+            "end": 8377800.706350517,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 133,
+          "timing": {
+            "start": 8377800.735376178,
+            "end": 8377805.30661643
+          },
+          "rebalance": {
+            "start": 8377805.313708533,
+            "end": 8377811.572690921,
+            "did_rebalance": true
+          }
+        },
+        {
+          "seed": 134,
+          "timing": {
+            "start": 8377800.735376178,
+            "end": 8377805.30661643
+          },
+          "rebalance": {
+            "start": 8377805.313708533,
+            "end": 8377811.572690921,
+            "did_rebalance": true
+          }
+        },
+        {
+          "seed": 135,
+          "timing": {
+            "start": 8377800.735376178,
+            "end": 8377805.30661643
+          },
+          "rebalance": {
+            "start": 8377805.313708533,
+            "end": 8377811.572690921,
+            "did_rebalance": true
+          }
+        },
+        {
+          "seed": 136,
+          "timing": {
+            "start": 8377800.735376178,
+            "end": 8377805.30661643
+          },
+          "rebalance": {
+            "start": 8377805.313708533,
+            "end": 8377811.572690921,
+            "did_rebalance": true
+          }
+        }
+      ],
+      "requests_per_second": 4.883201966106587
+    },
+    "regnet_x_16gf": {
+      "batches": [
+        {
+          "seed": 37,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 38,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 39,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 40,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 41,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 42,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 43,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 44,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 45,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 46,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 47,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 48,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 49,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 50,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 51,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 52,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 53,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 54,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 55,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 56,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 57,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 58,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 59,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 60,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 61,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 62,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 63,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 64,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 65,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 66,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 67,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 68,
+          "timing": {
+            "start": 8377811.599368404,
+            "end": 8377813.432188173
+          },
+          "rebalance": {
+            "start": 8377813.437482867,
+            "end": 8377813.439786393,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 69,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 70,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 71,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 72,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 73,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 74,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 75,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 76,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 77,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 78,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 79,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 80,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 81,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 82,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 83,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 84,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 85,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 86,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 87,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 88,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 89,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 90,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 91,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 92,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 93,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 94,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 95,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 96,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 97,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 98,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 99,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 100,
+          "timing": {
+            "start": 8377813.469918466,
+            "end": 8377815.236410714
+          },
+          "rebalance": {
+            "start": 8377815.242741672,
+            "end": 8377815.244765116,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 101,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 102,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 103,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 104,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 105,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 106,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 107,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 108,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 109,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 110,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 111,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 112,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 113,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 114,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 115,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 116,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 117,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 118,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 119,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 120,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 121,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 122,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 123,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 124,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 125,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 126,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 127,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 128,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 129,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 130,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 131,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 132,
+          "timing": {
+            "start": 8377815.275303621,
+            "end": 8377817.041273229
+          },
+          "rebalance": {
+            "start": 8377817.047439358,
+            "end": 8377817.049626044,
+            "did_rebalance": false
+          }
+        },
+        {
+          "seed": 133,
+          "timing": {
+            "start": 8377817.07830751,
+            "end": 8377818.792396684
+          },
+          "rebalance": {
+            "start": 8377818.798952783,
+            "end": 8377821.58285255,
+            "did_rebalance": true
+          }
+        },
+        {
+          "seed": 134,
+          "timing": {
+            "start": 8377817.07830751,
+            "end": 8377818.792396684
+          },
+          "rebalance": {
+            "start": 8377818.798952783,
+            "end": 8377821.58285255,
+            "did_rebalance": true
+          }
+        },
+        {
+          "seed": 135,
+          "timing": {
+            "start": 8377817.07830751,
+            "end": 8377818.792396684
+          },
+          "rebalance": {
+            "start": 8377818.798952783,
+            "end": 8377821.58285255,
+            "did_rebalance": true
+          }
+        },
+        {
+          "seed": 136,
+          "timing": {
+            "start": 8377817.07830751,
+            "end": 8377818.792396684
+          },
+          "rebalance": {
+            "start": 8377818.798952783,
+            "end": 8377821.58285255,
+            "did_rebalance": true
+          }
+        }
+      ],
+      "requests_per_second": 13.902350456613103
+    }
+  }
+}
