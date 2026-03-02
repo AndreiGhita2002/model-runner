@@ -1,0 +1,121 @@
+{
+  "meta": {
+    "mode": "gpipe",
+    "num_requests": 10,
+    "seed": 37,
+    "batch_size": 1,
+    "n_microbatches": 32,
+    "store_hashes": false,
+    "output_file": "./data/baselines/gpipe_2x16.json",
+    "omp_num_threads": "16",
+    "world_size": 2,
+    "device": "cpu",
+    "clock": "time.perf_counter (last rank)",
+    "argv": [
+      "/home/users/andrei/model-runner/tests/baseline.py",
+      "gpipe",
+      "-n",
+      "10",
+      "-b",
+      "1",
+      "-m",
+      "32",
+      "-o",
+      "./data/baselines/gpipe_2x16.json"
+    ]
+  },
+  "results": {
+    "conv_next": {
+      "batches": [
+        {
+          "seeds": [
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46
+          ],
+          "timing": {
+            "start": 8387653.538650101,
+            "end": 8387654.957764772
+          }
+        }
+      ],
+      "requests_per_second": 7.0466469034197265
+    },
+    "conv_next_base": {
+      "batches": [
+        {
+          "seeds": [
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46
+          ],
+          "timing": {
+            "start": 8387660.156649588,
+            "end": 8387661.915742226
+          }
+        }
+      ],
+      "requests_per_second": 5.68474893388214
+    },
+    "efficientnet_b6": {
+      "batches": [
+        {
+          "seeds": [
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46
+          ],
+          "timing": {
+            "start": 8387674.127323829,
+            "end": 8387680.564259714
+          }
+        }
+      ],
+      "requests_per_second": 1.5535341935043414
+    },
+    "regnet_x_16gf": {
+      "batches": [
+        {
+          "seeds": [
+            37,
+            38,
+            39,
+            40,
+            41,
+            42,
+            43,
+            44,
+            45,
+            46
+          ],
+          "timing": {
+            "start": 8387685.708262413,
+            "end": 8387688.028606133
+          }
+        }
+      ],
+      "requests_per_second": 4.3097063226830885
+    }
+  }
+}

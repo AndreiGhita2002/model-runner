@@ -8,29 +8,23 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-# Fixed baseline filenames and colors
-BASELINE_FILES = {
-    "sequential": "sequential.json",
-    "tensor_parallel": "tensor_parallel.json",
-    "gpipe": "gpipe.json",
-}
-
+# Known baseline colors (best-effort; unknown baselines get auto-assigned)
 BASELINE_COLORS = {
     "sequential": "red",
     "tensor_parallel": "blue",
     "gpipe": "green",
 }
 
-# Color palette for runs (first few are hand-picked for distinctness)
-RUN_COLORS = ["purple", "orange", "brown", "teal", "magenta", "olive", "cyan"]
+# Color palette for auto-assignment (baselines without a known color, and runs)
+AUTO_COLORS = ["purple", "orange", "brown", "teal", "magenta", "olive", "cyan"]
 
 
-def _get_run_color(index: int) -> str:
-    """Return a color for the given run index."""
-    if index < len(RUN_COLORS):
-        return RUN_COLORS[index]
+def _get_auto_color(index: int) -> str:
+    """Return a color for the given auto-assignment index."""
+    if index < len(AUTO_COLORS):
+        return AUTO_COLORS[index]
     cmap = plt.cm.tab20
-    return cmap((index - len(RUN_COLORS)) / 20)
+    return cmap((index - len(AUTO_COLORS)) / 20)
 
 
 def get_requests_per_second(dataset: dict) -> dict[str, float]:
@@ -66,6 +60,22 @@ def _collect_model_names(*dataset_dicts: dict[str, dict]) -> list[str]:
     return names
 
 
+def _build_color_map(baselines: dict[str, dict], runs: dict[str, dict]) -> dict[str, str]:
+    """Assign colors: known baselines get fixed colors, everything else auto-assigns."""
+    colors = {}
+    auto_idx = 0
+    for name in baselines:
+        if name in BASELINE_COLORS:
+            colors[name] = BASELINE_COLORS[name]
+        else:
+            colors[name] = _get_auto_color(auto_idx)
+            auto_idx += 1
+    for name in runs:
+        colors[name] = _get_auto_color(auto_idx)
+        auto_idx += 1
+    return colors
+
+
 def _legend_kwargs(n_entries: int) -> dict:
     """Return legend kwargs, using multi-column layout for many entries."""
     if n_entries > 6:
@@ -88,12 +98,7 @@ def plot_requests_per_second(
     x = np.arange(len(model_names))
     width = 0.8 / len(dataset_names)
 
-    # Build color map
-    colors = {}
-    for name in baselines:
-        colors[name] = BASELINE_COLORS.get(name, "gray")
-    for i, name in enumerate(runs):
-        colors[name] = _get_run_color(i)
+    colors = _build_color_map(baselines, runs)
 
     fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -121,6 +126,7 @@ def plot_batch_times(
     baselines: dict[str, dict],
     runs: dict[str, dict],
     output_path: Path | None = None,
+    show_rebalance: bool = False,
 ):
     """Plot per-batch elapsed time for each model, one subplot per model."""
     model_names = _collect_model_names(baselines, runs)
@@ -129,12 +135,7 @@ def plot_batch_times(
         print("No models found for batch time plot")
         return
 
-    # Build color map
-    colors = {}
-    for name in baselines:
-        colors[name] = BASELINE_COLORS.get(name, "gray")
-    for i, name in enumerate(runs):
-        colors[name] = _get_run_color(i)
+    colors = _build_color_map(baselines, runs)
 
     n_models = len(model_names)
     cols = min(n_models, 2)
@@ -180,17 +181,19 @@ def plot_batch_times(
             ax.plot(range(len(elapsed)), elapsed, color=color, label=ds_name, marker=".", markersize=4)
 
             # Mark rebalance events
-            rebalance_events = _get_rebalance_events(batches)
-            for j, event_idx in enumerate(rebalance_events):
-                ax.axvline(
-                    event_idx, color=color, linestyle=":", alpha=0.3,
-                    label=f"{ds_name} rebalance" if j == 0 else None,
-                )
+            if show_rebalance:
+                rebalance_events = _get_rebalance_events(batches)
+                for j, event_idx in enumerate(rebalance_events):
+                    ax.axvline(
+                        event_idx, color=color, linestyle=":", alpha=0.3,
+                        label=f"{ds_name} rebalance" if j == 0 else None,
+                    )
 
         ax.set_title(model)
         ax.set_xlabel("Batch index")
         ax.set_ylabel("Elapsed time (s)")
-        ax.legend(**_legend_kwargs(len(baselines) + len(runs) * 2))
+        n_legend = len(baselines) + len(runs) * (2 if show_rebalance else 1)
+        ax.legend(**_legend_kwargs(n_legend))
 
     # Hide unused subplots
     for idx in range(n_models, rows * cols):
@@ -207,15 +210,14 @@ def plot_batch_times(
 
 
 def load_baselines(baselines_dir: Path) -> dict[str, dict]:
-    """Load baseline JSON files from the baselines directory."""
+    """Load all baseline JSON files from the baselines directory, sorted alphabetically."""
     baselines = {}
-    for name, filename in BASELINE_FILES.items():
-        path = baselines_dir / filename
-        if not path.exists():
-            print(f"Warning: {path} not found, skipping {name}")
-            continue
+    if not baselines_dir.is_dir():
+        print(f"Warning: {baselines_dir} is not a directory, no baselines loaded")
+        return baselines
+    for path in sorted(baselines_dir.glob("*.json")):
         with open(path) as f:
-            baselines[name] = json.load(f)
+            baselines[path.stem] = json.load(f)
     return baselines
 
 
@@ -239,6 +241,8 @@ if __name__ == "__main__":
                         help="Directory containing run JSON files (default: data/runs/)")
     parser.add_argument("-o", "--output", type=Path, default=None,
                         help="Output image path (e.g. graphs.png). Displays interactively if not set.")
+    parser.add_argument("--rebalance", action="store_true", default=False,
+                        help="Show vertical rebalance event lines on batch time plots")
     args = parser.parse_args()
 
     baselines = load_baselines(args.baselines_dir)
@@ -252,7 +256,7 @@ if __name__ == "__main__":
     if output:
         plot_requests_per_second(baselines, runs, output)
         batch_times_path = output.with_name(f"{output.stem}_batch_times{output.suffix}")
-        plot_batch_times(baselines, runs, batch_times_path)
+        plot_batch_times(baselines, runs, batch_times_path, show_rebalance=args.rebalance)
     else:
         plot_requests_per_second(baselines, runs)
-        plot_batch_times(baselines, runs)
+        plot_batch_times(baselines, runs, show_rebalance=args.rebalance)
