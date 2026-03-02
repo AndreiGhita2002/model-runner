@@ -9,7 +9,7 @@ COMMON_ARGS ?= -n $(REQUEST_NUM) -b $(BATCH_COUNT)
 DATA_OUTPUT_DIR ?= ./data/run1
 
 # Number of distributed ranks (processes). Override with: make eval NPROC=5
-NPROC ?= 8
+NPROC ?= 4
 # CPU threads per rank — divides total cores evenly across ranks to avoid oversubscription
 #OMP_THREADS = $(shell echo $$(( $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) / $(NPROC) )))
 OMP_THREADS = 8
