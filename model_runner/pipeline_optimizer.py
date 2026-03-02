@@ -148,6 +148,7 @@ class PipelineOptimizer(ABC):
             True if the pipeline should be rebalanced
         """
         self._call_count += 1
+        #TODO: remove rebalance_interval
         if self._call_count < self.rebalance_interval:
             return False
         self._call_count = 0
@@ -614,6 +615,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                           current_config: PipelineConfig) -> bool:
         if not time_logs:
             return True
+
+        #TODO: figure out how this works
 
         stage_times = self._compute_stage_times(time_logs, current_config)
 

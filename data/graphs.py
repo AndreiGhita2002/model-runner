@@ -130,7 +130,7 @@ def plot_batch_times(datasets: dict[str, dict], output_path: Path | None = None)
                     if rb.get("did_rebalance"):
                         if not prev_did_rebalance:
                             prev_did_rebalance = True
-                            ax.axvline(i, color="red", linestyle="--", alpha=0.6,
+                            ax.axvline(i, color="red", linestyle="--", alpha=0.2,
                                        label="rebalance" if i == next(
                                            j for j, bb in enumerate(batches)
                                            if bb.get("rebalance", {}).get("did_rebalance")

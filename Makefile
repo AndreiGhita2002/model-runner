@@ -22,6 +22,8 @@ TORCHRUN = OMP_NUM_THREADS=$(OMP_THREADS) uv run --no-sync torchrun --nproc_per_
 install:
 	uv pip install -e .
 
+#todo: run this five more times
+
 eval: install
 	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) -o $(DATA_OUTPUT_DIR)/evaluation_output.json
 
@@ -37,6 +39,8 @@ benchmark: install
 
 eval-sequential: install
 	OMP_NUM_THREADS=1 uv run --no-sync python -m tests.baseline simple $(BASELINE_ARGS) -o $(DATA_OUTPUT_DIR)/sequential_baseline.json
+
+#TODO: get in between baselines too
 
 eval-tensor-parallel: install
 	OMP_NUM_THREADS=$(MAX_CORES) uv run --no-sync python -m tests.baseline simple $(BASELINE_ARGS) -o $(DATA_OUTPUT_DIR)/tensor_parallel_baseline.json
