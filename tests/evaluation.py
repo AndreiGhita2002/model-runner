@@ -4,6 +4,8 @@ import os
 import sys
 import time
 import uuid
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -286,7 +288,8 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--batch-size', type=int, default=32,
                         help='Batch size (default: 32)')
     parser.add_argument('-o', '--output', default='evaluation_output.json',
-                        help='Output JSON file (default: evaluation_output.json)')
+                        help='Output path: a directory (auto-generates timestamped filename) '
+                             'or a .json file path (used as-is)')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Verbose output (print every request and batch detail)')
     parser.add_argument('--baseline-file', default=None,
@@ -296,6 +299,16 @@ if __name__ == '__main__':
     parser.add_argument('--store-hashes', action='store_true',
                         help='Store output hashes in JSON')
     args = parser.parse_args()
+
+    # Resolve output path: directory → timestamped file, file → use as-is
+    output_path = Path(args.output)
+    if output_path.is_dir() or (not output_path.suffix and not output_path.exists()):
+        # Treat as directory — generate timestamped filename
+        output_path.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        output_file = str(output_path / f"{timestamp}.json")
+    else:
+        output_file = str(output_path)
 
     if torch.cuda.is_available():
         backend = "nccl"
@@ -307,7 +320,7 @@ if __name__ == '__main__':
         num_requests=args.num_requests,
         seed=args.seed,
         batch_size=args.batch_size,
-        output_file=args.output,
+        output_file=output_file,
         baseline_file=args.baseline_file,
         verbose=args.verbose,
         store_hashes=args.store_hashes,

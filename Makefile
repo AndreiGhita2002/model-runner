@@ -11,7 +11,6 @@ COMMON_ARGS ?= -n $(REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES)
 BASELINE_ARGS ?= -n $(BASELINE_REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES)
 BASELINES_DIR ?= ./data/baselines
 RUNS_DIR ?= ./data/runs
-RUN_NAME ?= run2
 
 # Number of distributed ranks (processes). Override with: make eval NPROC=5
 NPROC ?= 4
@@ -27,7 +26,7 @@ install:
 #todo: run this five more times
 
 eval: install
-	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) -o $(RUNS_DIR)/$(RUN_NAME).json
+	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) -o $(RUNS_DIR)
 
 quick-eval: install
 	$(TORCHRUN) tests.quick_evaluation
