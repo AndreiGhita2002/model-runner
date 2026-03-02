@@ -42,7 +42,7 @@ eval-tensor-parallel: install
 	OMP_NUM_THREADS=$(MAX_CORES) uv run --no-sync python -m tests.baseline simple $(BASELINE_ARGS) -o $(DATA_OUTPUT_DIR)/tensor_parallel_baseline.json
 
 eval-gpipe: install
-	OMP_NUM_THREADS=1 uv run --no-sync torchrun --nproc_per_node=$(MAX_NPROC) -m tests.baseline gpipe $(BASELINE_ARGS) -o $(DATA_OUTPUT_DIR)/gpipe_baseline.json
+	$(TORCHRUN) tests.baseline gpipe $(BASELINE_ARGS) -o $(DATA_OUTPUT_DIR)/gpipe_baseline.json
 
 eval-all-baselines: eval-sequential eval-tensor-parallel eval-gpipe
 
