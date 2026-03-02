@@ -9,7 +9,9 @@ BATCH_COUNT ?= 1  # samples per request (1 image each)
 N_MICROBATCHES ?= 32  # requests grouped per forward pass
 COMMON_ARGS ?= -n $(REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES)
 BASELINE_ARGS ?= -n $(BASELINE_REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES)
-DATA_OUTPUT_DIR ?= ./data/run1
+BASELINES_DIR ?= ./data/baselines
+RUNS_DIR ?= ./data/runs
+RUN_NAME ?= run2
 
 # Number of distributed ranks (processes). Override with: make eval NPROC=5
 NPROC ?= 4
@@ -25,7 +27,7 @@ install:
 #todo: run this five more times
 
 eval: install
-	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) -o $(DATA_OUTPUT_DIR)/evaluation_output.json
+	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) -o $(RUNS_DIR)/$(RUN_NAME).json
 
 quick-eval: install
 	$(TORCHRUN) tests.quick_evaluation
@@ -38,22 +40,22 @@ benchmark: install
 	uv run --no-sync python -m tests.benchmark
 
 eval-sequential: install
-	OMP_NUM_THREADS=1 uv run --no-sync python -m tests.baseline simple $(BASELINE_ARGS) -o $(DATA_OUTPUT_DIR)/sequential_baseline.json
+	OMP_NUM_THREADS=1 uv run --no-sync python -m tests.baseline simple $(BASELINE_ARGS) -o $(BASELINES_DIR)/sequential.json
 
 #TODO: get in between baselines too
 
 eval-tensor-parallel: install
-	OMP_NUM_THREADS=$(MAX_CORES) uv run --no-sync python -m tests.baseline simple $(BASELINE_ARGS) -o $(DATA_OUTPUT_DIR)/tensor_parallel_baseline.json
+	OMP_NUM_THREADS=$(MAX_CORES) uv run --no-sync python -m tests.baseline simple $(BASELINE_ARGS) -o $(BASELINES_DIR)/tensor_parallel.json
 
 eval-gpipe: install
-	$(TORCHRUN) tests.baseline gpipe $(BASELINE_ARGS) -o $(DATA_OUTPUT_DIR)/gpipe_baseline.json
+	$(TORCHRUN) tests.baseline gpipe $(BASELINE_ARGS) -o $(BASELINES_DIR)/gpipe.json
 
 eval-all-baselines: eval-sequential eval-tensor-parallel eval-gpipe
 
 eval-all: install eval-all-baselines eval
 
 graphs: install
-	uv run python data/graphs.py -i $(DATA_OUTPUT_DIR)
+	uv run python data/graphs.py -b $(BASELINES_DIR) -r $(RUNS_DIR)
 
 
 clean:
