@@ -56,71 +56,76 @@ def gpipe_baseline(num_requests: int = 100, seed: int = 37,
 
     for model_name, load_model, rand_inputs in evaluation_models:
         print(f"Running baseline for model: {model_name}")
-        model = load_model()
-        results[model_name] = {"batches": []}
+        try:
+            model = load_model()
+            results[model_name] = {"batches": []}
 
-        split_spec = gpipe_split_spec(model, dist.get_world_size())
-        pipe = pipeline(model, mb_args=(generate_batch(rand_inputs, batch_size, seed),), split_spec=split_spec)
+            split_spec = gpipe_split_spec(model, dist.get_world_size())
+            pipe = pipeline(model, mb_args=(generate_batch(rand_inputs, batch_size, seed),), split_spec=split_spec)
 
-        stage_module = pipe.get_stage_module(dist.get_rank())
-        stage = PipelineStage(
-            _ContiguousStageWrapper(stage_module),
-            stage_index=dist.get_rank(),
-            num_stages=pipe.num_stages,
-            device=device,
-        )
-        scheduler = ScheduleGPipe(stage, n_microbatches=n_microbatches)
+            stage_module = pipe.get_stage_module(dist.get_rank())
+            stage = PipelineStage(
+                _ContiguousStageWrapper(stage_module),
+                stage_index=dist.get_rank(),
+                num_stages=pipe.num_stages,
+                device=device,
+            )
+            scheduler = ScheduleGPipe(stage, n_microbatches=n_microbatches)
 
-        # Warmup pass (not recorded) to avoid lazy-init / CUDA kernel caching overhead
-        warmup_inputs = [generate_batch(rand_inputs, batch_size, seed) for _ in range(n_microbatches)]
-        with torch.no_grad():
-            if is_first_rank:
-                scheduler.step(torch.cat(warmup_inputs, dim=0))
-            else:
-                scheduler.step()
-
-        for chunk_start in range(0, num_requests, n_microbatches):
-            chunk_size = min(n_microbatches, num_requests - chunk_start)
-            seeds = [seed + chunk_start + j for j in range(chunk_size)]
-
-            if is_first_rank:
-                inputs = [generate_batch(rand_inputs, batch_size, s) for s in seeds]
-                # Pad to n_microbatches by replicating last input (matches pipeline_runner.py)
-                while len(inputs) < n_microbatches:
-                    inputs.append(inputs[-1])
-                x = torch.cat(inputs, dim=0)
-
-            # Run forward pass — time on last rank only to avoid cross-process clock skew
-            if is_last_rank:
-                forward_start = time.perf_counter()
-
+            # Warmup pass (not recorded) to avoid lazy-init / CUDA kernel caching overhead
+            warmup_inputs = [generate_batch(rand_inputs, batch_size, seed) for _ in range(n_microbatches)]
             with torch.no_grad():
                 if is_first_rank:
-                    output = scheduler.step(x)
+                    scheduler.step(torch.cat(warmup_inputs, dim=0))
                 else:
-                    output = scheduler.step()
+                    scheduler.step()
 
+            for chunk_start in range(0, num_requests, n_microbatches):
+                chunk_size = min(n_microbatches, num_requests - chunk_start)
+                seeds = [seed + chunk_start + j for j in range(chunk_size)]
+
+                if is_first_rank:
+                    inputs = [generate_batch(rand_inputs, batch_size, s) for s in seeds]
+                    # Pad to n_microbatches by replicating last input (matches pipeline_runner.py)
+                    while len(inputs) < n_microbatches:
+                        inputs.append(inputs[-1])
+                    x = torch.cat(inputs, dim=0)
+
+                # Run forward pass — time on last rank only to avoid cross-process clock skew
+                if is_last_rank:
+                    forward_start = time.perf_counter()
+
+                with torch.no_grad():
+                    if is_first_rank:
+                        output = scheduler.step(x)
+                    else:
+                        output = scheduler.step()
+
+                if is_last_rank:
+                    forward_end = time.perf_counter()
+                    batch_entry = {
+                        "seeds": seeds,
+                        "timing": {"start": forward_start, "end": forward_end},
+                    }
+                    if store_hashes:
+                        # Only hash the real outputs (not padded ones)
+                        real_count = chunk_size * batch_size
+                        batch_entry["output_hashes"] = [
+                            hashlib.sha256(output[0][j].numpy().tobytes()).hexdigest()
+                            for j in range(real_count)
+                        ]
+                    results[model_name]["batches"].append(batch_entry)
+
+            # Compute sustained throughput
             if is_last_rank:
-                forward_end = time.perf_counter()
-                batch_entry = {
-                    "seeds": seeds,
-                    "timing": {"start": forward_start, "end": forward_end},
-                }
-                if store_hashes:
-                    # Only hash the real outputs (not padded ones)
-                    real_count = chunk_size * batch_size
-                    batch_entry["output_hashes"] = [
-                        hashlib.sha256(output[0][j].numpy().tobytes()).hexdigest()
-                        for j in range(real_count)
-                    ]
-                results[model_name]["batches"].append(batch_entry)
+                batches = results[model_name]["batches"]
+                wall_clock = batches[-1]["timing"]["end"] - batches[0]["timing"]["start"]
+                total_samples = num_requests * batch_size
+                results[model_name]["requests_per_second"] = total_samples / wall_clock
 
-        # Compute sustained throughput
-        if is_last_rank:
-            batches = results[model_name]["batches"]
-            wall_clock = batches[-1]["timing"]["end"] - batches[0]["timing"]["start"]
-            total_samples = num_requests * batch_size
-            results[model_name]["requests_per_second"] = total_samples / wall_clock
+        except Exception as e:
+            print(f"  Skipping {model_name}: {e}")
+            results.pop(model_name, None)
 
     # Only the last rank has meaningful results
     if is_last_rank:

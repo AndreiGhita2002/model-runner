@@ -1,5 +1,5 @@
 .PHONY: install test-flask test-pipeline eval quick-eval simple-baseline gpipe-baseline benchmark clean \
-       eval-sequential eval-tensor-parallel eval-gpipe eval-all-baselines
+       eval-sequential eval-tensor-parallel eval-gpipe eval-gpipe-sweep eval-all-baselines
 
 MAX_CORES ?= 32  # should be 32 on fisherman
 MAX_NPROC ?= $(MAX_CORES)
@@ -11,6 +11,7 @@ COMMON_ARGS ?= -n $(REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES)
 BASELINE_ARGS ?= -n $(BASELINE_REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES)
 BASELINES_DIR ?= ./data/baselines
 RUNS_DIR ?= ./data/runs
+GPIPE_OUTPUT ?= gpipe.json
 
 # Number of distributed ranks (processes). Override with: make eval NPROC=5
 NPROC ?= 4
@@ -47,7 +48,10 @@ eval-tensor-parallel: install
 	OMP_NUM_THREADS=$(MAX_CORES) uv run --no-sync python -m tests.baseline simple $(BASELINE_ARGS) -o $(BASELINES_DIR)/tensor_parallel.json
 
 eval-gpipe: install
-	$(TORCHRUN) tests.baseline gpipe $(BASELINE_ARGS) -o $(BASELINES_DIR)/gpipe.json
+	$(TORCHRUN) tests.baseline gpipe $(BASELINE_ARGS) -o $(BASELINES_DIR)/$(GPIPE_OUTPUT)
+
+eval-gpipe-sweep: install
+	bash tests/gpipe_sweep.sh
 
 eval-all-baselines: eval-sequential eval-tensor-parallel eval-gpipe
 
