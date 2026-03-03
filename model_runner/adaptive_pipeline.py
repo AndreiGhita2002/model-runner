@@ -146,7 +146,7 @@ class AdaptivePipeline:
                 internally with ``num_stages``, ``root_uuid``, and ``device_manager``.
                 Defaults to ``GreedyPipelineOptimizer``.
             optimizer_kwargs: Extra keyword arguments forwarded to the optimiser
-                constructor (e.g. ``alpha`` for ``TimeBasedShishaPipelineOptimizer``).
+                constructor (e.g. ``imbalance_threshold`` for ``TimeBasedShishaPipelineOptimizer``).
             max_log_entries: Maximum number of timing measurements to keep per module.
                 Older entries are discarded when the cap is reached.
             n_microbatches: Number of microbatches per pipeline step. Clamped to at
@@ -389,7 +389,6 @@ class AdaptivePipeline:
         did_rebalance = new_config is not None
         if did_rebalance:
             self._log("Sync optimization: rebalancing pipeline")
-            self.time_logs = {}
             self.rebuild_pipeline(new_config)
 
         rebalance_end = time.perf_counter()
@@ -430,7 +429,6 @@ class AdaptivePipeline:
         did_rebalance = new_config is not None
         if did_rebalance:
             self._log("Async optimization: received new config, rebuilding pipeline")
-            self.time_logs = {}
             self.rebuild_pipeline(new_config)
 
         rebalance_end = time.perf_counter()

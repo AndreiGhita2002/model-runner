@@ -338,6 +338,14 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
                 current_stage += 1
                 current_stage_time = 0.0
 
+        # Ensure all stages are filled: if skewed timing left stages unused,
+        # reassign the last N children to their own stages.
+        missing_stages = (self.num_stages - 1) - current_stage
+        if missing_stages > 0 and len(assignments) > self.num_stages:
+            for j in range(len(assignments) - missing_stages, len(assignments)):
+                current_stage += 1
+                assignments[j] = (assignments[j][0], current_stage)
+
         return assignments
 
     def _build_split_spec(self, stage_assignments: List[Tuple[uuid.UUID, int]]) -> dict[str, SplitPoint]:
@@ -366,27 +374,30 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
     1. Seed Generation (Algorithm 1): merges children into balanced groups using
        parameter count as weight proxy, then assigns stages to devices via ranking.
     2. Online Tuning (Algorithm 2): iteratively moves children from the slowest
-       stage toward lighter stages, with patience parameter alpha.
+       stage toward lighter stages, with hysteresis-based rebalance triggering.
     """
 
     #TODO(naming): TimeBasedShishaPipelineOptimizer is an awful name
 
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
                  depth: int = 1,
-                 alpha: int = 10,
+                 imbalance_threshold: float = 1.2,
+                 persistence: int = 3,
+                 max_moves: int = 3,
                  assignment_choice: str = "rank_w",
                  balance_strategy: str = "nearest_lightest_fep",
                  rebalance_interval: int = None):
 
         super().__init__(num_stages, root_uuid, device_manager, depth=depth, rebalance_interval=rebalance_interval)
         self.n = self.device_manager.num_devices()
-        self.alpha = alpha
+        self.imbalance_threshold = imbalance_threshold
+        self.persistence = persistence
+        self.max_moves = max_moves
         self.assignment_choice = assignment_choice
         self.balance_strategy = balance_strategy
 
-        # Persistent state for online tuning across optimize() calls
-        self._gamma = 0                    # non-improving iteration counter
-        self._best_throughput = 0.0        # best 1/max_stage_time seen
+        # Persistent state
+        self._imbalance_streak = 0         # consecutive checks showing imbalance
         self._is_seeded = False            # whether seed has been used at least once
 
         # Caches
@@ -518,39 +529,56 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
     def _online_tuning(self, time_logs: dict[uuid.UUID, list[float]],
                        old_config: PipelineConfig) -> PipelineConfig:
-        """One iteration of online tuning: move one child from the slowest stage."""
-        stage_times, _ = self._compute_stage_times(time_logs, old_config)
+        """Online tuning: move up to max_moves children from the slowest stage(s)."""
         stages = self._children_to_stages(old_config)
 
-        slowest_idx = max(range(len(stage_times)), key=lambda i: stage_times[i])
+        # Build child-level average times for local recomputation between moves
+        child_times = {}
+        for child_uuid, times in time_logs.items():
+            if times:
+                child_times[child_uuid] = sum(times) / len(times)
 
-        # Can't move if slowest stage has only 1 child
-        if len(stages[slowest_idx]) <= 1:
+        moved = False
+        for _ in range(self.max_moves):
+            # Recompute stage times from child_times and current stage groupings
+            stage_times = []
+            for stage in stages:
+                stage_times.append(sum(child_times.get(u, 0) for u in stage))
+
+            max_t = max(stage_times)
+            min_t = min(stage_times)
+            if min_t > 0 and max_t / min_t <= self.imbalance_threshold:
+                break  # balanced enough
+
+            slowest_idx = stage_times.index(max_t)
+
+            if len(stages[slowest_idx]) <= 1:
+                break
+
+            target_idx = self._find_target_stage(stage_times, stages, old_config, slowest_idx)
+            if target_idx is None or target_idx == slowest_idx:
+                break
+
+            # Step toward target (adjacent move)
+            if target_idx < slowest_idx:
+                adjacent_idx = slowest_idx - 1
+            else:
+                adjacent_idx = slowest_idx + 1
+
+            # Move one child from slowest to adjacent
+            if adjacent_idx < slowest_idx:
+                child_to_move = stages[slowest_idx][0]
+                stages[adjacent_idx].append(child_to_move)
+                stages[slowest_idx] = stages[slowest_idx][1:]
+            else:
+                child_to_move = stages[slowest_idx][-1]
+                stages[adjacent_idx].insert(0, child_to_move)
+                stages[slowest_idx] = stages[slowest_idx][:-1]
+
+            moved = True
+
+        if not moved:
             return old_config
-
-        # Find target stage
-        target_idx = self._find_target_stage(stage_times, stages, old_config, slowest_idx)
-
-        if target_idx is None or target_idx == slowest_idx:
-            return old_config
-
-        # If target is non-adjacent, step toward it
-        if target_idx < slowest_idx:
-            adjacent_idx = slowest_idx - 1
-        else:
-            adjacent_idx = slowest_idx + 1
-
-        # Move one child from slowest to adjacent (in the direction of target)
-        if adjacent_idx < slowest_idx:
-            # Move first child of slowest to end of adjacent (left neighbour)
-            child_to_move = stages[slowest_idx][0]
-            stages[adjacent_idx].append(child_to_move)
-            stages[slowest_idx] = stages[slowest_idx][1:]
-        else:
-            # Move last child of slowest to beginning of adjacent (right neighbour)
-            child_to_move = stages[slowest_idx][-1]
-            stages[adjacent_idx].insert(0, child_to_move)
-            stages[slowest_idx] = stages[slowest_idx][:-1]
 
         # Build new split_spec from modified stages
         new_split_spec: dict[str, SplitPoint] = {}
@@ -637,33 +665,24 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         if not time_logs:
             return True
 
-        # TODO: problem with shisha should_rebalance
-
         stage_times, max_stage_time = self._compute_stage_times(time_logs, current_config)
 
         if any(t == 0 for t in stage_times):
             return True
 
-        throughput = 1.0 / max_stage_time
+        min_stage_time = min(stage_times)
+        imbalance = max_stage_time / min_stage_time if min_stage_time > 0 else float('inf')
 
-        if self._best_throughput == 0.0:
-            self._best_throughput = throughput
-            return True
-
-        if throughput > self._best_throughput:
-            self._best_throughput = throughput
-            self._gamma = 0
-            return True
+        if imbalance > self.imbalance_threshold:
+            self._imbalance_streak += 1
         else:
-            # This path is weird:
-            # So if max_stage_time is higher than best time alpha runs in a row, then shisha stops improving?
-            # until the max_stage_time magically becomes lower again?
-            # I feel like this should be the opposite
-            self._gamma += 1
-            if self._gamma >= self.alpha:
-                # Optimum was probably found
-                return False
+            self._imbalance_streak = 0
+
+        # Only rebalance if imbalance persists
+        if self._imbalance_streak >= self.persistence:
+            self._imbalance_streak = 0
             return True
+        return False
 
     def optimize(self, time_logs: dict[uuid.UUID, list[float]],
                  old_config: PipelineConfig) -> PipelineConfig:
