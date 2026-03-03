@@ -27,6 +27,9 @@ install:
 eval: install
 	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) -o $(RUNS_DIR)
 
+eval-with-greedy: install
+	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) --optimizer greedy -o $(RUNS_DIR)
+
 quick-eval: install
 	$(TORCHRUN) tests.quick_evaluation
 

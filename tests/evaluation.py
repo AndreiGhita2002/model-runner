@@ -12,7 +12,8 @@ import torch
 import torch.distributed as dist
 
 from model_runner import PipelineServer, uuids_to_tensor, tensor_to_uuids
-from model_runner.pipeline_optimizer import TimeBasedShishaPipelineOptimizer
+from model_runner.pipeline_optimizer import GreedyPipelineOptimizer, TimeBasedShishaPipelineOptimizer
+
 from tests.testing_models import evaluation_models
 from tests.util import generate_batch
 
@@ -22,6 +23,10 @@ _total_requests = 0
 _completed_requests = 0
 _last_progress_pct = -1
 
+optimizer_choices = {
+    "shisha": TimeBasedShishaPipelineOptimizer,
+    "greedy": GreedyPipelineOptimizer,
+}
 
 evaluation_results: dict[uuid.UUID, Any] = {}
 """Global dict storing pipeline outputs keyed by request UUID. Populated by ``handle_output``."""
@@ -67,6 +72,7 @@ def evaluation_main(
     verbose=False,
     store_hashes=False,
     n_microbatches=32,
+    optimizer_class=TimeBasedShishaPipelineOptimizer,
 ):
     """Run evaluation: queue generated inputs through the adaptive pipeline.
 
@@ -82,6 +88,8 @@ def evaluation_main(
         baseline_file: Optional path to a baseline JSON file for hash comparison.
         verbose: If True, print detailed per-request output.
         store_hashes: If True, compute and store output hashes in the JSON.
+        n_microbatches: How many requests to bundle into a forward pass.
+        optimizer_class: What pipeline optimiser to use.
     """
     if store_hashes:
         import hashlib
@@ -109,7 +117,7 @@ def evaluation_main(
         if verbose and is_print_rank:
             print(f"> Adding model {model_name} with load function {load_model.__name__}")
         main.add_model(model_name, load_model(), rand_input(),
-                       optimizer_class=TimeBasedShishaPipelineOptimizer,
+                       optimizer_class=optimizer_class,
                        rebalance_interval=4, n_microbatches=n_microbatches, async_optimization=False)
     if not verbose and is_print_rank:
         print("Models loaded. Running pipeline...")
@@ -298,6 +306,8 @@ if __name__ == '__main__':
                         help='Requests per forward pass (default: 32)')
     parser.add_argument('--store-hashes', action='store_true',
                         help='Store output hashes in JSON')
+    parser.add_argument('--optimizer', choices=optimizer_choices.keys(), default='shisha',
+                        help='Pipeline optimizer class (default: shisha)')
     args = parser.parse_args()
 
     # Resolve output path: directory → timestamped file, file → use as-is
@@ -325,6 +335,7 @@ if __name__ == '__main__':
         verbose=args.verbose,
         store_hashes=args.store_hashes,
         n_microbatches=args.n_microbatches,
+        optimizer_class=optimizer_choices[args.optimizer]
     )
 
     dist.destroy_process_group()
