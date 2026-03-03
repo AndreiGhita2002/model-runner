@@ -8,14 +8,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-# Known baseline colors (best-effort; unknown baselines get auto-assigned)
+# Known baseline colours
 BASELINE_COLORS = {
     "sequential": "red",
     "tensor_parallel": "blue",
     "gpipe": "green",
 }
 
-# Color palette for auto-assignment (baselines without a known color, and runs)
+# Colour palette for auto-assignment (baselines without a known colour, and runs)
 AUTO_COLORS = ["purple", "orange", "brown", "teal", "magenta", "olive", "cyan"]
 
 
@@ -209,18 +209,6 @@ def plot_batch_times(
         plt.show()
 
 
-def load_baselines(baselines_dir: Path) -> dict[str, dict]:
-    """Load all baseline JSON files from the baselines directory, sorted alphabetically."""
-    baselines = {}
-    if not baselines_dir.is_dir():
-        print(f"Warning: {baselines_dir} is not a directory, no baselines loaded")
-        return baselines
-    for path in sorted(baselines_dir.glob("*.json")):
-        with open(path) as f:
-            baselines[path.stem] = json.load(f)
-    return baselines
-
-
 def load_runs(runs_dir: Path) -> dict[str, dict]:
     """Load all run JSON files from the runs directory, sorted alphabetically."""
     runs = {}
@@ -245,7 +233,7 @@ if __name__ == "__main__":
                         help="Show vertical rebalance event lines on batch time plots")
     args = parser.parse_args()
 
-    baselines = load_baselines(args.baselines_dir)
+    baselines = load_runs(args.baselines_dir)
     runs = load_runs(args.runs_dir)
 
     if not baselines and not runs:
