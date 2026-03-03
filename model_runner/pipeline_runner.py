@@ -72,7 +72,7 @@ class PipelineRunner:
             **kwargs: Forwarded to ``AdaptivePipeline``.
 
         Raises:
-            Exception: If a model with the same name is already registered.
+            ValueError: If a model with the same name is already registered.
         """
         if device is None:
             device = str(self.primary_device)
@@ -80,7 +80,7 @@ class PipelineRunner:
         depth = depth or self.default_timing_depth
 
         if self.pipelines.get(model_name, None) is not None:
-            raise Exception(f"Pipeline with name {model_name} already exists!")
+            raise ValueError(f"Pipeline with name {model_name} already exists!")
 
         timed_model = make_module_timed(
             model,
@@ -124,6 +124,8 @@ class PipelineRunner:
         batch_size = 0
 
         if rank == 0:
+            if not inputs:
+                raise ValueError("inputs must be a non-empty list on rank 0")
             batch_size = len(inputs)
 
             # Pad batch if needed (scheduler expects exactly n_microbatches)

@@ -79,26 +79,6 @@ def _optimizer_process_worker(
             # Signal that we checked but no rebalance needed
             result_queue.put(None)
 
-def extract_shapes(obj):
-    """Recursively extract tensor shapes from a nested structure.
-
-    Args:
-        obj: A tensor, or a nested tuple/list/dict of tensors.
-
-    Returns:
-        The same nested structure with tensors replaced by their ``torch.Size``,
-        or ``None`` for non-tensor leaves.
-    """
-    if isinstance(obj, torch.Tensor):
-        return obj.shape
-    elif isinstance(obj, (tuple, list)):
-        return type(obj)(extract_shapes(x) for x in obj)
-    elif isinstance(obj, dict):
-        return {k: extract_shapes(v) for k, v in obj.items()}
-    else:
-        return None
-
-
 class AdaptivePipeline:
     """Manages a PyTorch pipeline with automatic stage rebalancing.
 

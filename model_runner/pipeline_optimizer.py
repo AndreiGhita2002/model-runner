@@ -14,7 +14,7 @@ from .device_manager import DeviceManager
 @dataclass
 class PipelineConfig:
     split_spec: dict[str, SplitPoint]  # module path → SplitPoint
-    device_mapping: dict[int, str]
+    device_mapping: dict[int, torch.device]
 
 
 class PipelineOptimizer(ABC):
@@ -320,8 +320,6 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
             if layer_time[0] in children_ids:
                 children_times.append(layer_time)
 
-        print(children_times)
-
         # The assignment algorithm:
         assignments = []
         current_stage_time = 0.0
@@ -398,7 +396,6 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
         # Persistent state
         self._imbalance_streak = 0         # consecutive checks showing imbalance
-        self._is_seeded = False            # whether seed has been used at least once
 
         # Caches
         self._stage_times_cache = None
@@ -505,7 +502,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             # Heaviest stage → fastest device
             stage_order = sorted(range(len(groups)), key=lambda i: groups[i][1], reverse=True)
         elif self.assignment_choice == "rank_l":
-            # Most children → slowest device (SEP)
+            # Most children → fastest device
             stage_order = sorted(range(len(groups)), key=lambda i: len(groups[i][0]), reverse=True)
         else:
             stage_order = list(range(len(groups)))
@@ -656,9 +653,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
     # ── Public interface ─────────────────────────────────────────────────
 
     def initial_setup(self) -> PipelineConfig:
-        config = self._seed_generation()
-        self._is_seeded = True
-        return config
+        return self._seed_generation()
 
     def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]],
                           current_config: PipelineConfig) -> bool:
