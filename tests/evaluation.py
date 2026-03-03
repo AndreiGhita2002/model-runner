@@ -73,6 +73,7 @@ def evaluation_main(
     store_hashes=False,
     n_microbatches=32,
     optimizer_class=TimeBasedShishaPipelineOptimizer,
+    rebalance_interval=None,
 ):
     """Run evaluation: queue generated inputs through the adaptive pipeline.
 
@@ -118,7 +119,7 @@ def evaluation_main(
             print(f"> Adding model {model_name} with load function {load_model.__name__}")
         main.add_model(model_name, load_model(), rand_input(),
                        optimizer_class=optimizer_class,
-                       rebalance_interval=4, n_microbatches=n_microbatches, async_optimization=False)
+                       rebalance_interval=rebalance_interval, n_microbatches=n_microbatches, async_optimization=False)
     if not verbose and is_print_rank:
         print("Models loaded. Running pipeline...")
 
@@ -308,7 +309,13 @@ if __name__ == '__main__':
                         help='Store output hashes in JSON')
     parser.add_argument('--optimizer', choices=optimizer_choices.keys(), default='shisha',
                         help='Pipeline optimizer class (default: shisha)')
+    parser.add_argument('--rebalance-interval', type=int, default=None,
+                        help='Check rebalance every N batches (default: None, check every batch)')
     args = parser.parse_args()
+
+    rebalance_interval = args.rebalance_interval
+    if rebalance_interval is not None and rebalance_interval < 0:
+        rebalance_interval = None
 
     # Resolve output path: directory → timestamped file, file → use as-is
     output_path = Path(args.output)
@@ -335,7 +342,8 @@ if __name__ == '__main__':
         verbose=args.verbose,
         store_hashes=args.store_hashes,
         n_microbatches=args.n_microbatches,
-        optimizer_class=optimizer_choices[args.optimizer]
+        optimizer_class=optimizer_choices[args.optimizer],
+        rebalance_interval=rebalance_interval,
     )
 
     dist.destroy_process_group()

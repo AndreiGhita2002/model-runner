@@ -7,7 +7,9 @@ REQUEST_NUM ?= 5000  # should be 100+
 BASELINE_REQUEST_NUM ?= 10  # baselines don't change over time, fewer runs suffice
 BATCH_COUNT ?= 1  # samples per request (1 image each)
 N_MICROBATCHES ?= 32  # requests grouped per forward pass
-COMMON_ARGS ?= -n $(REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES)
+OPTIMIZER ?= shisha
+REBALANCE_INTERVAL ?=
+COMMON_ARGS ?= -n $(REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES) --optimizer $(OPTIMIZER) $(if $(REBALANCE_INTERVAL),--rebalance-interval $(REBALANCE_INTERVAL))
 BASELINE_ARGS ?= -n $(BASELINE_REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES)
 BASELINES_DIR ?= ./data/baselines
 RUNS_DIR ?= ./data/runs
@@ -26,9 +28,6 @@ install:
 
 eval: install
 	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) -o $(RUNS_DIR)
-
-eval-with-greedy: install
-	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) --optimizer greedy -o $(RUNS_DIR)
 
 quick-eval: install
 	$(TORCHRUN) tests.quick_evaluation
