@@ -151,8 +151,8 @@ class PipelineOptimizer(ABC):
         if self.rebalance_interval is not None:
             self._call_count += 1
             if self._call_count < self.rebalance_interval:
-                self._call_count = 0
                 return False
+            self._call_count = 0
         return self._should_rebalance(time_logs, current_config)
 
     def initial_setup(self) -> PipelineConfig:
@@ -637,6 +637,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         if not time_logs:
             return True
 
+        # TODO: problem with shisha should_rebalance
+
         stage_times, max_stage_time = self._compute_stage_times(time_logs, current_config)
 
         if any(t == 0 for t in stage_times):
@@ -653,6 +655,10 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             self._gamma = 0
             return True
         else:
+            # This path is weird:
+            # So if max_stage_time is higher than best time alpha runs in a row, then shisha stops improving?
+            # until the max_stage_time magically becomes lower again?
+            # I feel like this should be the opposite
             self._gamma += 1
             if self._gamma >= self.alpha:
                 # Optimum was probably found
