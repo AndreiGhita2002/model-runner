@@ -8,7 +8,18 @@
   - Produces two graphs: a **throughput bar chart** (requests/sec per model) and a **batch times line plot** (per-batch elapsed time, with rebalance markers for the adaptive dataset). With `-o`, the batch times plot is saved as `<stem>_batch_times.png`.
 
 ### Data Directories:
-- /sample/ -- includes a small amount of data for testing purposes. 
-Note: this data was run on an unusually small batch size and small number of cores,
-so it should not be taken seriously.
 
+- **sample/** — Small amount of data for testing graph generation. Run on an unusually small batch size and small number of cores; should not be taken seriously.
+
+- **baselines/** — Baseline measurements on server `fisherman` (32-core CPU, no GPU). 10 requests per model, batch_size=1, n_microbatches=32. All use 4 models: ConvNeXt Small, ConvNeXt Base, EfficientNet B6, RegNet X 16GF.
+  - `sequential.json` — Single-threaded sequential inference (1 OMP thread).
+  - `tensor_parallel.json` — Single-process inference with 32 OMP threads (intra-op parallelism).
+  - `gpipe_NxM.json` — Static GPipe pipeline with N ranks and M OMP threads per rank (N*M=32). Explores the tradeoff between pipeline parallelism and intra-op parallelism. `gpipe_32x1` is missing RegNet due to FX tracing failures at high rank counts.
+
+- **runs/** — Adaptive pipeline evaluation runs on server `fisherman`. All use 4 ranks, 8 OMP threads, batch_size=1, n_microbatches=32, 5000 requests per model, seed=37.
+  - `run1.json` — Shisha with rebalance interval=10
+  - `run2.json` — Shisha same as run1
+  - `run3.json` — Shisha without the rebalance interval
+  - `run4.json` — Shisha same as run 3
+  - `run5.json` — Greedy, no rebalance interval
+  - `run6.json` — Greedy with rebalance interval=5
