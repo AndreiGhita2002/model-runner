@@ -375,6 +375,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         self._best_config: PipelineConfig = None
         self._at_optimum = False
         self._return_best = True
+        self._slowest_stage_offset = 0
 
         # Caches
         self._stage_times_cache = None
@@ -510,7 +511,10 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         stage_times, _ = self._compute_stage_times(time_logs, old_config)
         stages = self._children_to_stages(old_config)
 
-        slowest_idx = max(range(len(stage_times)), key=lambda i: stage_times[i])
+        # Finding the slowest stage (offset cycles through stages by slowness rank)
+        ranked_stages = sorted(range(len(stage_times)), key=lambda i: stage_times[i], reverse=True)
+        offset = min(self._slowest_stage_offset, len(ranked_stages) - 1)
+        slowest_idx = ranked_stages[offset]
 
         # Can't move if slowest stage has only 1 child
         if len(stages[slowest_idx]) <= 1:
@@ -634,6 +638,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
         if self._best_throughput == 0.0:
             self._best_throughput = throughput
+            self._best_config = current_config
             return True
 
         if throughput > self._best_throughput:
@@ -651,6 +656,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             if self._gamma >= self.alpha:
                 # Optimum was probably found
                 self._return_best = True
+                self._slowest_stage_offset += 1
+                self._gamma = 0
                 return False
             return True
 
@@ -672,7 +679,12 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         if self._return_best and not self._at_optimum:
             self._return_best = False
             self._config_changed()
-            self._at_optimum = True
+            if self._slowest_stage_offset >= self.num_stages:
+                # All stages have been tried — true optimum.
+                # _at_optimum blocks future optimisation until cleared by
+                # _config_changed() (e.g. via force rebalance or pipeline rebuild).
+                self._at_optimum = True
+                self._slowest_stage_offset = self.num_stages - 1
             return self._best_config
         # If not, then we only continue if we should rebalance or if it is forced
         if not force_rebalance and not should_rebalance:
