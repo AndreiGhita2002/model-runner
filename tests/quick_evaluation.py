@@ -77,6 +77,28 @@ def quick_evaluation_main(baseline_file: str = None):
     # Run pipeline (all ranks)
     main.run(exit_when_done=True)
 
+    # Force rebalance: queue one more request and trigger a forced rebalance
+    if rank == 0:
+        print("\n  > Forcing rebalance for next forward pass...")
+        main.force_rebalance(QUICK_MODEL_NAME)
+        input_seed = QUICK_SEED + QUICK_NUM_REQUESTS
+        x = generate_batch(conv_next_rand_inputs, QUICK_BATCH_SIZE, input_seed)
+        req_id = main.queue_work(QUICK_MODEL_NAME, x)
+        requests.append(req_id)
+        print(f"  > Queued request {req_id} (seed={input_seed})")
+
+        # Send the new request ID to last rank
+        if last_rank != 0:
+            t = uuids_to_tensor([req_id], 1)
+            dist.send(t, dst=last_rank)
+    elif rank == last_rank:
+        t = torch.zeros(4, dtype=torch.int)
+        dist.recv(t, src=0)
+        decoded = tensor_to_uuids(t)
+        requests.extend([u for u in decoded if u is not None])
+
+    main.run(exit_when_done=True)
+
     # Check results (last rank only)
     if rank == last_rank:
         print(f"\nQuick eval completed: {len(requests)} requests")
