@@ -373,6 +373,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         self._gamma = 0                    # non-improving iteration counter
         self._best_throughput = 0.0        # best 1/max_stage_time seen
         self._best_config: PipelineConfig = None
+        self._at_optimum = False
         self._return_best = True
 
         # Caches
@@ -384,6 +385,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
     def _config_changed(self):
         self._stage_times_cache = None
         self._slowest_stage_times = None
+        self._at_optimum = False
 
     def _children_to_stages(self, config: PipelineConfig) -> list[list[uuid.UUID]]:
         """Reconstruct which children are in which stage from the split_spec."""
@@ -667,9 +669,10 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         should_rebalance = self._should_rebalance(time_logs, old_config)
 
         # If we found the optimum then always return best config
-        if self._return_best:
+        if self._return_best and not self._at_optimum:
             self._return_best = False
             self._config_changed()
+            self._at_optimum = True
             return self._best_config
         # If not, then we only continue if we should rebalance or if it is forced
         if not force_rebalance and not should_rebalance:
