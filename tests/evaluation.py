@@ -74,6 +74,7 @@ def evaluation_main(
     n_microbatches=32,
     optimizer_class=TimeBasedShishaPipelineOptimizer,
     rebalance_interval=None,
+    optimizer_kwargs=None,
 ):
     """Run evaluation: queue generated inputs through the adaptive pipeline.
 
@@ -91,7 +92,10 @@ def evaluation_main(
         store_hashes: If True, compute and store output hashes in the JSON.
         n_microbatches: How many requests to bundle into a forward pass.
         optimizer_class: What pipeline optimiser to use.
+        optimizer_kwargs: Extra keyword arguments forwarded to the optimizer constructor.
     """
+    if optimizer_kwargs is None:
+        optimizer_kwargs = {}
     if store_hashes:
         import hashlib
     global _verbose, _total_requests, _completed_requests, _last_progress_pct
@@ -119,7 +123,8 @@ def evaluation_main(
             print(f"> Adding model {model_name} with load function {load_model.__name__}")
         main.add_model(model_name, load_model(), rand_input(),
                        optimizer_class=optimizer_class,
-                       rebalance_interval=rebalance_interval, n_microbatches=n_microbatches, async_optimization=False)
+                       rebalance_interval=rebalance_interval, n_microbatches=n_microbatches,
+                       async_optimization=False, **optimizer_kwargs)
     if not verbose and is_print_rank:
         print("Models loaded. Running pipeline...")
 
@@ -311,6 +316,12 @@ if __name__ == '__main__':
                         help='Pipeline optimizer class (default: shisha)')
     parser.add_argument('--rebalance-interval', type=int, default=None,
                         help='Check rebalance every N batches (default: None, check every batch)')
+    parser.add_argument('--assignment-choice', choices=['rank_w', 'rank_l'], default=None,
+                        help='Shisha device assignment strategy (default: rank_w)')
+    parser.add_argument('--balance-strategy', choices=['nearest_lightest_fep', 'nearest_fep'], default=None,
+                        help='Shisha balance strategy (default: nearest_lightest_fep)')
+    parser.add_argument('--alpha', type=int, default=None,
+                        help='Shisha patience parameter (default: 10)')
     args = parser.parse_args()
 
     rebalance_interval = args.rebalance_interval
@@ -333,6 +344,15 @@ if __name__ == '__main__':
         backend = "gloo"
     dist.init_process_group(backend=backend)
 
+    # Build optimizer kwargs from CLI args (only include if explicitly set)
+    optimizer_kwargs = {}
+    if args.assignment_choice is not None:
+        optimizer_kwargs['assignment_choice'] = args.assignment_choice
+    if args.balance_strategy is not None:
+        optimizer_kwargs['balance_strategy'] = args.balance_strategy
+    if args.alpha is not None:
+        optimizer_kwargs['alpha'] = args.alpha
+
     evaluation_main(
         num_requests=args.num_requests,
         seed=args.seed,
@@ -344,6 +364,7 @@ if __name__ == '__main__':
         n_microbatches=args.n_microbatches,
         optimizer_class=optimizer_choices[args.optimizer],
         rebalance_interval=rebalance_interval,
+        optimizer_kwargs=optimizer_kwargs,
     )
 
     dist.destroy_process_group()
