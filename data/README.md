@@ -23,3 +23,5 @@
   - `run4.json` — Shisha same as run 3
   - `run5.json` — Greedy, no rebalance interval
   - `run6.json` — Greedy with rebalance interval=5
+  - `run7.json` — Shisha with rank_w assignment, nearest_lightest_fep balance strategy and return to optimum
+
