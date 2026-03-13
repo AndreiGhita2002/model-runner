@@ -70,14 +70,8 @@ def _optimizer_process_worker(
             continue
 
         time_logs, current_config = request
-
-        # Check if we should rebalance
-        if optimizer.should_rebalance(time_logs, current_config):
-            new_config = optimizer.optimize(time_logs, current_config)
-            result_queue.put(new_config)
-        else:
-            # Signal that we checked but no rebalance needed
-            result_queue.put(None)
+        new_config = optimizer.optimize(time_logs, current_config)
+        result_queue.put(new_config)
 
 
 class AdaptivePipeline:
@@ -356,10 +350,9 @@ class AdaptivePipeline:
             with self._force_rebalance_lock:
                 force = self._force_rebalance
                 self._force_rebalance = False
-            if force or self.pipeline_optimizer.should_rebalance(self.time_logs, self.current_config):
-                new_config = self.pipeline_optimizer.optimize(self.time_logs, self.current_config)
-            else:
-                new_config = None
+            new_config = self.pipeline_optimizer.optimize(
+                self.time_logs, self.current_config, force_rebalance=force
+            )
             config_list = [new_config]
         else:
             config_list = [None]
@@ -396,7 +389,9 @@ class AdaptivePipeline:
             if force:
                 # Bypass background process — optimise directly so it takes
                 # effect on the very next forward pass.
-                new_config = self.pipeline_optimizer.optimize(self.time_logs, self.current_config)
+                new_config = self.pipeline_optimizer.optimize(
+                    self.time_logs, self.current_config, force_rebalance=True
+                )
             else:
                 if not self._pending_optimization:
                     self._send_optimization_request()

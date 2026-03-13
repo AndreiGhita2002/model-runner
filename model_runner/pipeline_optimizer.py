@@ -20,24 +20,18 @@ class PipelineConfig:
 class PipelineOptimizer(ABC):
     """Abstract base class for pipeline optimisers.
 
-    ``should_rebalance`` is called every forward pass by the pipeline. The base
-    class tracks a call counter and only delegates to the subclass's
-    ``_should_rebalance`` once every ``rebalance_interval`` calls. This lets
-    timing data accumulate between evaluations without burdening each subclass
-    with interval bookkeeping.
-
-    Subclasses that need to evaluate every forward pass can set
-    ``rebalance_interval=1``.
+    Subclasses implement ``optimize`` which receives timing data and the current
+    config, and returns a new ``PipelineConfig`` if rebalancing is warranted or
+    ``None`` otherwise. The ``force_rebalance`` flag lets callers bypass the
+    subclass's internal rebalance criteria.
     """
 
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
-                 depth: int = 1, rebalance_interval: int = None):
+                 depth: int = 1):
         self.num_stages = num_stages
         self.device_manager = device_manager
         self.root_uuid = root_uuid
         self.depth = depth
-        self.rebalance_interval = rebalance_interval
-        self._call_count = 0
         self.children = self._collect_leaf_children()
 
     def _collect_leaf_children(self) -> list[uuid.UUID]:
@@ -102,58 +96,23 @@ class PipelineOptimizer(ABC):
         return module.get_path()
 
     @abstractmethod
-    def optimize(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig) -> PipelineConfig:
+    def optimize(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig,
+                 force_rebalance: bool = False) -> PipelineConfig | None:
         """
         Optimise pipeline configuration based on timing data.
+
+        Subclasses implement their own rebalance criteria internally.
+        Returns ``None`` if no rebalance is needed.
 
         Args:
             time_logs: Dict mapping TimedModule UUIDs to lists of elapsed times
             old_config: The current pipeline configuration
+            force_rebalance: If True, skip the rebalance check and always optimise.
 
         Returns:
-            New PipelineConfig with optimised split points
+            New PipelineConfig if rebalancing was performed, or None otherwise.
         """
         pass
-
-    @abstractmethod
-    def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
-        """
-        Determine if rebalancing is needed based on timing data.
-
-        Called by ``should_rebalance`` once every ``rebalance_interval`` forward
-        passes. Subclasses implement their rebalancing criteria here.
-
-        Args:
-            time_logs: Dict mapping TimedModule UUIDs to lists of elapsed times
-            current_config: The current pipeline configuration
-
-        Returns:
-            True if the pipeline should be rebalanced
-        """
-        pass
-
-    def should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
-        """
-        Gate rebalancing checks behind ``rebalance_interval``.
-
-        Increments an internal call counter each time it is invoked. Only
-        delegates to ``_should_rebalance`` when the counter reaches
-        ``rebalance_interval``, then resets the counter.
-
-        Args:
-            time_logs: Dict mapping TimedModule UUIDs to lists of elapsed times
-            current_config: The current pipeline configuration
-
-        Returns:
-            True if the pipeline should be rebalanced
-        """
-
-        if self.rebalance_interval is not None:
-            self._call_count += 1
-            if self._call_count < self.rebalance_interval:
-                return False
-            self._call_count = 0
-        return self._should_rebalance(time_logs, current_config)
 
     def initial_setup(self) -> PipelineConfig:
         """Generate a uniform initial split across all ranks.
@@ -196,8 +155,10 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
 
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
                  depth: int = 1, rebalance_threshold: float = 0.1, rebalance_interval: int = 10):
-        super().__init__(num_stages, root_uuid, device_manager, depth=depth, rebalance_interval=rebalance_interval)
+        super().__init__(num_stages, root_uuid, device_manager, depth=depth)
         self.rebalance_threshold = rebalance_threshold
+        self.rebalance_interval = rebalance_interval
+        self._call_count = 0
 
     def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]], current_config: PipelineConfig) -> bool:
         """
@@ -239,18 +200,23 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
 
         return max_change > self.rebalance_threshold
 
-    def optimize(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig) -> PipelineConfig:
+    def optimize(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig,
+                 force_rebalance: bool = False) -> PipelineConfig | None:
         """
         Optimise pipeline configuration based on timing data.
         Uses a greedy algorithm to balance computation time across stages.
 
-        Args:
-            time_logs: Dict mapping TimedModule UUIDs to lists of elapsed times
-            old_config: The current pipeline configuration
-
-        Returns:
-            New PipelineConfig with optimized split points
+        Returns None if no rebalance is needed.
         """
+        # Check rebalance interval gate
+        if not force_rebalance:
+            self._call_count += 1
+            if self._call_count < self.rebalance_interval:
+                return None
+            self._call_count = 0
+            if not self._should_rebalance(time_logs, old_config):
+                return None
+
         if not time_logs:
             return old_config
 
@@ -376,26 +342,48 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  assignment_choice: str = "rank_w",
                  balance_strategy: str = "nearest_lightest_fep",
                  rebalance_interval: int = None):
-
-        super().__init__(num_stages, root_uuid, device_manager, depth=depth, rebalance_interval=rebalance_interval)
+        """
+        Args:
+            num_stages: Number of pipeline stages.
+            root_uuid: UUID of the root TimedModule.
+            device_manager: DeviceManager instance for device enumeration.
+            depth: Depth in the TimedModule hierarchy to collect leaf children at.
+            alpha: Non-improving iteration limit before reverting to the best config.
+            assignment_choice: Strategy for assigning stages to devices.
+                - ``"rank_w"``: Heaviest stage (by parameter count) goes to the fastest device.
+                - ``"rank_l"``: Stage with the most children goes to the fastest device.
+            balance_strategy: Strategy for choosing which stage to move a child toward
+                during online tuning.
+                - ``"nearest_lightest_fep"``: Lightest stage overall, preferring CUDA stages,
+                  breaking ties by proximity to the slowest stage.
+                - ``"nearest_fep"``: Nearest CUDA stage to the slowest; falls back to
+                  nearest stage overall.
+            rebalance_interval: Number of forward passes between rebalance attempts.
+                None means no automatic rebalancing.
+        """
+        super().__init__(num_stages, root_uuid, device_manager, depth=depth)
         self.n = self.device_manager.num_devices()
         self.alpha = alpha
         self.assignment_choice = assignment_choice
         self.balance_strategy = balance_strategy
+        self.rebalance_interval = rebalance_interval
+        self._call_count = 0
 
         # Persistent state for online tuning across optimize() calls
         self._gamma = 0                    # non-improving iteration counter
         self._best_throughput = 0.0        # best 1/max_stage_time seen
+        self._best_config: PipelineConfig = None
+        self._return_best = True
 
         # Caches
         self._stage_times_cache = None
-        self._max_stage_time = None
+        self._slowest_stage_times = None
 
     # ── Helpers ──────────────────────────────────────────────────────────
 
     def _config_changed(self):
         self._stage_times_cache = None
-        self._max_stage_time = None
+        self._slowest_stage_times = None
 
     def _children_to_stages(self, config: PipelineConfig) -> list[list[uuid.UUID]]:
         """Reconstruct which children are in which stage from the split_spec."""
@@ -410,11 +398,11 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
     def _compute_stage_times(self, time_logs: dict[uuid.UUID, list[float]],
                              config: PipelineConfig) -> tuple[list[float], float]:
-        """Compute per-stage times by summing average child times."""
+        """Compute per-stage average times and slowest stage time by summing average child times."""
 
         if self._stage_times_cache is None:
             stages = self._children_to_stages(config)
-            max_stage_time = 0
+            slowest_time = 0
             stage_times = []
             for stage in stages:
                 total = 0.0
@@ -424,13 +412,13 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                         total += sum(times) / len(times)
                 stage_times.append(total)
                 # update max
-                if total > max_stage_time:
-                    max_stage_time = total
+                if total > slowest_time:
+                    slowest_time = total
 
             self._stage_times_cache = stage_times
-            self._max_stage_time = max_stage_time
+            self._slowest_stage_times = slowest_time
 
-        return self._stage_times_cache, self._max_stage_time
+        return self._stage_times_cache, self._slowest_stage_times
 
     def _get_child_weight(self, child_uuid: uuid.UUID) -> int:
         """Return parameter count for a child module (proxy for computational weight)."""
@@ -635,19 +623,21 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
         # TODO: problem with shisha should_rebalance
 
-        stage_times, max_stage_time = self._compute_stage_times(time_logs, current_config)
+        stage_times, slowest_stage_time = self._compute_stage_times(time_logs, current_config)
 
         if any(t == 0 for t in stage_times):
             return True
 
-        throughput = 1.0 / max_stage_time
+        throughput = 1.0 / slowest_stage_time
 
         if self._best_throughput == 0.0:
             self._best_throughput = throughput
             return True
 
         if throughput > self._best_throughput:
+            # Better config found
             self._best_throughput = throughput
+            self._best_config = current_config
             self._gamma = 0
             return True
         else:
@@ -658,9 +648,32 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             self._gamma += 1
             if self._gamma >= self.alpha:
                 # Optimum was probably found
+                self._return_best = True
                 return False
             return True
 
     def optimize(self, time_logs: dict[uuid.UUID, list[float]],
-                 old_config: PipelineConfig) -> PipelineConfig:
+                 old_config: PipelineConfig,
+                 force_rebalance: bool = False) -> PipelineConfig | None:
+        # Check rebalance interval
+        if not force_rebalance and self.rebalance_interval is not None:
+            self._call_count += 1
+            if self._call_count < self.rebalance_interval:
+                return None
+            self._call_count = 0
+
+        # Always call _should_rebalance to update internal state (_gamma, _best_throughput),
+        # but only gate on its result when not forced.
+        should_rebalance = self._should_rebalance(time_logs, old_config)
+
+        # If we found the optimum then always return best config
+        if self._return_best:
+            self._return_best = False
+            self._config_changed()
+            return self._best_config
+        # If not, then we only continue if we should rebalance or if it is forced
+        if not force_rebalance and not should_rebalance:
+            return None
+
+        # Calculate new config
         return self._online_tuning(time_logs, old_config)
