@@ -617,11 +617,6 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                     best_idx = i
             return best_idx
 
-    # ── Public interface ─────────────────────────────────────────────────
-
-    def initial_setup(self) -> PipelineConfig:
-        return self._seed_generation()
-
     def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]],
                           current_config: PipelineConfig) -> bool:
         if not time_logs:
@@ -660,6 +655,20 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                 self._gamma = 0
                 return False
             return True
+
+    def should_rebalance(self, time_logs: dict[uuid.UUID, list[float]],
+                         current_config: PipelineConfig) -> bool:
+        self._call_count += 1
+        if self._call_count == self.rebalance_interval:
+            self._call_count = 0
+            return self._should_rebalance(time_logs, current_config)
+        else:
+            return False
+
+    # ── Public interface ─────────────────────────────────────────────────
+
+    def initial_setup(self) -> PipelineConfig:
+        return self._seed_generation()
 
     def optimize(self, time_logs: dict[uuid.UUID, list[float]],
                  old_config: PipelineConfig,

@@ -347,9 +347,11 @@ class AdaptivePipeline:
 
         # Rank 0 decides and computes; others receive via broadcast
         if dist.get_rank() == 0:
+            # getting the value of force rebalance
             with self._force_rebalance_lock:
                 force = self._force_rebalance
                 self._force_rebalance = False
+            # computing the new config
             new_config = self.pipeline_optimizer.optimize(
                 self.time_logs, self.current_config, force_rebalance=force
             )
