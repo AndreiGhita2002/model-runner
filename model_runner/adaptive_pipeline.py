@@ -102,7 +102,7 @@ class AdaptivePipeline:
             device_manager: DeviceManager,
             example_input: Any,
             optimizer_class: type[PipelineOptimizer] = TimeBasedShishaPipelineOptimizer,
-            max_log_entries: int = 5,
+            max_log_entries: int = 20, #todo: used to be 5; should ideally be a running average or smth
             n_microbatches: int = 4,
             initial_pipeline_config: PipelineConfig | None = None,
             verbose: bool = False,
