@@ -6,14 +6,42 @@ import uuid
 from typing import Optional, Any
 
 import torch
+import torch.fx as fx
 
 from torch.distributed.pipelining import pipeline, PipelineStage, ScheduleGPipe, SplitPoint, Pipe
+from torch.distributed.pipelining._IR import annotate_split_points
 import torch.distributed as dist
 from torch.distributed.pipelining.schedules import PipelineScheduleSingle, PipelineScheduleMulti
 
 from .timed_module import TimedModule, timed_module_registry, timed_module_hierarchy
 from .device_manager import DeviceManager
 from .pipeline_optimizer import PipelineOptimizer, PipelineConfig, TimeBasedShishaPipelineOptimizer
+
+# The ATen op that pipe_split() compiles to in the FX graph
+_aten_pipe_split = torch.ops.pippy._pipe_split.default
+
+
+def _make_split_policy(keep_indices: set[int]):
+    """Create a split_policy that keeps only pipe_split nodes at the given indices.
+
+    The cached trace contains a pipe_split node before every child (except the first).
+    This policy removes the ones not needed for the current split_spec.
+
+    Args:
+        keep_indices: Set of pipe_split indices to keep (0-based, in child order).
+    """
+    def policy(traced: fx.GraphModule) -> fx.GraphModule:
+        pipe_splits = [
+            node for node in traced.graph.nodes
+            if node.op == "call_function" and node.target == _aten_pipe_split
+        ]
+        for i, node in enumerate(pipe_splits):
+            if i not in keep_indices:
+                traced.graph.erase_node(node)
+        traced.graph.lint()
+        traced.recompile()
+        return traced
+    return policy
 
 
 class _ContiguousStageWrapper(torch.nn.Module):
@@ -156,6 +184,12 @@ class AdaptivePipeline:
         self.pipe = None
         self.stage = None
         self.scheduler = None
+
+        # Cached FX trace: trace once with all possible split points,
+        # then reuse on subsequent rebuilds with a split_policy that
+        # removes unwanted pipe_split nodes.
+        self._cached_export = None
+        self._cached_children = None  # children list at time of caching (for invalidation)
 
         # Force-rebalance flag (set from Flask thread, read from main loop)
         self._force_rebalance: bool = False
@@ -414,6 +448,65 @@ class AdaptivePipeline:
         rebalance_end = time.perf_counter()
         return {"start": rebalance_start, "end": rebalance_end, "did_rebalance": did_rebalance}
 
+    def _trace_and_cache(self):
+        """Trace the model once with all possible split points and cache the result.
+
+        Creates a split_spec with every child (except the first) as a BEGINNING
+        split point, traces the model, and stores the ExportedProgram. Subsequent
+        rebuilds use a split_policy to remove unwanted pipe_split nodes from
+        the cached trace instead of retracing.
+        """
+        children = self.pipeline_optimizer.children
+
+        # Build max split spec: every child except first gets a split point
+        max_split_spec = {}
+        for i in range(1, len(children)):
+            path = self.pipeline_optimizer._uuid_to_path(children[i])
+            max_split_spec[path] = SplitPoint.BEGINNING
+
+        # Annotate all split points, trace, then clean up annotations
+        self._cleanup_split_annotations()
+        annotate_split_points(self.original_model, max_split_spec)
+        self._cached_export = Pipe._trace_with_export(
+            self.original_model, (self.example_input,)
+        )
+        self._cleanup_split_annotations()
+
+        # Remember which children this cache was built for
+        self._cached_children = list(children)
+
+        self._log(f"[rank:{dist.get_rank()}] cached FX trace with {len(max_split_spec)} split points")
+
+    def _build_pipe_from_cache(self, config: PipelineConfig) -> Pipe:
+        """Build a Pipe from the cached trace using a split_policy.
+
+        Determines which pipe_split nodes to keep based on the config's split_spec,
+        then calls Pipe._from_traced with a policy that removes the rest.
+        """
+        children = self.pipeline_optimizer.children
+
+        # Map child paths to their index in the children list
+        child_path_to_idx = {}
+        for i, child_uuid in enumerate(children):
+            path = self.pipeline_optimizer._uuid_to_path(child_uuid)
+            child_path_to_idx[path] = i
+
+        # Determine which pipe_split indices to keep.
+        # pipe_split #(i-1) corresponds to "before children[i]" (since children[0] has no split).
+        keep_indices = set()
+        for path, sp in config.split_spec.items():
+            if sp == SplitPoint.BEGINNING and path in child_path_to_idx:
+                child_idx = child_path_to_idx[path]
+                if child_idx > 0:
+                    keep_indices.add(child_idx - 1)
+
+        policy = _make_split_policy(keep_indices)
+        return Pipe._from_traced(
+            self.original_model,
+            self._cached_export,
+            split_policy=policy,
+        )
+
     def _cleanup_split_annotations(self):
         """Remove stale ``pipe_split()`` annotations left by previous ``pipeline()`` calls.
 
@@ -450,14 +543,23 @@ class AdaptivePipeline:
         self._log(f"[rank:{dist.get_rank()}] rebuilding pipeline...")
         self.current_config = config
 
-        self._cleanup_split_annotations()
+        t0 = time.perf_counter()
 
-        # Create pipe (split_spec is already path-based)
-        self.pipe = pipeline(
-            module=self.original_model,
-            mb_args=(self.example_input,),
-            split_spec=config.split_spec
-        )
+        # Invalidate cache if children have changed (e.g. depth reconfiguration)
+        children = self.pipeline_optimizer.children
+        if self._cached_export is not None and self._cached_children != list(children):
+            self._log("Cache invalidated: children changed")
+            self._cached_export = None
+
+        # Trace and cache on first call (or after invalidation)
+        if self._cached_export is None:
+            self._trace_and_cache()
+
+        t1 = time.perf_counter()
+
+        # Build pipe from cached trace
+        self.pipe = self._build_pipe_from_cache(config)
+        t2 = time.perf_counter()
 
         # Validate: num_stages must equal world_size for pipeline parallelism
         world_size = dist.get_world_size()
@@ -466,15 +568,13 @@ class AdaptivePipeline:
                 f"Warning: split produced {self.pipe.num_stages} stage(s) instead of "
                 f"{world_size}. Falling back to depth-1 (top-level) split."
             )
-            self._cleanup_split_annotations()
+            # Safe config changes children → invalidate cache
             config = self.pipeline_optimizer.generate_safe_config()
             self.current_config = config
-
-            self.pipe = pipeline(
-                module=self.original_model,
-                mb_args=(self.example_input,),
-                split_spec=config.split_spec
-            )
+            self._cached_export = None
+            self._trace_and_cache()
+            self.pipe = self._build_pipe_from_cache(config)
+            t2 = time.perf_counter()
 
         if self.pipe.num_stages != world_size:
             raise RuntimeError(
@@ -488,18 +588,27 @@ class AdaptivePipeline:
         assert rank in config.device_mapping, f"Rank {rank} not in device_mapping: {config.device_mapping}"
 
         stage_module = self.pipe.get_stage_module(rank)
+        t3 = time.perf_counter()
         self.stage = PipelineStage(
             _ContiguousStageWrapper(stage_module),
             stage_index=rank,
             num_stages=self.pipe.num_stages,
             device=config.device_mapping[rank]
         )
+        t4 = time.perf_counter()
 
         # Create scheduler
         self.scheduler = ScheduleGPipe(self.stage, n_microbatches=self.n_microbatches)
+        t5 = time.perf_counter()
 
         # Cache which children belong to this rank's stage for update_logs()
         self._local_children = self._compute_local_stage_children(config)
+
+        self._log(
+            f"[rank:{rank}] rebuild timing: cache={t1-t0:.4f}s  "
+            f"pipe_from_cache={t2-t1:.4f}s  PipelineStage={t4-t3:.4f}s  "
+            f"ScheduleGPipe={t5-t4:.4f}s  total={t5-t0:.4f}s"
+        )
 
     def _compute_local_stage_children(self, config: PipelineConfig) -> list[uuid.UUID]:
         """Return the child UUIDs that belong to this rank's pipeline stage."""
