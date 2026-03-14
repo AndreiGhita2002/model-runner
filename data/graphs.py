@@ -27,12 +27,42 @@ def _get_auto_color(index: int) -> str:
     return cmap((index - len(AUTO_COLORS)) / 20)
 
 
-def get_requests_per_second(dataset: dict) -> dict[str, float]:
-    """Return per-model requests per second."""
-    return {
-        model_name: data["requests_per_second"]
-        for model_name, data in dataset["results"].items()
-    }
+def get_requests_per_second(dataset: dict, include_rebalance: bool = False) -> dict[str, float]:
+    """Return per-model requests per second.
+
+    If include_rebalance is True, recompute RPS using forward + rebalance time.
+    """
+    if not include_rebalance:
+        return {
+            model_name: data["requests_per_second"]
+            for model_name, data in dataset["results"].items()
+        }
+
+    result = {}
+    for model_name, data in dataset["results"].items():
+        batches = data.get("batches", [])
+        timed = [b for b in batches if "timing" in b]
+        if len(timed) < 1:
+            result[model_name] = 0.0
+            continue
+        total_time = sum(
+            (b["timing"]["end"] - b["timing"]["start"])
+            + (b.get("rebalance", {}).get("end", 0) - b.get("rebalance", {}).get("start", 0))
+            for b in timed
+        )
+        result[model_name] = len(timed) / total_time if total_time > 0 else 0.0
+    return result
+
+
+def _batch_elapsed(batch: dict, include_rebalance: bool = False) -> float:
+    """Compute elapsed time for a batch, optionally including rebalance time."""
+    t = batch["timing"]
+    elapsed = t["end"] - t["start"]
+    if include_rebalance:
+        r = batch.get("rebalance", {})
+        if r.get("start") is not None and r.get("end") is not None:
+            elapsed += r["end"] - r["start"]
+    return elapsed
 
 
 def _get_rebalance_events(batches: list[dict]) -> list[int]:
@@ -87,12 +117,14 @@ def plot_requests_per_second(
     baselines: dict[str, dict],
     runs: dict[str, dict],
     output_path: Path | None = None,
+    include_rebalance: bool = False,
 ):
     # Ordered: baselines first (fixed order), then runs (alphabetical)
     all_datasets = list(baselines.items()) + list(runs.items())
     dataset_names = [name for name, _ in all_datasets]
 
-    all_rps = {name: get_requests_per_second(ds) for name, ds in all_datasets}
+    all_rps = {name: get_requests_per_second(ds, include_rebalance=include_rebalance)
+               for name, ds in all_datasets}
 
     model_names = _collect_model_names(baselines, runs)
     x = np.arange(len(model_names))
@@ -127,6 +159,7 @@ def plot_batch_times(
     runs: dict[str, dict],
     output_path: Path | None = None,
     show_rebalance: bool = False,
+    include_rebalance: bool = False,
 ):
     """Plot per-batch elapsed time for each model, one subplot per model."""
     model_names = _collect_model_names(baselines, runs)
@@ -161,7 +194,7 @@ def plot_batch_times(
             batches = ds["results"][model].get("batches", [])
             if not batches:
                 continue
-            elapsed = [b["timing"]["end"] - b["timing"]["start"] for b in batches if "timing" in b]
+            elapsed = [_batch_elapsed(b, include_rebalance) for b in batches if "timing" in b]
             if not elapsed:
                 continue
             mean_elapsed = sum(elapsed) / len(elapsed)
@@ -174,7 +207,7 @@ def plot_batch_times(
             batches = ds["results"][model].get("batches", [])
             if not batches:
                 continue
-            elapsed = [b["timing"]["end"] - b["timing"]["start"] for b in batches if "timing" in b]
+            elapsed = [_batch_elapsed(b, include_rebalance) for b in batches if "timing" in b]
             if not elapsed:
                 continue
             color = colors[ds_name]
@@ -231,7 +264,11 @@ if __name__ == "__main__":
                         help="Output image path (e.g. graphs.png). Displays interactively if not set.")
     parser.add_argument("--rebalance", action="store_true", default=False,
                         help="Show vertical rebalance event lines on batch time plots")
+    parser.add_argument("--no-rebalance-time", action="store_true", default=False,
+                        help="Exclude rebalance time from elapsed time calculations (default: include it)")
     args = parser.parse_args()
+
+    include_rebalance = not args.no_rebalance_time
 
     baselines = load_runs(args.baselines_dir)
     runs = load_runs(args.runs_dir)
@@ -242,9 +279,11 @@ if __name__ == "__main__":
 
     output = args.output
     if output:
-        plot_requests_per_second(baselines, runs, output)
+        plot_requests_per_second(baselines, runs, output, include_rebalance=include_rebalance)
         batch_times_path = output.with_name(f"{output.stem}_batch_times{output.suffix}")
-        plot_batch_times(baselines, runs, batch_times_path, show_rebalance=args.rebalance)
+        plot_batch_times(baselines, runs, batch_times_path, show_rebalance=args.rebalance,
+                         include_rebalance=include_rebalance)
     else:
-        plot_requests_per_second(baselines, runs)
-        plot_batch_times(baselines, runs, show_rebalance=args.rebalance)
+        plot_requests_per_second(baselines, runs, include_rebalance=include_rebalance)
+        plot_batch_times(baselines, runs, show_rebalance=args.rebalance,
+                         include_rebalance=include_rebalance)

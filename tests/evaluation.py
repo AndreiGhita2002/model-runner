@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 import uuid
@@ -168,6 +169,14 @@ def evaluation_main(
 
     # Build output JSON and optionally compare against baseline (last rank only)
     if rank == last_rank:
+        # Get git commit hash for reproducibility
+        try:
+            git_hash = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True
+            ).strip()
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            git_hash = None
+
         meta = {
             "mode": "adaptive",
             "num_requests": num_requests,
@@ -178,6 +187,7 @@ def evaluation_main(
             "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
             "world_size": dist.get_world_size(),
             "clock": "time.perf_counter (cross-rank)",
+            "git_commit": git_hash,
             "argv": sys.argv,
         }
         results = {}
