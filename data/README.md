@@ -16,12 +16,12 @@
   - `tensor_parallel.json` — Single-process inference with 32 OMP threads (intra-op parallelism).
   - `gpipe_NxM.json` — Static GPipe pipeline with N ranks and M OMP threads per rank (N*M=32). Explores the tradeoff between pipeline parallelism and intra-op parallelism. `gpipe_32x1` is missing RegNet due to FX tracing failures at high rank counts.
 
-- **runs/** — Adaptive pipeline evaluation runs on server `fisherman`. All use 4 ranks, 8 OMP threads, batch_size=1, n_microbatches=32, 5000 requests per model, seed=37.
-  - `run1.json` — Shisha with rebalance interval=10
-  - `run2.json` — Shisha same as run1
-  - `run3.json` — Shisha without the rebalance interval
-  - `run4.json` — Shisha same as run 3
-  - `run5.json` — Greedy, no rebalance interval
-  - `run6.json` — Greedy with rebalance interval=5
-  - `run7.json` — Shisha with rank_w assignment, nearest_lightest_fep balance strategy and return to optimum
-
+- **runs/** – Adaptive pipeline evaluation runs on server `fisherman`. All use 4 ranks, 8 OMP threads, batch_size=1, n_microbatches=32, 5000 requests per model, seed=37.
+  - `run1.json` – Shisha with rebalance interval=10
+  - `run2.json` – Shisha same as run1
+  - `run3.json` – Shisha without the rebalance interval
+  - `run4.json` – Shisha same as run 3
+  - `run5.json` – Greedy, no rebalance interval
+  - `run6.json` – Greedy with rebalance interval=5
+  - `run7.json` – Shisha with rank_w assignment, nearest_lightest_fep balance strategy and return to optimum
+  - `run8.json` –
