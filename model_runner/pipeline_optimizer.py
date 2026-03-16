@@ -388,7 +388,13 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
     # ── Helpers ──────────────────────────────────────────────────────────
 
-    def _config_changed(self):
+    def _reset_exploration(self):
+        """Clear cached stage times and re-enable exploration.
+
+        Called after any config change (online tuning move, revert to best, etc.)
+        so that stage times are recomputed on the next call and the optimizer
+        can resume exploring even if it had previously reached an optimum.
+        """
         self._stage_times_cache = None
         self._slowest_stage_times = None
         self._at_optimum = False
@@ -555,7 +561,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             if stage_idx > 0 and stage_uuids:
                 new_split_spec[self._uuid_to_path(stage_uuids[0])] = SplitPoint.BEGINNING
 
-        self._config_changed()
+        self._reset_exploration()
 
         return PipelineConfig(split_spec=new_split_spec, device_mapping=old_config.device_mapping)
 
@@ -627,8 +633,6 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         if not time_logs:
             return True
 
-        # TODO: problem with shisha should_rebalance
-
         stage_times, slowest_stage_time = self._compute_stage_times(time_logs, current_config)
 
         if any(t == 0 for t in stage_times):
@@ -692,14 +696,16 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         # If we found the optimum then always return best config
         if self._return_best and not self._at_optimum:
             self._return_best = False
-            self._config_changed()
-            if self._slowest_stage_offset >= self.num_stages / 2:
-                # All stages have been tried — true optimum.
-                # _at_optimum blocks future optimisation until cleared by
-                # _config_changed() (e.g. via force rebalance or pipeline rebuild).
+            self._reset_exploration()
+            if self._slowest_stage_offset > 1:
+                # Only explore slowest (0) and 2nd slowest (1).
+                # If neither yields improvement, stop.
                 self._at_optimum = True
-                self._slowest_stage_offset = self.num_stages - 1
+                self._slowest_stage_offset = 1
             return self._best_config
+        # If at optimum, no further exploration
+        if self._at_optimum:
+            return None
         # If not, then we only continue if we should rebalance or if it is forced
         if not force_rebalance and not should_rebalance:
             return None

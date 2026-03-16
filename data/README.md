@@ -31,4 +31,4 @@
   - `run12.json` – multiple online tuning steps per rebalance 
   - `run13.json` – same as run 12 but with `_slowest_stage_offset >= num_stages / 2`
   - `run14.json` – one tuning step per rebalance 
-  - `run15.json` – NOT RUN – should have multiple tuning steps but stop at num_stages - 1 (only look at second slowest stage then stop exploration)
+  - `run15.json` – NOT RUN YET – should have multiple tuning steps but stop at num_stages - 1 (only look at second-slowest stage then stop exploration)
