@@ -693,7 +693,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         if self._return_best and not self._at_optimum:
             self._return_best = False
             self._config_changed()
-            if self._slowest_stage_offset >= self.num_stages:
+            if self._slowest_stage_offset >= self.num_stages / 2:
                 # All stages have been tried — true optimum.
                 # _at_optimum blocks future optimisation until cleared by
                 # _config_changed() (e.g. via force rebalance or pipeline rebuild).
