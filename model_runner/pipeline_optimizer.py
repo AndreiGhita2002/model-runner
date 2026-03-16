@@ -633,7 +633,6 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
         # Better config found; reset gamma
         if throughput > self._best_throughput:
-            #TODO(idea): maybe only reset gamma if tolerance% better
             self._best_throughput = throughput
             self._best_config = current_config
             self._deep_gamma = 0
