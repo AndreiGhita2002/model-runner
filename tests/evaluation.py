@@ -208,6 +208,7 @@ def evaluation_main(
                         "start": reb["start"],
                         "end": reb["end"],
                         "did_rebalance": reb["did_rebalance"],
+                        "at_optimum": reb.get("at_optimum", False),
                     }
 
                 if store_hashes:
@@ -328,12 +329,10 @@ if __name__ == '__main__':
                         help='Check rebalance every N batches (default: None, check every batch)')
     parser.add_argument('--assignment-choice', choices=['rank_w', 'rank_l'], default=None,
                         help='Shisha device assignment strategy (default: rank_w)')
-    parser.add_argument('--balance-strategy', choices=['nearest_lightest_fep', 'nearest_fep'], default=None,
-                        help='Shisha balance strategy (default: nearest_lightest_fep)')
     parser.add_argument('--alpha', type=int, default=None,
                         help='Shisha patience parameter (default: 10)')
-    parser.add_argument('--tuning-steps', type=int, default=None,
-                        help='Online tuning iterations per rebalance (default: 3)')
+    parser.add_argument('--tolerance', type=float, default=None,
+                        help='Shisha throughput tolerance fraction (default: 0.05)')
     args = parser.parse_args()
 
     rebalance_interval = args.rebalance_interval
@@ -360,12 +359,10 @@ if __name__ == '__main__':
     optimizer_kwargs = {}
     if args.assignment_choice is not None:
         optimizer_kwargs['assignment_choice'] = args.assignment_choice
-    if args.balance_strategy is not None:
-        optimizer_kwargs['balance_strategy'] = args.balance_strategy
     if args.alpha is not None:
         optimizer_kwargs['alpha'] = args.alpha
-    if args.tuning_steps is not None:
-        optimizer_kwargs['tuning_steps'] = args.tuning_steps
+    if args.tolerance is not None:
+        optimizer_kwargs['tolerance'] = args.tolerance
 
     evaluation_main(
         num_requests=args.num_requests,

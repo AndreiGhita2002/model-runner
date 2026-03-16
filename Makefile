@@ -10,15 +10,13 @@ N_MICROBATCHES ?= 32  # requests grouped per forward pass
 OPTIMIZER ?= shisha
 REBALANCE_INTERVAL ?= 10
 ASSIGNMENT_CHOICE ?=
-BALANCE_STRATEGY ?=
 ALPHA ?=
-TUNING_STEPS ?=
+TOLERANCE ?=
 COMMON_ARGS ?= -n $(REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES) --optimizer $(OPTIMIZER) \
 	$(if $(REBALANCE_INTERVAL),--rebalance-interval $(REBALANCE_INTERVAL)) \
 	$(if $(ASSIGNMENT_CHOICE),--assignment-choice $(ASSIGNMENT_CHOICE)) \
-	$(if $(BALANCE_STRATEGY),--balance-strategy $(BALANCE_STRATEGY)) \
 	$(if $(ALPHA),--alpha $(ALPHA)) \
-	$(if $(TUNING_STEPS),--tuning-steps $(TUNING_STEPS))
+	$(if $(TOLERANCE),--tolerance $(TOLERANCE))
 BASELINE_ARGS ?= -n $(BASELINE_REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES)
 BASELINES_DIR ?= ./data/baselines
 RUNS_DIR ?= ./data/runs

@@ -403,7 +403,9 @@ class AdaptivePipeline:
             self.rebuild_pipeline(new_config)
 
         rebalance_end = time.perf_counter()
-        return {"start": rebalance_start, "end": rebalance_end, "did_rebalance": did_rebalance}
+        at_optimum = self.pipeline_optimizer.at_optimum if dist.get_rank() == 0 else False
+        return {"start": rebalance_start, "end": rebalance_end,
+                "did_rebalance": did_rebalance, "at_optimum": at_optimum}
 
     def _forward_async_optimization(self) -> dict[str, Any]:
         """Submit timing data to the background optimiser and apply any ready result.
@@ -446,7 +448,9 @@ class AdaptivePipeline:
             self.rebuild_pipeline(new_config)
 
         rebalance_end = time.perf_counter()
-        return {"start": rebalance_start, "end": rebalance_end, "did_rebalance": did_rebalance}
+        at_optimum = self.pipeline_optimizer.at_optimum if dist.get_rank() == 0 else False
+        return {"start": rebalance_start, "end": rebalance_end,
+                "did_rebalance": did_rebalance, "at_optimum": at_optimum}
 
     def _trace_and_cache(self):
         """Trace the model once with all possible split points and cache the result.

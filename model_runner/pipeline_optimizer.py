@@ -10,6 +10,29 @@ import torch
 from .timed_module import timed_module_hierarchy, timed_module_registry
 from .device_manager import DeviceManager
 
+def nth_largest_index(arr: list, n: int):
+    """
+    Returns the index of the nth largest element in arr (0-indexed).
+    n=0 returns the index of the largest element, n=1 the second largest, etc.
+    Uses the Quickselect algorithm — O(n) average time.
+    """
+    if not 0 <= n < len(arr):
+        raise ValueError(f"n={n} is out of range for list of length {len(arr)}")
+
+    def select(pairs, k):
+        pivot_val = pairs[0][1]
+        low  = [(i, v) for i, v in pairs if v <  pivot_val]
+        mid  = [(i, v) for i, v in pairs if v == pivot_val]
+        high = [(i, v) for i, v in pairs if v >  pivot_val]
+        if k <= len(low):
+            return select(low, k)
+        elif k <= len(low) + len(mid):
+            return mid[0][0]
+        else:
+            return select(high, k - len(low) - len(mid))
+
+    return select(list(enumerate(arr)), len(arr) - n)
+
 
 @dataclass
 class PipelineConfig:
@@ -86,6 +109,11 @@ class PipelineOptimizer(ABC):
         """
         self.reconfigure_depth(1)
         return self.initial_setup()
+
+    @property
+    def at_optimum(self) -> bool:
+        """Whether the optimizer believes it has found the best config."""
+        return False
 
     @staticmethod
     def _uuid_to_path(module_uuid: uuid.UUID) -> str:
@@ -338,66 +366,67 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
                  depth: int = 1,
-                 alpha: int = 10,
+                 deep_alpha: int = 5,
+                 sibling_alpha: int = 2,
                  assignment_choice: str = "rank_w",
-                 balance_strategy: str = "nearest_lightest_fep",
                  rebalance_interval: int = None,
-                 tuning_steps: int = 1):
+                 tolerance: float = 0.05):
         """
         Args:
             num_stages: Number of pipeline stages.
             root_uuid: UUID of the root TimedModule.
             device_manager: DeviceManager instance for device enumeration.
             depth: Depth in the TimedModule hierarchy to collect leaf children at.
-            alpha: Non-improving iteration limit before reverting to the best config.
+            deep_alpha: Non-improving iteration limit for a single stage direction.
+                When deep_alpha consecutive iterations fail to improve throughput,
+                the optimizer stops exploring the current stage and moves on to the
+                next slowest stage (increments sibling_gamma).
+            sibling_alpha: Number of different stages to try before giving up.
+                After exhausting deep_alpha attempts on sibling_alpha different
+                stages, the optimizer declares an optimum and reverts to best config.
             assignment_choice: Strategy for assigning stages to devices.
                 - ``"rank_w"``: Heaviest stage (by parameter count) goes to the fastest device.
                 - ``"rank_l"``: Stage with the most children goes to the fastest device.
-            balance_strategy: Strategy for choosing which stage to move a child toward
-                during online tuning.
-                - ``"nearest_lightest_fep"``: Lightest stage overall, preferring CUDA stages,
-                  breaking ties by proximity to the slowest stage.
-                - ``"nearest_fep"``: Nearest CUDA stage to the slowest; falls back to
-                  nearest stage overall.
             rebalance_interval: Number of forward passes between rebalance attempts.
                 None means no automatic rebalancing.
-            tuning_steps: Number of online tuning iterations to run per rebalance.
-                Multiple steps are computed virtually (using the same timing data)
-                before a single pipeline rebuild, reducing rebuild overhead.
+            tolerance: Fraction of best throughput that a new config can be worse
+                by without counting as a regression. Doubled when at optimum to
+                avoid restarting exploration on noise.
         """
         super().__init__(num_stages, root_uuid, device_manager, depth=depth)
-        self.n = self.device_manager.num_devices()
-        self.alpha = alpha
+        self.tolerance = tolerance
+        self.deep_alpha = deep_alpha
+        self.sibling_alpha = min(sibling_alpha, num_stages)
         self.assignment_choice = assignment_choice
-        self.balance_strategy = balance_strategy
         self.rebalance_interval = rebalance_interval
-        self.tuning_steps = tuning_steps
         self._call_count = 0
 
         # Persistent state for online tuning across optimize() calls
-        self._gamma = 0                    # non-improving iteration counter
+        self._deep_gamma = 0                    # non-improving iteration counter
         self._best_throughput = 0.0        # best 1/max_stage_time seen
         self._best_config: PipelineConfig = None
         self._at_optimum = False
-        self._return_best = True
-        self._slowest_stage_offset = 0
+        self._return_best = False
+        self._sibling_gamma = 0
 
         # Caches
         self._stage_times_cache = None
         self._slowest_stage_times = None
 
+    @property
+    def at_optimum(self) -> bool:
+        return self._at_optimum
+
     # ── Helpers ──────────────────────────────────────────────────────────
 
-    def _reset_exploration(self):
-        """Clear cached stage times and re-enable exploration.
+    def _reset_stage_caches(self):
+        """Clear cached stage times so they are recomputed on the next call.
 
         Called after any config change (online tuning move, revert to best, etc.)
-        so that stage times are recomputed on the next call and the optimizer
-        can resume exploring even if it had previously reached an optimum.
+        since the stage layout has changed and cached times are stale.
         """
         self._stage_times_cache = None
         self._slowest_stage_times = None
-        self._at_optimum = False
 
     def _children_to_stages(self, config: PipelineConfig) -> list[list[uuid.UUID]]:
         """Reconstruct which children are in which stage from the split_spec."""
@@ -517,43 +546,43 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
     # ── Online Tuning (Algorithm 2) ──────────────────────────────────────
 
     def _online_tuning(self, time_logs: dict[uuid.UUID, list[float]],
-                       old_config: PipelineConfig) -> PipelineConfig:
+                       old_config: PipelineConfig) -> PipelineConfig | None:
         """One iteration of online tuning: move one child from the slowest stage."""
         stage_times, _ = self._compute_stage_times(time_logs, old_config)
         stages = self._children_to_stages(old_config)
 
-        # Finding the slowest stage (offset cycles through stages by slowness rank)
-        ranked_stages = sorted(range(len(stage_times)), key=lambda i: stage_times[i], reverse=True)
-        offset = min(self._slowest_stage_offset, len(ranked_stages) - 1)
-        slowest_idx = ranked_stages[offset]
+        # Selecting the nth slowest stage, depending on the current value of sibling gamma
+        selected_idx = nth_largest_index(stage_times, self._sibling_gamma)
 
         # Can't move if slowest stage has only 1 child
-        if len(stages[slowest_idx]) <= 1:
-            return old_config
+        if len(stages[selected_idx]) <= 1:
+            self._sibling_gamma += 1 # move to the next stage
+            self._deep_gamma = 0
+            return None
 
         # Find target stage
-        target_idx = self._find_target_stage(stage_times, stages, old_config, slowest_idx)
+        target_idx = self._find_target_stage(stage_times, selected_idx)
 
-        if target_idx is None or target_idx == slowest_idx:
-            return old_config
+        if target_idx is None or target_idx == selected_idx:
+            return None
 
-        # If target is non-adjacent, step toward it
-        if target_idx < slowest_idx:
-            adjacent_idx = slowest_idx - 1
-        else:
-            adjacent_idx = slowest_idx + 1
-
-        # Move one child from slowest to adjacent (in the direction of target)
-        if adjacent_idx < slowest_idx:
+        # target is to the left of selected
+        if target_idx < selected_idx:
+            # step towards it
+            adjacent_idx = selected_idx - 1
             # Move first child of slowest to end of adjacent (left neighbour)
-            child_to_move = stages[slowest_idx][0]
+            child_to_move = stages[selected_idx][0]
             stages[adjacent_idx].append(child_to_move)
-            stages[slowest_idx] = stages[slowest_idx][1:]
+            stages[selected_idx] = stages[selected_idx][1:]
+
+        # target is to the right of selected
         else:
+            # same but in reverse
+            adjacent_idx = selected_idx + 1
             # Move last child of slowest to beginning of adjacent (right neighbour)
-            child_to_move = stages[slowest_idx][-1]
+            child_to_move = stages[selected_idx][-1]
             stages[adjacent_idx].insert(0, child_to_move)
-            stages[slowest_idx] = stages[slowest_idx][:-1]
+            stages[selected_idx] = stages[selected_idx][:-1]
 
         # Build new split_spec from modified stages
         new_split_spec: dict[str, SplitPoint] = {}
@@ -561,72 +590,27 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             if stage_idx > 0 and stage_uuids:
                 new_split_spec[self._uuid_to_path(stage_uuids[0])] = SplitPoint.BEGINNING
 
-        self._reset_exploration()
+        self._reset_stage_caches()
 
         return PipelineConfig(split_spec=new_split_spec, device_mapping=old_config.device_mapping)
 
-    def _find_target_stage(self, stage_times: list[float], stages: list[list[uuid.UUID]],
-                           config: PipelineConfig, slowest_idx: int) -> int | None:
-        """Find the target stage to move a child toward, per balance_strategy."""
+    def _find_target_stage(self, stage_times: list[float],
+                           slowest_idx: int) -> int | None:
+        """Find the lightest stage to move a child toward, breaking ties by proximity."""
         num_stages = len(stage_times)
         if num_stages <= 1:
             return None
 
-        if self.balance_strategy == "nearest_lightest_fep":
-            # Among all stages != slowest, find one with the lowest time,
-            # preferring CUDA ("FEP") stages, breaking ties by proximity.
-            cuda_candidates = []
-            all_candidates = []
-            for i in range(num_stages):
-                if i == slowest_idx:
-                    continue
-                device = config.device_mapping.get(i)
-                is_cuda = device is not None and device.type == "cuda"
-                proximity = abs(i - slowest_idx)
-                entry = (stage_times[i], proximity, i)
-                all_candidates.append(entry)
-                if is_cuda:
-                    cuda_candidates.append(entry)
-
-            candidates = cuda_candidates if cuda_candidates else all_candidates
-            if not candidates:
-                return None
-            # Sort by (time, proximity) and pick best
-            candidates.sort(key=lambda e: (e[0], e[1]))
-            return candidates[0][2]
-
-        elif self.balance_strategy == "nearest_fep":
-            # Nearest CUDA stage; fallback to nearest overall.
-            cuda_candidates = []
-            all_candidates = []
-            for i in range(num_stages):
-                if i == slowest_idx:
-                    continue
-                device = config.device_mapping.get(i)
-                is_cuda = device is not None and device.type == "cuda"
-                proximity = abs(i - slowest_idx)
-                entry = (proximity, i)
-                all_candidates.append(entry)
-                if is_cuda:
-                    cuda_candidates.append(entry)
-
-            candidates = cuda_candidates if cuda_candidates else all_candidates
-            if not candidates:
-                return None
-            candidates.sort()
-            return candidates[0][1]
-
-        else:
-            # Default: lightest stage overall
-            best_idx = None
-            best_time = float('inf')
-            for i in range(num_stages):
-                if i == slowest_idx:
-                    continue
-                if stage_times[i] < best_time:
-                    best_time = stage_times[i]
-                    best_idx = i
-            return best_idx
+        best_idx = None
+        best_key = (float('inf'), float('inf'))
+        for i in range(num_stages):
+            if i == slowest_idx:
+                continue
+            key = (stage_times[i], abs(i - slowest_idx))
+            if key < best_key:
+                best_key = key
+                best_idx = i
+        return best_idx
 
     def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]],
                           current_config: PipelineConfig) -> bool:
@@ -635,44 +619,55 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
         stage_times, slowest_stage_time = self._compute_stage_times(time_logs, current_config)
 
+        # Model has not been run
         if any(t == 0 for t in stage_times):
-            return True
+            return False
 
         throughput = 1.0 / slowest_stage_time
 
+        # First config become best config
         if self._best_throughput == 0.0:
             self._best_throughput = throughput
             self._best_config = current_config
             return True
 
+        # Better config found; reset gamma
         if throughput > self._best_throughput:
-            # Better config found
+            #TODO(idea): maybe only reset gamma if tolerance% better
             self._best_throughput = throughput
             self._best_config = current_config
-            self._gamma = 0
-            return True
-        else:
-            # This path is weird:
-            # So if max_stage_time is higher than best time alpha runs in a row, then shisha stops improving?
-            # until the max_stage_time magically becomes lower again?
-            # I feel like this should be the opposite
-            self._gamma += 1
-            if self._gamma >= self.alpha:
-                # Optimum was probably found
-                self._return_best = True
-                self._slowest_stage_offset += 1
-                self._gamma = 0
-                return False
-            return True
+            self._deep_gamma = 0
+            # should we keep exploring? only if we are not at optimum
+            return not self._at_optimum
 
-    def should_rebalance(self, time_logs: dict[uuid.UUID, list[float]],
-                         current_config: PipelineConfig) -> bool:
-        self._call_count += 1
-        if self._call_count == self.rebalance_interval:
-            self._call_count = 0
-            return self._should_rebalance(time_logs, current_config)
+        # Throughput is within tolerance
+        elif (throughput >= self._best_throughput -
+              self._best_throughput * (self.tolerance * (2 if self._at_optimum else 1))):
+            return not self._at_optimum
+
+        # Throughput is worse, so we keep trying to find the optimum
         else:
-            return False
+            # no longer at optimum if we were there
+            if self._at_optimum:
+                self._at_optimum = False
+                self._sibling_gamma = 0
+
+            # First, we look deep
+            self._deep_gamma += 1
+            if self._deep_gamma >= self.deep_alpha:
+                # We reached the end of depth of exploration, time to look sideways
+                self._deep_gamma = 0 # reset deep exploration
+                self._sibling_gamma += 1 # increment sideways
+
+                if self._sibling_gamma >= self.sibling_alpha:
+                    # we explored enough; just return to best
+                    self._return_best = True
+                    self._at_optimum = True
+                    return False
+
+                # keep exploring
+                return True
+            return True
 
     # ── Public interface ─────────────────────────────────────────────────
 
@@ -693,31 +688,15 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         # but only gate on its result when not forced.
         should_rebalance = self._should_rebalance(time_logs, old_config)
 
-        # If we found the optimum then always return best config
-        if self._return_best and not self._at_optimum:
-            self._return_best = False
-            self._reset_exploration()
-            if self._slowest_stage_offset >= self.num_stages / 2:
-                # Only explore slowest (0) and 2nd slowest (1).
-                # If neither yields improvement, stop.
-                self._at_optimum = True
-                self._slowest_stage_offset -= 1
-            return self._best_config
-        # If at optimum, no further exploration
-        if self._at_optimum:
-            return None
-        # If not, then we only continue if we should rebalance or if it is forced
-        if not force_rebalance and not should_rebalance:
-            return None
+        if not force_rebalance:
+            # If at optimum, no further exploration
+            if self._at_optimum and self._return_best:
+                self._return_best = False
+                return self._best_config
 
-        # Run multiple virtual tuning steps before a single rebuild.
-        # Each step feeds its output config into the next, but all use the
-        # same timing data (the actual pipeline isn't rebuilt in between).
-        config = old_config
-        for _ in range(self.tuning_steps):
-            new_config = self._online_tuning(time_logs, config)
-            if new_config is config:
-                # No movement possible — stop early
-                break
-            config = new_config
-        return config if config is not old_config else None
+            # Exit if we don't need to rebalance
+            elif not should_rebalance:
+                return None
+
+        # We need to rebalance
+        return self._online_tuning(time_logs, old_config)
