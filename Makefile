@@ -23,6 +23,8 @@ BASELINE_ARGS ?= -n $(BASELINE_REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHE
 BASELINES_DIR ?= ./data/baselines
 RUNS_DIR ?= ./data/runs
 GPIPE_OUTPUT ?= gpipe.json
+GRAPHS_INCLUDE_REBALANCE_TIME ?=
+GRAPH_ARGS ?= $(if $(GRAPHS_INCLUDE_REBALANCE_TIME),--rebalance-interval)
 
 # Number of distributed ranks (processes). Override with: make eval NPROC=5
 NPROC ?= 4
@@ -65,7 +67,7 @@ eval-all-baselines: eval-sequential eval-tensor-parallel eval-gpipe
 eval-all: install eval-all-baselines eval
 
 graphs: install
-	uv run python data/graphs.py -b $(BASELINES_DIR) -r $(RUNS_DIR)
+	uv run python data/graphs.py $(GRAPH_ARGS) -b $(BASELINES_DIR) -r $(RUNS_DIR)
 
 
 clean:

@@ -264,7 +264,7 @@ if __name__ == "__main__":
                         help="Output image path (e.g. graphs.png). Displays interactively if not set.")
     parser.add_argument("--rebalance", action="store_true", default=False,
                         help="Show vertical rebalance event lines on batch time plots")
-    parser.add_argument("--no-rebalance-time", action="store_true", default=False,
+    parser.add_argument("--no-rebalance-time", action="store_true", default=True,
                         help="Exclude rebalance time from elapsed time calculations (default: include it)")
     args = parser.parse_args()
 
