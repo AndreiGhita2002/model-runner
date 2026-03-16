@@ -31,13 +31,13 @@
   - `run12.json` – multiple online tuning steps per rebalance 
   - `run13.json` – same as run 12 but with `_slowest_stage_offset >= num_stages / 2`
   - `run14.json` – one tuning step per rebalance 
-  - `run15.json` – NOT RUN YET – num_stages - 1 (only look at second-slowest stage then stop exploration)
+  - `run15.json` – num_stages - 1 (only look at second-slowest stage then stop exploration)
 
 
 - What have we learnt from this?
-  - multiple optimum attempts are GOOD, but there should be a limit
+  - multiple optimum attempts are GOOD, but there should be a limit -- we dont need a sort for the slowest
   - rebalance interval is GOOD
-  - more online tuning steps per rebalance is BAD, despite what my intuition says 
+  - more online tuning steps per rebalance is BAD, despite what my intuition says <- make sure you move the second slowest stage
   - run14 is the best for 3/4, and run13 is best for 1/4 (regnet)
    - so online step is usually BAD, but GOOD for regnet  
 

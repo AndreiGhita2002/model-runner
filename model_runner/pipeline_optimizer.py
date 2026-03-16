@@ -697,11 +697,11 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         if self._return_best and not self._at_optimum:
             self._return_best = False
             self._reset_exploration()
-            if self._slowest_stage_offset > 1:
+            if self._slowest_stage_offset >= self.num_stages / 2:
                 # Only explore slowest (0) and 2nd slowest (1).
                 # If neither yields improvement, stop.
                 self._at_optimum = True
-                self._slowest_stage_offset = 1
+                self._slowest_stage_offset -= 1
             return self._best_config
         # If at optimum, no further exploration
         if self._at_optimum:
