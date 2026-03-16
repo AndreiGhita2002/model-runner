@@ -1,6 +1,7 @@
 .idea
 
 results.txt
+data/old_runs/
 
 # Python-generated files
 __pycache__/
