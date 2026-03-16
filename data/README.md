@@ -39,6 +39,7 @@
   - rebalance interval is GOOD
   - more online tuning steps per rebalance is BAD, despite what my intuition says 
   - run14 is the best for 3/4, and run13 is best for 1/4 (regnet)
+   - so online step is usually BAD, but GOOD for regnet  
 
 - What is left to explore?
   - other shisha strategies from the original paper
