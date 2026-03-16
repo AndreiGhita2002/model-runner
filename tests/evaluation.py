@@ -332,6 +332,8 @@ if __name__ == '__main__':
                         help='Shisha balance strategy (default: nearest_lightest_fep)')
     parser.add_argument('--alpha', type=int, default=None,
                         help='Shisha patience parameter (default: 10)')
+    parser.add_argument('--tuning-steps', type=int, default=None,
+                        help='Online tuning iterations per rebalance (default: 3)')
     args = parser.parse_args()
 
     rebalance_interval = args.rebalance_interval
@@ -362,6 +364,8 @@ if __name__ == '__main__':
         optimizer_kwargs['balance_strategy'] = args.balance_strategy
     if args.alpha is not None:
         optimizer_kwargs['alpha'] = args.alpha
+    if args.tuning_steps is not None:
+        optimizer_kwargs['tuning_steps'] = args.tuning_steps
 
     evaluation_main(
         num_requests=args.num_requests,

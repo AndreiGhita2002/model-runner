@@ -341,7 +341,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  alpha: int = 10,
                  assignment_choice: str = "rank_w",
                  balance_strategy: str = "nearest_lightest_fep",
-                 rebalance_interval: int = None):
+                 rebalance_interval: int = None,
+                 tuning_steps: int = 3):
         """
         Args:
             num_stages: Number of pipeline stages.
@@ -360,6 +361,9 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                   nearest stage overall.
             rebalance_interval: Number of forward passes between rebalance attempts.
                 None means no automatic rebalancing.
+            tuning_steps: Number of online tuning iterations to run per rebalance.
+                Multiple steps are computed virtually (using the same timing data)
+                before a single pipeline rebuild, reducing rebuild overhead.
         """
         super().__init__(num_stages, root_uuid, device_manager, depth=depth)
         self.n = self.device_manager.num_devices()
@@ -367,6 +371,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         self.assignment_choice = assignment_choice
         self.balance_strategy = balance_strategy
         self.rebalance_interval = rebalance_interval
+        self.tuning_steps = tuning_steps
         self._call_count = 0
 
         # Persistent state for online tuning across optimize() calls
@@ -699,5 +704,14 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         if not force_rebalance and not should_rebalance:
             return None
 
-        # Calculate new config
-        return self._online_tuning(time_logs, old_config)
+        # Run multiple virtual tuning steps before a single rebuild.
+        # Each step feeds its output config into the next, but all use the
+        # same timing data (the actual pipeline isn't rebuilt in between).
+        config = old_config
+        for _ in range(self.tuning_steps):
+            new_config = self._online_tuning(time_logs, config)
+            if new_config is config:
+                # No movement possible — stop early
+                break
+            config = new_config
+        return config if config is not old_config else None
