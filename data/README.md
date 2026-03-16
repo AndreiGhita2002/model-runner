@@ -25,10 +25,21 @@
   - `run6.json` – Greedy with rebalance interval=5
   - `run7.json` – Shisha with rank_w assignment, nearest_lightest_fep balance strategy and return to optimum
   - `run8.json` – run7 with multiple optimum attempts
-  - `run9.json` – added rebalance interval back
+  - `run9.json` – added rebalance interval back with multiple optimum attempts
   - `run10.json` – caching module graph for rebalance
   - `run11.json` – same as run 10
   - `run12.json` – multiple online tuning steps per rebalance 
   - `run13.json` – same as run 12 but with `_slowest_stage_offset >= num_stages / 2`
   - `run14.json` – one tuning step per rebalance 
-  - `run15.json` – NOT RUN YET – should have multiple tuning steps but stop at num_stages - 1 (only look at second-slowest stage then stop exploration)
+  - `run15.json` – NOT RUN YET – num_stages - 1 (only look at second-slowest stage then stop exploration)
+
+
+- What have we learnt from this?
+  - multiple optimum attempts are GOOD, but there should be a limit
+  - rebalance interval is GOOD
+  - more online tuning steps per rebalance is BAD, despite what my intuition says 
+  - run14 is the best for 3/4, and run13 is best for 1/4 (regnet)
+
+- What is left to explore?
+  - other shisha strategies from the original paper
+

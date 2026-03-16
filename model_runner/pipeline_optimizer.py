@@ -342,7 +342,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  assignment_choice: str = "rank_w",
                  balance_strategy: str = "nearest_lightest_fep",
                  rebalance_interval: int = None,
-                 tuning_steps: int = 3):
+                 tuning_steps: int = 1):
         """
         Args:
             num_stages: Number of pipeline stages.
