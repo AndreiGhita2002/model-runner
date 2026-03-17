@@ -160,6 +160,7 @@ def plot_batch_times(
     output_path: Path | None = None,
     show_rebalance: bool = False,
     include_rebalance: bool = False,
+    show_optimum: bool = True,
 ):
     """Plot per-batch elapsed time for each model, one subplot per model."""
     model_names = _collect_model_names(baselines, runs)
@@ -222,10 +223,22 @@ def plot_batch_times(
                         label=f"{ds_name} rebalance" if j == 0 else None,
                     )
 
+            # Mark optimum batches with triangles
+            if show_optimum:
+                optimum_indices = [i for i, b in enumerate(batches)
+                                   if "timing" in b and b.get("rebalance", {}).get("at_optimum", False)]
+                if optimum_indices:
+                    optimum_times = [elapsed[i] for i in optimum_indices if i < len(elapsed)]
+                    optimum_xs = [i for i in optimum_indices if i < len(elapsed)]
+                    ax.scatter(optimum_xs, optimum_times, color=color, marker="^", s=80,
+                               edgecolors="black", linewidths=0.8, zorder=5,
+                               label=f"{ds_name} optimum" if optimum_xs else None)
+
         ax.set_title(model)
         ax.set_xlabel("Batch index")
         ax.set_ylabel("Elapsed time (s)")
-        n_legend = len(baselines) + len(runs) * (2 if show_rebalance else 1)
+        extra = (1 if show_rebalance else 0) + (1 if show_optimum else 0)
+        n_legend = len(baselines) + len(runs) * (1 + extra)
         ax.legend(**_legend_kwargs(n_legend))
 
     # Hide unused subplots
@@ -264,11 +277,14 @@ if __name__ == "__main__":
                         help="Output image path (e.g. graphs.png). Displays interactively if not set.")
     parser.add_argument("--rebalance", action="store_true", default=False,
                         help="Show vertical rebalance event lines on batch time plots")
-    parser.add_argument("--no-rebalance-time", action="store_true", default=True,
-                        help="Exclude rebalance time from elapsed time calculations (default: include it)")
+    parser.add_argument("--rebalance-time", action="store_true", default=False,
+                        help="Include rebalance time in elapsed time calculations")
+    parser.add_argument("--optimum", action="store_true", default=True,
+                        help="Show optimum reached markers on batch time plots")
     args = parser.parse_args()
 
-    include_rebalance = not args.no_rebalance_time
+    include_rebalance = args.rebalance_time
+    show_optimum = args.optimum
 
     baselines = load_runs(args.baselines_dir)
     runs = load_runs(args.runs_dir)
@@ -282,8 +298,8 @@ if __name__ == "__main__":
         plot_requests_per_second(baselines, runs, output, include_rebalance=include_rebalance)
         batch_times_path = output.with_name(f"{output.stem}_batch_times{output.suffix}")
         plot_batch_times(baselines, runs, batch_times_path, show_rebalance=args.rebalance,
-                         include_rebalance=include_rebalance)
+                         include_rebalance=include_rebalance, show_optimum=show_optimum)
     else:
         plot_requests_per_second(baselines, runs, include_rebalance=include_rebalance)
         plot_batch_times(baselines, runs, show_rebalance=args.rebalance,
-                         include_rebalance=include_rebalance)
+                         include_rebalance=include_rebalance, show_optimum=show_optimum)

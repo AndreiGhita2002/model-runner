@@ -21,8 +21,9 @@ BASELINE_ARGS ?= -n $(BASELINE_REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHE
 BASELINES_DIR ?= ./data/baselines
 RUNS_DIR ?= ./data/runs
 GPIPE_OUTPUT ?= gpipe.json
-GRAPHS_INCLUDE_REBALANCE_TIME ?=
-GRAPH_ARGS ?= $(if $(GRAPHS_INCLUDE_REBALANCE_TIME),--rebalance-interval)
+REBALANCE_TIME ?=
+OPTIMUM ?=
+GRAPH_ARGS ?= $(if $(REBALANCE_TIME),--rebalance-time) $(if $(OPTIMUM),--optimum)
 
 # Number of distributed ranks (processes). Override with: make eval NPROC=5
 NPROC ?= 4
