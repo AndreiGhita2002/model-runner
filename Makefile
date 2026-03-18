@@ -23,7 +23,8 @@ RUNS_DIR ?= ./data/runs
 GPIPE_OUTPUT ?= gpipe.json
 REBALANCE_TIME ?=
 OPTIMUM ?=
-GRAPH_ARGS ?= $(if $(REBALANCE_TIME),--rebalance-time) $(if $(OPTIMUM),--optimum)
+SHOW_REBALANCE ?=
+GRAPH_ARGS ?= $(if $(REBALANCE_TIME),--rebalance-time) $(if $(OPTIMUM),--optimum) $(if $(SHOW_REBALANCE), --rebalance)
 
 # Number of distributed ranks (processes). Override with: make eval NPROC=5
 NPROC ?= 4

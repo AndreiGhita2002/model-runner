@@ -370,7 +370,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  sibling_alpha: int = 2,
                  assignment_choice: str = "rank_w",
                  rebalance_interval: int = None,
-                 tolerance: float = 0.03):
+                 tolerance: float = 0.01):
         """
         Args:
             num_stages: Number of pipeline stages.

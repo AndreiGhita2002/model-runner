@@ -214,8 +214,8 @@ def plot_batch_times(
             color = colors[ds_name]
             ax.plot(range(len(elapsed)), elapsed, color=color, label=ds_name, marker=".", markersize=4)
 
-            # Mark rebalance events
-            if show_rebalance:
+            # Mark rebalance events (only on the last model subplot)
+            if show_rebalance and idx == n_models - 1:
                 rebalance_events = _get_rebalance_events(batches)
                 for j, event_idx in enumerate(rebalance_events):
                     ax.axvline(
@@ -237,7 +237,8 @@ def plot_batch_times(
         ax.set_title(model)
         ax.set_xlabel("Batch index")
         ax.set_ylabel("Elapsed time (s)")
-        extra = (1 if show_rebalance else 0) + (1 if show_optimum else 0)
+        has_rebalance = show_rebalance and idx == n_models - 1
+        extra = (1 if has_rebalance else 0) + (1 if show_optimum else 0)
         n_legend = len(baselines) + len(runs) * (1 + extra)
         ax.legend(**_legend_kwargs(n_legend))
 
