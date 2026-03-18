@@ -649,6 +649,14 @@ class AdaptivePipeline:
             if child is not None:
                 child.get_logs(local_logs)
 
+        rank = dist.get_rank()
+        n_local = len(self._local_children)
+        n_found = sum(1 for u in self._local_children if timed_module_registry.get(u) is not None)
+        n_logs = len(local_logs)
+        nonzero = sum(1 for v in local_logs.values() if v and v[0] != 0)
+        print(f"[DEBUG update_logs] rank={rank} local_children={n_local} found_in_registry={n_found} "
+              f"local_log_entries={n_logs} nonzero={nonzero}")
+
         all_local_logs = [None] * dist.get_world_size()
         dist.all_gather_object(all_local_logs, local_logs)
 
