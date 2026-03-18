@@ -19,11 +19,11 @@ Find the best values for the Shisha optimizer's three hyperparameters:
 
 ## Context
 
-- The optimiser must actually rebalance during a run. If a run has 0 rebalances, the parameters are wrong (tolerance too high, or alpha too high for the rebalance interval).
-- Recent runs (16-18) had 0 rebalances — the optimiser never triggered. This is the problem we're trying to fix.
+- The zero-rebalance bug (runs 16-19) has been fixed. The optimiser now rebalances correctly.
 - The baseline to beat is the seed config (no rebalancing). If rebalancing makes things worse, the parameters are bad.
 - Rebalance interval is fixed at 10 (don't change this).
 - The server is CPU-only (32 cores, gloo backend, 4 ranks, 8 OMP threads per rank).
+- With rebalance_interval=10 and n_microbatches=32, you need at least ~3200 requests for 10 optimiser calls. Use REQUEST_NUM=1000+ for meaningful results.
 
 ## How to run an evaluation
 
@@ -33,9 +33,9 @@ make eval ALPHA=<deep_alpha> TOLERANCE=<tolerance> REQUEST_NUM=<number of reques
 
 Notes:
 - `ALPHA` sets deep_alpha. sibling_alpha is currently hardcoded (default 2) — to change it you need to edit `model_runner/pipeline_optimizer.py` line ~372.
-- Use `REQUEST_NUM=500` for sweep runs (faster). Use 3000+ for final validation.
+- Use `REQUEST_NUM=1000` for sweep runs. Use 3000+ for final validation.
 - Output goes to `data/runs/` as a timestamped JSON file.
-- Each run takes a few minutes with 500 requests. Start with running short evaluations (500-1000 requests) and then if values look good, then increase it to 3000. 
+- Each run takes a few minutes with 1000 requests. If values look good, increase to 3000 for validation.
 
 ## How to analyse a run
 
@@ -57,9 +57,9 @@ for model, result in data["results"].items():
 
 ## Search strategy
 
-1. **Start by fixing the zero-rebalance problem.** Run with low tolerance (0.01) and low alpha (5) to confirm rebalancing actually happens. If it still doesn't rebalance, there's a code bug — stop and report.
+1. **Verify rebalancing works.** Run with default parameters (tolerance=0.05, alpha=5) and REQUEST_NUM=1000 to confirm rebalancing happens. If 0 rebalances, stop and report — there may be a regression.
 
-2. **Explore tolerance first** (most impactful). Try: 0.01, 0.02, 0.03, 0.05, 0.1. Keep alpha=5 fixed. Look for the sweet spot where rebalancing happens but isn't too aggressive.
+2. **Explore tolerance first** (most impactful). Try: 0.01, 0.02, 0.05, 0.1, 0.15. Keep alpha=5 fixed. Look for the sweet spot where rebalancing happens but isn't too aggressive.
 
 3. **Then explore deep_alpha.** Try: 3, 5, 8, 10, 15. Use the best tolerance from step 2. Lower alpha = faster exploration but more rebuilds. Higher alpha = fewer rebuilds but slower to adapt.
 
@@ -85,7 +85,7 @@ for model, result in data["results"].items():
 
 ## What a bad result looks like
 
-- 0 rebalances (tolerance too high or alpha too high)
+- 0 rebalances (tolerance too high, alpha too high, or not enough requests)
 - Hundreds of rebalances that never stop (tolerance too low, never reaches optimum)
 - RPS significantly worse than baseline (rebalancing overhead outweighs gains)
 
