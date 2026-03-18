@@ -627,6 +627,13 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
         stage_times, slowest_stage_time = self._compute_stage_times(time_logs, current_config)
 
+        # Debug: check UUID overlap
+        children_set = set(self.children)
+        logs_set = set(time_logs.keys())
+        overlap = children_set & logs_set
+        print(f"[DEBUG _should_rebalance] children={len(children_set)} time_log_keys={len(logs_set)} "
+              f"overlap={len(overlap)} missing={len(children_set - logs_set)}")
+
         # Some stages have no timing data yet — can't make a decision
         if any(t == 0 for t in stage_times):
             print(f"[DEBUG _should_rebalance] zero stage time found: {stage_times}, returning True")
