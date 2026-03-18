@@ -366,11 +366,11 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
                  depth: int = 1,
-                 deep_alpha: int = 10,
+                 deep_alpha: int = 7,
                  sibling_alpha: int = 2,
                  assignment_choice: str = "rank_w",
                  rebalance_interval: int = None,
-                 tolerance: float = 0.01,
+                 tolerance: float = 0.05,
                  verbose: bool = False):
         """
         Args:
