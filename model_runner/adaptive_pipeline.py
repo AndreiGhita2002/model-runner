@@ -643,23 +643,20 @@ class AdaptivePipeline:
         Returns:
             The updated ``time_logs`` dict (maps module UUID to list of durations).
         """
+        # Collect local timing data keyed by module path (not UUID).
+        # Each rank has its own TimedModule registry with different UUIDs for
+        # the same logical modules, so UUID keys don't match across ranks.
+        # Paths are stable identifiers that match the optimizer's children.
         local_logs = {}
         for child_uuid in self._local_children:
             child = timed_module_registry.get(child_uuid)
             if child is not None:
                 elapsed = child.get_last_elapsed_cycles()
-                if child_uuid in local_logs:
-                    local_logs[child_uuid].append(elapsed)
+                path = child.get_path()
+                if path in local_logs:
+                    local_logs[path].append(elapsed)
                 else:
-                    local_logs[child_uuid] = [elapsed]
-
-        rank = dist.get_rank()
-        n_local = len(self._local_children)
-        n_found = sum(1 for u in self._local_children if timed_module_registry.get(u) is not None)
-        n_logs = len(local_logs)
-        nonzero = sum(1 for v in local_logs.values() if v and v[0] != 0)
-        print(f"[DEBUG update_logs] rank={rank} local_children={n_local} found_in_registry={n_found} "
-              f"local_log_entries={n_logs} nonzero={nonzero}")
+                    local_logs[path] = [elapsed]
 
         all_local_logs = [None] * dist.get_world_size()
         dist.all_gather_object(all_local_logs, local_logs)
@@ -667,11 +664,11 @@ class AdaptivePipeline:
         for rank_logs in all_local_logs:
             if rank_logs is None:
                 continue
-            for mod_uuid, times in rank_logs.items():
-                if mod_uuid in self.time_logs:
-                    self.time_logs[mod_uuid].extend(times)
+            for path, times in rank_logs.items():
+                if path in self.time_logs:
+                    self.time_logs[path].extend(times)
                 else:
-                    self.time_logs[mod_uuid] = list(times)
+                    self.time_logs[path] = list(times)
 
         # Cap each module's log to the most recent max_log_entries measurements
         if self.max_log_entries > 0:
