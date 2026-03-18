@@ -627,10 +627,10 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
         stage_times, slowest_stage_time = self._compute_stage_times(time_logs, current_config)
 
-        # Model has not been run
+        # Some stages have no timing data yet — can't make a decision
         if any(t == 0 for t in stage_times):
-            print(f"[DEBUG _should_rebalance] zero stage time found: {stage_times}, returning False")
-            return False
+            print(f"[DEBUG _should_rebalance] zero stage time found: {stage_times}, returning True")
+            return True
 
         throughput = 1.0 / slowest_stage_time
 
@@ -698,6 +698,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             if self._call_count < self.rebalance_interval:
                 return None
             self._call_count = 0
+        print(f"[DEBUG optimize] passed rebalance interval gate (call_count reset)")
 
         # Clear stale cached stage times so _should_rebalance sees fresh data
         self._reset_stage_caches()
