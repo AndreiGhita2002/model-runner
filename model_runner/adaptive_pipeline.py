@@ -647,7 +647,11 @@ class AdaptivePipeline:
         for child_uuid in self._local_children:
             child = timed_module_registry.get(child_uuid)
             if child is not None:
-                child.get_logs(local_logs)
+                elapsed = child.get_last_elapsed_cycles()
+                if child_uuid in local_logs:
+                    local_logs[child_uuid].append(elapsed)
+                else:
+                    local_logs[child_uuid] = [elapsed]
 
         rank = dist.get_rank()
         n_local = len(self._local_children)
