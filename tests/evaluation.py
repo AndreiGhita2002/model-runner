@@ -165,7 +165,13 @@ def evaluation_main(
                 requests[model_name] = [u for u in decoded if u is not None]
 
     # Running the main service (all ranks):
-    main.run(exit_when_done=True)
+    interrupted = False
+    try:
+        main.run(exit_when_done=True)
+    except KeyboardInterrupt:
+        interrupted = True
+        if is_print_rank:
+            print("\nInterrupted — saving partial results...")
 
     # Build output JSON and optionally compare against baseline (last rank only)
     if rank == last_rank:
@@ -189,6 +195,7 @@ def evaluation_main(
             "clock": "time.perf_counter (cross-rank)",
             "git_commit": git_hash,
             "argv": sys.argv,
+            "interrupted": interrupted,
         }
         results = {}
 
@@ -257,8 +264,8 @@ def evaluation_main(
             if rebalance_count > 0:
                 print(f"    Rebalanced {rebalance_count} time(s)")
 
-        # Optional baseline comparison (hash-based only)
-        if baseline_file is not None and os.path.exists(baseline_file):
+        # Optional baseline comparison (hash-based only, skip if interrupted)
+        if not interrupted and baseline_file is not None and os.path.exists(baseline_file):
             print(f"\nComparing output hashes against baseline: {baseline_file}")
             with open(baseline_file, "r") as f:
                 raw = json.load(f)

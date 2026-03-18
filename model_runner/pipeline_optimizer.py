@@ -550,12 +550,16 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         """One iteration of online tuning: move one child from the slowest stage."""
         stage_times, _ = self._compute_stage_times(time_logs, old_config)
         stages = self._children_to_stages(old_config)
+        stage_sizes = [len(s) for s in stages]
+        print(f"[DEBUG _online_tuning] stage_times={[f'{t:.4f}' for t in stage_times]} "
+              f"stage_sizes={stage_sizes} sibling_gamma={self._sibling_gamma}")
 
         # Selecting the nth slowest stage, depending on the current value of sibling gamma
         selected_idx = nth_largest_index(stage_times, self._sibling_gamma)
 
         # Can't move if slowest stage has only 1 child
         if len(stages[selected_idx]) <= 1:
+            print(f"[DEBUG _online_tuning] stage {selected_idx} has 1 child, skipping")
             self._sibling_gamma += 1 # move to the next stage
             self._deep_gamma = 0
             return None
@@ -564,7 +568,10 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         target_idx = self._find_target_stage(stage_times, selected_idx)
 
         if target_idx is None or target_idx == selected_idx:
+            print(f"[DEBUG _online_tuning] no valid target (target={target_idx}), returning None")
             return None
+
+        print(f"[DEBUG _online_tuning] moving child from stage {selected_idx} toward stage {target_idx}")
 
         # target is to the left of selected
         if target_idx < selected_idx:
@@ -615,12 +622,14 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
     def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]],
                           current_config: PipelineConfig) -> bool:
         if not time_logs:
+            print("[DEBUG _should_rebalance] no time_logs, returning True")
             return True
 
         stage_times, slowest_stage_time = self._compute_stage_times(time_logs, current_config)
 
         # Model has not been run
         if any(t == 0 for t in stage_times):
+            print(f"[DEBUG _should_rebalance] zero stage time found: {stage_times}, returning False")
             return False
 
         throughput = 1.0 / slowest_stage_time
@@ -629,19 +638,26 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         if self._best_throughput == 0.0:
             self._best_throughput = throughput
             self._best_config = current_config
+            print(f"[DEBUG _should_rebalance] first config, tp={throughput:.4f}, returning True")
             return True
+
+        tol = self.tolerance * (2 if self._at_optimum else 1)
+        threshold = self._best_throughput - self._best_throughput * tol
+        print(f"[DEBUG _should_rebalance] tp={throughput:.4f} best={self._best_throughput:.4f} "
+              f"threshold={threshold:.4f} tol={tol} gamma_d={self._deep_gamma} gamma_s={self._sibling_gamma}")
 
         # Better config found; reset gamma
         if throughput > self._best_throughput:
             self._best_throughput = throughput
             self._best_config = current_config
             self._deep_gamma = 0
+            print(f"[DEBUG _should_rebalance] better config, returning {not self._at_optimum}")
             # should we keep exploring? only if we are not at optimum
             return not self._at_optimum
 
         # Throughput is within tolerance
-        elif (throughput >= self._best_throughput -
-              self._best_throughput * (self.tolerance * (2 if self._at_optimum else 1))):
+        elif throughput >= threshold:
+            print(f"[DEBUG _should_rebalance] within tolerance, returning {not self._at_optimum}")
             return not self._at_optimum
 
         # Throughput is worse, so we keep trying to find the optimum
@@ -683,6 +699,9 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                 return None
             self._call_count = 0
 
+        # Clear stale cached stage times so _should_rebalance sees fresh data
+        self._reset_stage_caches()
+
         # Always call _should_rebalance to update internal state (_gamma, _best_throughput),
         # but only gate on its result when not forced.
         should_rebalance = self._should_rebalance(time_logs, old_config)
@@ -691,11 +710,16 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             # If at optimum, no further exploration
             if self._at_optimum and self._return_best:
                 self._return_best = False
+                print("[DEBUG optimize] at optimum, returning best config")
                 return self._best_config
 
             # Exit if we don't need to rebalance
             elif not should_rebalance:
+                print("[DEBUG optimize] should_rebalance=False, returning None")
                 return None
 
         # We need to rebalance
-        return self._online_tuning(time_logs, old_config)
+        print("[DEBUG optimize] calling _online_tuning")
+        result = self._online_tuning(time_logs, old_config)
+        print(f"[DEBUG optimize] _online_tuning returned {'new config' if result is not None else 'None'}")
+        return result
