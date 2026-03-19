@@ -686,6 +686,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             self._best_throughput = throughput
             self._best_config = current_config
             self._deep_gamma = 0
+            self._sibling_gamma = 0
             self._log(f"[DEBUG _should_rebalance] better config, returning {not self._at_optimum}")
             # should we keep exploring? only if we are not at optimum
             return not self._at_optimum
