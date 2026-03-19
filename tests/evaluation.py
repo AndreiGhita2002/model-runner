@@ -188,6 +188,7 @@ def evaluation_main(
             "num_requests": num_requests,
             "seed": seed,
             "batch_size": batch_size,
+            "n_microbatches": n_microbatches,
             "store_hashes": store_hashes,
             "output_file": output_file,
             "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
@@ -196,6 +197,9 @@ def evaluation_main(
             "git_commit": git_hash,
             "argv": sys.argv,
             "interrupted": interrupted,
+            "optimizer": optimizer_class.__name__,
+            "rebalance_interval": rebalance_interval,
+            "optimizer_kwargs": optimizer_kwargs,
         }
         results = {}
 

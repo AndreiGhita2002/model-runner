@@ -370,7 +370,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  sibling_alpha: int = 2,
                  assignment_choice: str = "rank_w",
                  rebalance_interval: int = None,
-                 tolerance: float = 0.75,
+                 tolerance: float = 0.05,
                  verbose: bool = False):
         """
         Args:

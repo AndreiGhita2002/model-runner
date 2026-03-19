@@ -25,7 +25,15 @@
       "-o",
       "./data/runs"
     ],
-    "interrupted": false
+    "interrupted": false,
+    "optimizer": "TimeBasedShishaPipelineOptimizer",
+    "rebalance_interval": 4,
+    "n_microbatches": 32,
+    "optimizer_kwargs": {
+      "deep_alpha": 5,
+      "sibling_alpha": 2,
+      "tolerance": 0.1
+    }
   },
   "results": {
     "conv_next": {
