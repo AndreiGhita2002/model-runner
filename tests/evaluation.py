@@ -1,4 +1,5 @@
 import argparse
+import inspect
 import json
 import os
 import subprocess
@@ -28,6 +29,21 @@ optimizer_choices = {
     "shisha": TimeBasedShishaPipelineOptimizer,
     "greedy": GreedyPipelineOptimizer,
 }
+
+def _get_full_optimizer_kwargs(optimizer_class, explicit_kwargs: dict) -> dict:
+    """Merge explicit kwargs with constructor defaults to record all actual values used."""
+    sig = inspect.signature(optimizer_class.__init__)
+    # Skip 'self' and positional-only params (num_stages, root_uuid, device_manager)
+    skip = {'self', 'num_stages', 'root_uuid', 'device_manager', 'depth', 'verbose'}
+    full = {}
+    for name, param in sig.parameters.items():
+        if name in skip:
+            continue
+        if param.default is not inspect.Parameter.empty:
+            full[name] = param.default
+    full.update(explicit_kwargs)
+    return full
+
 
 evaluation_results: dict[uuid.UUID, Any] = {}
 """Global dict storing pipeline outputs keyed by request UUID. Populated by ``handle_output``."""
@@ -199,7 +215,7 @@ def evaluation_main(
             "interrupted": interrupted,
             "optimizer": optimizer_class.__name__,
             "rebalance_interval": rebalance_interval,
-            "optimizer_kwargs": optimizer_kwargs,
+            "optimizer_kwargs": _get_full_optimizer_kwargs(optimizer_class, optimizer_kwargs),
         }
         results = {}
 
