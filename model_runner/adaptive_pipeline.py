@@ -404,12 +404,19 @@ class AdaptivePipeline:
 
         rebalance_end = time.perf_counter()
         result = {"start": rebalance_start, "end": rebalance_end, "did_rebalance": did_rebalance}
-        if dist.get_rank() == 0:
-            result["at_optimum"] = self.pipeline_optimizer.at_optimum
-            if hasattr(self.pipeline_optimizer, 'optimizer_state'):
-                result.update(self.pipeline_optimizer.optimizer_state)
+
+        # Optimizer state lives on rank 0; broadcast to last rank for timing dict
+        if hasattr(self.pipeline_optimizer, 'optimizer_state'):
+            if dist.get_rank() == 0:
+                state = [self.pipeline_optimizer.at_optimum, self.pipeline_optimizer.optimizer_state]
+            else:
+                state = [None, None]
+            dist.broadcast_object_list(state, src=0)
+            result["at_optimum"] = state[0]
+            result.update(state[1])
         else:
             result["at_optimum"] = False
+
         return result
 
     def _forward_async_optimization(self) -> dict[str, Any]:
@@ -454,10 +461,16 @@ class AdaptivePipeline:
 
         rebalance_end = time.perf_counter()
         result = {"start": rebalance_start, "end": rebalance_end, "did_rebalance": did_rebalance}
-        if dist.get_rank() == 0:
-            result["at_optimum"] = self.pipeline_optimizer.at_optimum
-            if hasattr(self.pipeline_optimizer, 'optimizer_state'):
-                result.update(self.pipeline_optimizer.optimizer_state)
+
+        # Optimizer state lives on rank 0; broadcast to last rank for timing dict
+        if hasattr(self.pipeline_optimizer, 'optimizer_state'):
+            if dist.get_rank() == 0:
+                state = [self.pipeline_optimizer.at_optimum, self.pipeline_optimizer.optimizer_state]
+            else:
+                state = [None, None]
+            dist.broadcast_object_list(state, src=0)
+            result["at_optimum"] = state[0]
+            result.update(state[1])
         else:
             result["at_optimum"] = False
         return result
