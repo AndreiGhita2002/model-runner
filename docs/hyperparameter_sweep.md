@@ -59,13 +59,13 @@ for model, result in data["results"].items():
 
 ## Search strategy
 
-1. **Verify rebalancing works.** Run with default parameters (tolerance=0.05, alpha=7, rebalance_interval=3) and REQUEST_NUM=1000 to confirm rebalancing happens. If 0 rebalances, stop and report — there may be a regression.
+1. **Verify rebalancing works.** Run with default parameters (tolerance=0.05, deep_alpha=5, sibling_alpha=2, rebalance_interval=3) and REQUEST_NUM=1000 to confirm rebalancing happens. If 0 rebalances, stop and report — there may be a regression.
 
 2. **Explore tolerance first** (most impactful). Try: 0.01, 0.02, 0.05, 0.1, 0.15. Keep alpha=7 and interval=10 fixed. Look for the sweet spot where rebalancing happens but isn't too aggressive.
 
-3. **Then explore deep_alpha.** Try: 3, 5, 7, 10, 15. Use the best tolerance from step 2. Lower alpha = faster exploration but more rebuilds. Higher alpha = fewer rebuilds but slower to adapt.
+3. **Then explore deep_alpha.** Try: 3, 5, 7, 10. Use the best tolerance from step 2. Lower alpha = faster exploration but more rebuilds. Higher alpha = fewer rebuilds but slower to adapt.
 
-4. **Then explore rebalance_interval.** Try: 1, 3, 5, 10, 15. Use the best tolerance and alpha from above. Lower interval = more frequent checks (more responsive but more overhead). Higher interval = less overhead but slower to adapt.
+4. **Then explore rebalance_interval.** Try: 1, 3, 5. Use the best tolerance and alpha from above. Lower interval = more frequent checks (more responsive but more overhead). Higher interval = less overhead but slower to adapt.
 
 5. **Finally try sibling_alpha.** Try: 1, 2, 3. This requires editing the default in `pipeline_optimizer.py` (line ~370). This controls how many stages to explore before stopping.
 
