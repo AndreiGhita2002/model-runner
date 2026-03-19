@@ -403,9 +403,14 @@ class AdaptivePipeline:
             self.rebuild_pipeline(new_config)
 
         rebalance_end = time.perf_counter()
-        at_optimum = self.pipeline_optimizer.at_optimum if dist.get_rank() == 0 else False
-        return {"start": rebalance_start, "end": rebalance_end,
-                "did_rebalance": did_rebalance, "at_optimum": at_optimum}
+        result = {"start": rebalance_start, "end": rebalance_end, "did_rebalance": did_rebalance}
+        if dist.get_rank() == 0:
+            result["at_optimum"] = self.pipeline_optimizer.at_optimum
+            if hasattr(self.pipeline_optimizer, 'optimizer_state'):
+                result.update(self.pipeline_optimizer.optimizer_state)
+        else:
+            result["at_optimum"] = False
+        return result
 
     def _forward_async_optimization(self) -> dict[str, Any]:
         """Submit timing data to the background optimiser and apply any ready result.
@@ -448,9 +453,14 @@ class AdaptivePipeline:
             self.rebuild_pipeline(new_config)
 
         rebalance_end = time.perf_counter()
-        at_optimum = self.pipeline_optimizer.at_optimum if dist.get_rank() == 0 else False
-        return {"start": rebalance_start, "end": rebalance_end,
-                "did_rebalance": did_rebalance, "at_optimum": at_optimum}
+        result = {"start": rebalance_start, "end": rebalance_end, "did_rebalance": did_rebalance}
+        if dist.get_rank() == 0:
+            result["at_optimum"] = self.pipeline_optimizer.at_optimum
+            if hasattr(self.pipeline_optimizer, 'optimizer_state'):
+                result.update(self.pipeline_optimizer.optimizer_state)
+        else:
+            result["at_optimum"] = False
+        return result
 
     def _trace_and_cache(self):
         """Trace the model once with all possible split points and cache the result.

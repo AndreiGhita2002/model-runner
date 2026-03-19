@@ -420,6 +420,15 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
     def at_optimum(self) -> bool:
         return self._at_optimum
 
+    @property
+    def optimizer_state(self) -> dict:
+        """Return current internal state for logging."""
+        return {
+            "deep_gamma": self._deep_gamma,
+            "sibling_gamma": self._sibling_gamma,
+            "best_throughput": self._best_throughput,
+        }
+
     def _log(self, msg: str):
         if self.verbose:
             print(msg)
