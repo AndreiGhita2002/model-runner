@@ -637,6 +637,12 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             self._log("[DEBUG _should_rebalance] no time_logs, returning True")
             return True
 
+        #TODO: still rebalance every single call after batch 288 without converging to an optimum
+        # tolerance is probably too high
+
+        #TODO: once at optimum, only trigger rebalance again if TP is slow for X amount of steps
+        # X should be small
+
         stage_times, slowest_stage_time = self._compute_stage_times(time_logs, current_config)
 
         # Debug: check UUID overlap
@@ -651,6 +657,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             self._log(f"[DEBUG _should_rebalance] zero stage time found: {stage_times}, returning True")
             return True
 
+        # TODO: maybe make it accurate? change this to actual TP
         throughput = 1.0 / slowest_stage_time
 
         # First config become best config
