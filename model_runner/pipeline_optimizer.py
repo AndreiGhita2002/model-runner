@@ -371,7 +371,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  assignment_choice: str = "rank_w",
                  rebalance_interval: int = None,
                  tolerance: float = 0.05,
-                 optimum_escape: int = 3,
+                 optimum_escape: int = 1,
                  verbose: bool = False):
         """
         Args:
