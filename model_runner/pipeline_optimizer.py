@@ -371,6 +371,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  assignment_choice: str = "rank_w",
                  rebalance_interval: int = None,
                  tolerance: float = 0.05,
+                 optimum_escape: int = 3,
                  verbose: bool = False):
         """
         Args:
@@ -411,6 +412,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         self._at_optimum = False
         self._return_best = False
         self._sibling_gamma = 0
+        self.optimum_escape = optimum_escape
+        self.optimum_escape_i = 0
 
         # Caches
         self._stage_times_cache = None
@@ -699,9 +702,16 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         # Throughput is worse, so we keep trying to find the optimum
         else:
             # no longer at optimum if we were there
+            # unless optimum_escape_i < optimum_escape
             if self._at_optimum:
+                self.optimum_escape_i += 1
+                if self.optimum_escape_i >= self.optimum_escape:
+                    # not enough worse steps to leave optimum
+                    return False
+                self.optimum_escape_i = 0
                 self._at_optimum = False
                 self._sibling_gamma = 0
+                self._deep_gamma = 0
 
             # First, we look deep
             self._deep_gamma += 1
