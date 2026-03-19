@@ -10,13 +10,17 @@ N_MICROBATCHES ?= 32  # requests grouped per forward pass
 OPTIMIZER ?= shisha
 REBALANCE_INTERVAL ?= 4
 ASSIGNMENT_CHOICE ?=
-ALPHA ?=
+DEEP_ALPHA ?=
+SIBLING_ALPHA ?=
 TOLERANCE ?=
+OPTIMUM_ESCAPE ?=
 COMMON_ARGS ?= -n $(REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES) --optimizer $(OPTIMIZER) \
 	$(if $(REBALANCE_INTERVAL),--rebalance-interval $(REBALANCE_INTERVAL)) \
 	$(if $(ASSIGNMENT_CHOICE),--assignment-choice $(ASSIGNMENT_CHOICE)) \
-	$(if $(ALPHA),--alpha $(ALPHA)) \
-	$(if $(TOLERANCE),--tolerance $(TOLERANCE))
+	$(if $(DEEP_ALPHA),--alpha $(DEEP_ALPHA)) \
+	$(if $(SIBLING_ALPHA),--sibling-alpha $(SIBLING_ALPHA)) \
+	$(if $(TOLERANCE),--tolerance $(TOLERANCE)) \
+	$(if $(OPTIMUM_ESCAPE),--optimum-escape $(OPTIMUM_ESCAPE))
 BASELINE_ARGS ?= -n $(BASELINE_REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES)
 BASELINES_DIR ?= ./data/baselines
 RUNS_DIR ?= ./data/runs
