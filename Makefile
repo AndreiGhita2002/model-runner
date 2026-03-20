@@ -1,5 +1,5 @@
 .PHONY: install test-flask test-pipeline eval quick-eval simple-baseline gpipe-baseline benchmark clean \
-       eval-sequential eval-tensor-parallel eval-gpipe eval-gpipe-sweep eval-all-baselines
+       eval-sequential eval-tensor-parallel eval-gpipe eval-gpipe-sweep eval-all-baselines sweep
 
 MAX_CORES ?= 32  # should be 32 on fisherman
 MAX_NPROC ?= $(MAX_CORES)
@@ -65,6 +65,9 @@ eval-gpipe: install
 
 eval-gpipe-sweep: install
 	bash tests/gpipe_sweep.sh
+
+sweep: install
+	bash tests/sweep.sh $(REQUEST_NUM)
 
 eval-all-baselines: eval-sequential eval-tensor-parallel eval-gpipe
 
