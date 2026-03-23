@@ -1,5 +1,5 @@
 .PHONY: install test-flask test-pipeline eval quick-eval simple-baseline gpipe-baseline benchmark clean \
-       eval-sequential eval-tensor-parallel eval-gpipe eval-gpipe-sweep eval-all-baselines sweep
+       eval-sequential eval-tensor-parallel eval-gpipe eval-gpipe-sweep eval-all-baselines sweep csv
 
 MAX_CORES ?= 32  # should be 32 on fisherman
 MAX_NPROC ?= $(MAX_CORES)
@@ -8,7 +8,7 @@ BASELINE_REQUEST_NUM ?= 10  # baselines don't change over time, fewer runs suffi
 BATCH_COUNT ?= 1  # samples per request (1 image each)
 N_MICROBATCHES ?= 32  # requests grouped per forward pass
 OPTIMIZER ?= shisha
-REBALANCE_INTERVAL ?= 4
+REBALANCE_INTERVAL ?=
 ASSIGNMENT_CHOICE ?=
 DEEP_ALPHA ?=
 SIBLING_ALPHA ?=
@@ -75,6 +75,9 @@ eval-all: install eval-all-baselines eval
 
 graphs: install
 	uv run python data/graphs.py $(GRAPH_ARGS) -b $(BASELINES_DIR) -r $(RUNS_DIR)
+
+csv:
+	python3 data/runs_to_csv.py -d $(RUNS_DIR) -o data/runs_summary.csv
 
 
 clean:
