@@ -239,6 +239,7 @@ def evaluation_main(
                         "deep_gamma": reb.get("deep_gamma"),
                         "sibling_gamma": reb.get("sibling_gamma"),
                         "best_throughput": reb.get("best_throughput"),
+                        "optimum_escape_i": reb.get("optimum_escape_i"),
                     }
 
                 if store_hashes:
@@ -364,9 +365,11 @@ if __name__ == '__main__':
     parser.add_argument('--sibling-alpha', type=int, default=None,
                         help='Shisha sibling patience — stages to try before stopping (default: 2)')
     parser.add_argument('--tolerance', type=float, default=None,
-                        help='Shisha throughput tolerance fraction (default: 0.05)')
+                        help='Shisha throughput tolerance fraction during exploration (default: 0.02)')
+    parser.add_argument('--optimum-tolerance', type=float, default=None,
+                        help='Shisha throughput tolerance fraction when at optimum (default: 0.1)')
     parser.add_argument('--optimum-escape', type=int, default=None,
-                        help='Batches at optimum before restarting exploration (default: 3)')
+                        help='Batches at optimum before restarting exploration (default: 4)')
     args = parser.parse_args()
 
     rebalance_interval = args.rebalance_interval
@@ -399,6 +402,8 @@ if __name__ == '__main__':
         optimizer_kwargs['sibling_alpha'] = args.sibling_alpha
     if args.tolerance is not None:
         optimizer_kwargs['tolerance'] = args.tolerance
+    if args.optimum_tolerance is not None:
+        optimizer_kwargs['optimum_tolerance'] = args.optimum_tolerance
     if args.optimum_escape is not None:
         optimizer_kwargs['optimum_escape'] = args.optimum_escape
 

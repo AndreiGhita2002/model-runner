@@ -369,9 +369,10 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  deep_alpha: int = 5,
                  sibling_alpha: int = 2,
                  assignment_choice: str = "rank_w",
-                 rebalance_interval: int = None,
-                 tolerance: float = 0.05,
-                 optimum_escape: int = 1,
+                 rebalance_interval: int = 3,
+                 tolerance: float = 0.02,
+                 optimum_tolerance: float = 0.1,
+                 optimum_escape: int = 4,
                  verbose: bool = False):
         """
         Args:
@@ -392,13 +393,16 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             rebalance_interval: Number of forward passes between rebalance attempts.
                 None means no automatic rebalancing.
             tolerance: Fraction of best throughput that a new config can be worse
-                by without counting as a regression. Doubled when at optimum to
-                avoid restarting exploration on noise.
+                by without counting as a regression during exploration.
+            optimum_tolerance: Fraction of best throughput used as the tolerance
+                band when at optimum. Should be larger than tolerance to avoid
+                restarting exploration on noise.
             verbose: If True, print debug logs during optimization.
         """
         super().__init__(num_stages, root_uuid, device_manager, depth=depth)
         self.verbose = verbose
         self.tolerance = tolerance
+        self.optimum_tolerance = optimum_tolerance
         self.deep_alpha = deep_alpha
         self.sibling_alpha = min(sibling_alpha, num_stages)
         self.assignment_choice = assignment_choice
@@ -430,6 +434,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             "deep_gamma": self._deep_gamma,
             "sibling_gamma": self._sibling_gamma,
             "best_throughput": self._best_throughput,
+            "optimum_escape_i": self.optimum_escape_i,
         }
 
     def _log(self, msg: str):
@@ -679,7 +684,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             self._log(f"[DEBUG _should_rebalance] first config, tp={throughput:.4f}, returning True")
             return True
 
-        tol = self.tolerance * (2 if self._at_optimum else 1)
+        tol = self.optimum_tolerance if self._at_optimum else self.tolerance
         threshold = self._best_throughput - self._best_throughput * tol
         self._log(f"[DEBUG _should_rebalance] tp={throughput:.4f} best={self._best_throughput:.4f} "
               f"threshold={threshold:.4f} tol={tol} gamma_d={self._deep_gamma} gamma_s={self._sibling_gamma}")
