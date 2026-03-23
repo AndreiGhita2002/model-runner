@@ -701,6 +701,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
         # Throughput is within tolerance
         elif throughput >= threshold:
+            if self._at_optimum:
+                self.optimum_escape_i = 0  # things are fine, reset escape counter
             self._log(f"[DEBUG _should_rebalance] within tolerance, returning {not self._at_optimum}")
             return not self._at_optimum
 
@@ -710,9 +712,10 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             # unless optimum_escape_i < optimum_escape
             if self._at_optimum:
                 self.optimum_escape_i += 1
-                if self.optimum_escape_i >= self.optimum_escape:
-                    # not enough worse steps to leave optimum
+                if self.optimum_escape_i < self.optimum_escape:
+                    # not enough consecutive worse steps yet — stay at optimum
                     return False
+                # enough worse steps — leave optimum and restart exploration
                 self.optimum_escape_i = 0
                 self._at_optimum = False
                 self._sibling_gamma = 0
