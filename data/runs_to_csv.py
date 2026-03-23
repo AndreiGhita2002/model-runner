@@ -28,11 +28,11 @@ def analyse_run(path: Path) -> dict | None:
         "commit": (meta.get("git_commit") or "?")[:8],
         "num_requests": meta.get("num_requests", ""),
         "optimizer": meta.get("optimizer", ""),
-        "rebalance_interval": meta.get("rebalance_interval", ""),
+        "rebalance_interval": opt_kwargs.get("rebalance_interval") or meta.get("rebalance_interval", 3),
         "deep_alpha": opt_kwargs.get("deep_alpha", ""),
         "sibling_alpha": opt_kwargs.get("sibling_alpha", ""),
         "tolerance": opt_kwargs.get("tolerance", ""),
-        "optimum_tolerance": opt_kwargs.get("optimum_tolerance", ""),
+        "optimum_tolerance": opt_kwargs.get("optimum_tolerance") or opt_kwargs.get("tolerance", 0.02) * 2,
         "optimum_escape": opt_kwargs.get("optimum_escape", ""),
     }
 

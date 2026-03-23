@@ -214,8 +214,9 @@ def evaluation_main(
             "argv": sys.argv,
             "interrupted": interrupted,
             "optimizer": optimizer_class.__name__,
-            "rebalance_interval": rebalance_interval,
-            "optimizer_kwargs": _get_full_optimizer_kwargs(optimizer_class, optimizer_kwargs),
+            "optimizer_kwargs": _get_full_optimizer_kwargs(optimizer_class,
+                {"rebalance_interval": rebalance_interval, **optimizer_kwargs}
+                if rebalance_interval is not None else optimizer_kwargs),
         }
         results = {}
 
