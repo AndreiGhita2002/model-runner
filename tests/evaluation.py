@@ -92,6 +92,7 @@ def evaluation_main(
     optimizer_class=TimeBasedShishaPipelineOptimizer,
     rebalance_interval=None,
     optimizer_kwargs=None,
+    duration=None,
 ):
     """Run evaluation: queue generated inputs through the adaptive pipeline.
 
@@ -117,19 +118,23 @@ def evaluation_main(
         import hashlib
     global _verbose, _total_requests, _completed_requests, _last_progress_pct
     _verbose = verbose
-    _total_requests = num_requests * len(evaluation_models)
+    _total_requests = num_requests * len(evaluation_models) if duration is None else 0
     _completed_requests = 0
     _last_progress_pct = -1
 
     rank = dist.get_rank()
     last_rank = dist.get_world_size() - 1
     is_print_rank = rank == 0
-    requests: dict[str, list[uuid.UUID]] = dict()
+    requests: dict[str, list[uuid.UUID]] = {name: [] for name, _, _ in evaluation_models}
 
     # Init main — only enable verbose logging on rank 0 to avoid duplicate prints
     if is_print_rank:
-        print(f"Evaluation: {len(evaluation_models)} model(s), "
-              f"{num_requests} requests each, world_size={dist.get_world_size()}")
+        if duration is not None:
+            print(f"Evaluation: {len(evaluation_models)} model(s), "
+                  f"continuous for {duration}s, world_size={dist.get_world_size()}")
+        else:
+            print(f"Evaluation: {len(evaluation_models)} model(s), "
+                  f"{num_requests} requests each, world_size={dist.get_world_size()}")
     main = PipelineServer(handle_output, verbose=(verbose and is_print_rank))
 
     # Adding models (all ranks)
@@ -145,49 +150,72 @@ def evaluation_main(
     if not verbose and is_print_rank:
         print("Models loaded. Running pipeline...")
 
-    # Queue work (rank 0 only) — generate inputs from seeds
-    if rank == 0:
-        for model_name, _, rand_inputs in evaluation_models:
-            requests[model_name] = list()
-            for i in range(num_requests):
-                input_seed = seed + i
-                x = generate_batch(rand_inputs, batch_size, input_seed)
-                req_id = main.queue_work(model_name, x)
-                requests[model_name].append(req_id)
-                if verbose and is_print_rank:
-                    print(f" > Work added with request id: {req_id}")
+    def _queue_batch(request_offset: int):
+        """Queue num_requests of work and sync request IDs between rank 0 and last rank."""
+        if rank == 0:
+            for model_name, _, rand_inputs in evaluation_models:
+                for i in range(num_requests):
+                    input_seed = seed + request_offset + i
+                    x = generate_batch(rand_inputs, batch_size, input_seed)
+                    req_id = main.queue_work(model_name, x)
+                    requests[model_name].append(req_id)
 
-        # Send request IDs to last rank so it can match outputs
-        if last_rank != 0:
+            # Send request IDs to last rank so it can match outputs
+            if last_rank != 0:
+                for model_name, _, _ in evaluation_models:
+                    uuids = requests[model_name][-num_requests:]
+                    n = torch.tensor([len(uuids)], dtype=torch.int)
+                    dist.send(n, dst=last_rank)
+                    if len(uuids) > 0:
+                        t = uuids_to_tensor(uuids, len(uuids))
+                        dist.send(t, dst=last_rank)
+
+        elif rank == last_rank:
             for model_name, _, _ in evaluation_models:
-                uuids = requests[model_name]
-                n = torch.tensor([len(uuids)], dtype=torch.int)
-                dist.send(n, dst=last_rank)
-                if len(uuids) > 0:
-                    t = uuids_to_tensor(uuids, len(uuids))
-                    dist.send(t, dst=last_rank)
+                n = torch.zeros(1, dtype=torch.int)
+                dist.recv(n, src=0)
+                count = n.item()
+                if count > 0:
+                    t = torch.zeros(count * 4, dtype=torch.int)
+                    dist.recv(t, src=0)
+                    decoded = tensor_to_uuids(t)
+                    requests[model_name].extend([u for u in decoded if u is not None])
 
-    # Receive request IDs from rank 0
-    elif rank == last_rank:  # Unless there is a single rank in the world
-        for model_name, _, _ in evaluation_models:
-            n = torch.zeros(1, dtype=torch.int)
-            dist.recv(n, src=0)
-            count = n.item()
-            requests[model_name] = []
-            if count > 0:
-                t = torch.zeros(count * 4, dtype=torch.int)
-                dist.recv(t, src=0)
-                decoded = tensor_to_uuids(t)
-                requests[model_name] = [u for u in decoded if u is not None]
-
-    # Running the main service (all ranks):
     interrupted = False
-    try:
-        main.run(exit_when_done=True)
-    except KeyboardInterrupt:
-        interrupted = True
+
+    if duration is None:
+        # Fixed request count mode (original behaviour)
+        _queue_batch(0)
+
+        try:
+            main.run(exit_when_done=True)
+        except KeyboardInterrupt:
+            interrupted = True
+            if is_print_rank:
+                print("\nInterrupted — saving partial results...")
+    else:
+        # Continuous mode: keep queuing and processing until duration expires
+        start_time = time.time()
+        end_time = start_time + duration
+        total_queued = 0
+
         if is_print_rank:
-            print("\nInterrupted — saving partial results...")
+            print(f"Continuous mode: running for {duration}s")
+
+        try:
+            while time.time() < end_time:
+                _queue_batch(total_queued)
+                total_queued += num_requests
+                main.run(exit_when_done=True)
+
+                elapsed = time.time() - start_time
+                if is_print_rank:
+                    completed = sum(len(v) for v in requests.values())
+                    print(f"  [{elapsed:.0f}s / {duration}s] {completed} requests completed")
+        except KeyboardInterrupt:
+            interrupted = True
+            if is_print_rank:
+                print("\nInterrupted — saving partial results...")
 
     # Build output JSON and optionally compare against baseline (last rank only)
     if rank == last_rank:
@@ -200,8 +228,9 @@ def evaluation_main(
             git_hash = None
 
         meta = {
-            "mode": "adaptive",
-            "num_requests": num_requests,
+            "mode": "continuous" if duration is not None else "adaptive",
+            "duration": duration,
+            "num_requests": sum(len(v) for v in requests.values()) // max(len(evaluation_models), 1),
             "seed": seed,
             "batch_size": batch_size,
             "n_microbatches": n_microbatches,
@@ -371,6 +400,8 @@ if __name__ == '__main__':
                         help='Shisha throughput tolerance fraction when at optimum (default: 0.1)')
     parser.add_argument('--optimum-escape', type=int, default=None,
                         help='Batches at optimum before restarting exploration (default: 4)')
+    parser.add_argument('--duration', type=int, default=None,
+                        help='Run continuously for this many seconds (default: None, use --num-requests)')
     args = parser.parse_args()
 
     rebalance_interval = args.rebalance_interval
@@ -420,6 +451,7 @@ if __name__ == '__main__':
         optimizer_class=optimizer_choices[args.optimizer],
         rebalance_interval=rebalance_interval,
         optimizer_kwargs=optimizer_kwargs,
+        duration=args.duration,
     )
 
     dist.destroy_process_group()

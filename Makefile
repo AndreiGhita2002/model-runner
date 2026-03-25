@@ -1,5 +1,6 @@
 .PHONY: install test-flask test-pipeline eval quick-eval simple-baseline gpipe-baseline benchmark clean \
-       eval-sequential eval-tensor-parallel eval-gpipe eval-gpipe-sweep eval-all-baselines sweep csv
+       eval-sequential eval-tensor-parallel eval-gpipe eval-gpipe-sweep eval-all-baselines sweep csv \
+       interf-eval interf-eval-clean
 
 MAX_CORES ?= 32  # should be 32 on fisherman
 MAX_NPROC ?= $(MAX_CORES)
@@ -56,24 +57,22 @@ test-flask: install
 benchmark: install
 	uv run --no-sync python -m tests.benchmark
 
-eval-sequential: install
+baseline-sequential: install
 	OMP_NUM_THREADS=1 uv run --no-sync python -m tests.baseline simple $(BASELINE_ARGS) -o $(BASELINES_DIR)/sequential.json
 
-eval-tensor-parallel: install
+baseline-tensor-parallel: install
 	OMP_NUM_THREADS=$(MAX_CORES) uv run --no-sync python -m tests.baseline simple $(BASELINE_ARGS) -o $(BASELINES_DIR)/tensor_parallel.json
 
-eval-gpipe: install
+baseline-gpipe: install
 	$(TORCHRUN) tests.baseline gpipe $(BASELINE_ARGS) -o $(BASELINES_DIR)/$(GPIPE_OUTPUT)
 
-eval-gpipe-sweep: install
+baseline-gpipe-sweep: install
 	bash tests/gpipe_sweep.sh
 
 sweep: install
 	bash tests/sweep.sh $(REQUEST_NUM)
 
-eval-all-baselines: eval-sequential eval-tensor-parallel eval-gpipe
-
-eval-all: install eval-all-baselines eval
+baselines: baseline-sequential baseline-tensor-parallel baseline-gpipe
 
 graphs: install
 	uv run python data/graphs.py $(GRAPH_ARGS) -b $(BASELINES_DIR) -r $(RUNS_DIR)
@@ -81,6 +80,10 @@ graphs: install
 csv:
 	python3 data/runs_to_csv.py -d $(RUNS_DIR) -o data/runs_summary.csv
 
+# Interference experiments
+EXPERIMENT_DURATION ?= 600
+interf-eval: install
+	bash tests/interference/run_experiment.sh --duration $(EXPERIMENT_DURATION) --nproc $(NPROC)
 
 clean:
 	rm -rf build/ *.egg-info/ __pycache__/ .pytest_cache/
