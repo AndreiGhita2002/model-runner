@@ -13,12 +13,13 @@ from pathlib import Path
 # Benchmark commands — adjust paths as needed for your system
 BENCHMARKS = {
     "cpu_stress": {
-        "cmd": ["CPU_stress"],
-        "description": "CPU-intensive workload",
+        "cmd": ["gemm"],
+        "args_fn": lambda threads: ["9999", str(threads)],
+        "description": "CPU-intensive workload (GEMM)",
     },
     "memory_bandwidth": {
         # STREAM with array size > L3 cache (80MB = 10M doubles)
-        "cmd": ["stream_c.exe"],
+        "cmd": ["stream_c"],
         "env": {"STREAM_ARRAY_SIZE": "10000000"},
         "description": "Memory bandwidth benchmark (STREAM, 80MB array)",
     },
@@ -53,9 +54,13 @@ class InterferenceManager:
         if "env" in bench:
             env.update(bench["env"])
 
+        cmd = list(bench["cmd"])
+        if bench.get("args_fn"):
+            cmd.extend(bench["args_fn"](num_threads))
+
         try:
             proc = subprocess.Popen(
-                bench["cmd"],
+                cmd,
                 env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
