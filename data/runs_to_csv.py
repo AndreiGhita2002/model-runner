@@ -33,7 +33,7 @@ def analyse_run(path: Path) -> dict | None:
         "sibling_alpha": opt_kwargs.get("sibling_alpha", ""),
         "tolerance": opt_kwargs.get("tolerance", ""),
         "optimum_tolerance": opt_kwargs.get("optimum_tolerance") or opt_kwargs.get("tolerance", 0.02) * 2,
-        "optimum_escape": opt_kwargs.get("optimum_escape", ""),
+        "optimum_escape_duration": opt_kwargs.get("optimum_escape_duration", ""),
     }
 
     for model in MODELS:
@@ -110,7 +110,7 @@ def main():
     # Build columns: params first, then per-model columns
     param_cols = [
         "run", "commit", "num_requests", "optimizer",
-        "rebalance_interval", "deep_alpha", "sibling_alpha", "tolerance", "optimum_tolerance", "optimum_escape",
+        "rebalance_interval", "deep_alpha", "sibling_alpha", "tolerance", "optimum_tolerance", "optimum_escape_duration",
     ]
     model_cols = []
     for model in MODELS:

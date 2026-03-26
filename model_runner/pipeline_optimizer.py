@@ -372,7 +372,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  assignment_choice: str = "rank_w",
                  rebalance_interval: int = 3,
                  tolerance: float = 0.02,
-                 optimum_tolerance: float = 0.1,
+                 optimum_tolerance: float = 0.08,
                  optimum_escape_duration: float = 5,
                  verbose: bool = False):
         """
@@ -420,7 +420,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         self._return_best = False
         self._sibling_gamma = 0
         self.optimum_escape = optimum_escape_duration
-        self.optimum_escape_i = 0
+        self._optimum_escape_start: float | None = None
+        self._now: float = 0.0
 
         # Caches
         self._stage_times_cache = None
@@ -437,7 +438,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             "deep_gamma": self._deep_gamma,
             "sibling_gamma": self._sibling_gamma,
             "best_throughput": self._best_throughput,
-            "optimum_escape_i": self.optimum_escape_i,
+            "optimum_escape_elapsed": self._now - self._optimum_escape_start if self._optimum_escape_start is not None else 0.0,
         }
 
     def _log(self, msg: str):
@@ -657,9 +658,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             self._log("[DEBUG _should_rebalance] no time_logs, returning True")
             return True
 
-        #TODO: try to increase optimum escape
-
-        #TODO: optimum escape should be a duration of time rather than steps (try 5 second)
+        # TODO: try to increase optimum escape
 
         stage_times, slowest_stage_time = self._compute_stage_times(time_logs, current_config)
 
@@ -704,21 +703,23 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         # Throughput is within tolerance
         elif throughput >= threshold:
             if self._at_optimum:
-                self.optimum_escape_i = 0  # things are fine, reset escape counter
+                self._optimum_escape_start = None  # things are fine, reset escape timer
             self._log(f"[DEBUG _should_rebalance] within tolerance, returning {not self._at_optimum}")
             return not self._at_optimum
 
         # Throughput is worse, so we keep trying to find the optimum
         else:
             # no longer at optimum if we were there
-            # unless optimum_escape_i < optimum_escape
+            # unless we haven't been worse for long enough
             if self._at_optimum:
-                self.optimum_escape_i += 1
-                if self.optimum_escape_i < self.optimum_escape:
-                    # not enough consecutive worse steps yet — stay at optimum
+                self._now = time.monotonic()
+                if self._optimum_escape_start is None:
+                    self._optimum_escape_start = self._now
+                if self._now - self._optimum_escape_start < self.optimum_escape:
+                    # not enough time has passed — stay at optimum
                     return False
-                # enough worse steps — leave optimum and restart exploration
-                self.optimum_escape_i = 0
+                # enough time worse — leave optimum and restart exploration
+                self._optimum_escape_start = None
                 self._at_optimum = False
                 self._best_throughput = 0.0
                 self._best_config = None

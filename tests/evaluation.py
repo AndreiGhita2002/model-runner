@@ -269,7 +269,7 @@ def evaluation_main(
                         "deep_gamma": reb.get("deep_gamma"),
                         "sibling_gamma": reb.get("sibling_gamma"),
                         "best_throughput": reb.get("best_throughput"),
-                        "optimum_escape_i": reb.get("optimum_escape_i"),
+                        "optimum_escape_elapsed": reb.get("optimum_escape_elapsed"),
                     }
 
                 if store_hashes:
@@ -398,8 +398,8 @@ if __name__ == '__main__':
                         help='Shisha throughput tolerance fraction during exploration (default: 0.02)')
     parser.add_argument('--optimum-tolerance', type=float, default=None,
                         help='Shisha throughput tolerance fraction when at optimum (default: 0.1)')
-    parser.add_argument('--optimum-escape', type=int, default=None,
-                        help='Batches at optimum before restarting exploration (default: 4)')
+    parser.add_argument('--optimum-escape', type=float, default=None,
+                        help='Seconds at optimum before restarting exploration (default: 5)')
     parser.add_argument('--duration', type=int, default=None,
                         help='Run continuously for this many seconds (default: None, use --num-requests)')
     args = parser.parse_args()
@@ -437,7 +437,7 @@ if __name__ == '__main__':
     if args.optimum_tolerance is not None:
         optimizer_kwargs['optimum_tolerance'] = args.optimum_tolerance
     if args.optimum_escape is not None:
-        optimizer_kwargs['optimum_escape'] = args.optimum_escape
+        optimizer_kwargs['optimum_escape_duration'] = args.optimum_escape
 
     evaluation_main(
         num_requests=args.num_requests,
