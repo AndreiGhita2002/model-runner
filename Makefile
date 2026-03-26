@@ -78,12 +78,15 @@ graphs: install
 	uv run python data/graphs.py $(GRAPH_ARGS) -b $(BASELINES_DIR) -r $(RUNS_DIR)
 
 csv:
-	python3 data/runs_to_csv.py -d $(RUNS_DIR) -o data/runs_summary.csv
+	uv run python data/runs_to_csv.py -d $(RUNS_DIR) -o data/runs_summary.csv
 
 # Interference experiments
 EXPERIMENT_DURATION ?= 600
 interf-eval: install
 	bash tests/interference/run_experiment.sh --duration $(EXPERIMENT_DURATION) --nproc $(NPROC)
+
+interf-test: install
+	bash tests/interference/run_experiment.sh --no-interference --duration 30 --nproc $(NPROC)
 
 clean:
 	rm -rf build/ *.egg-info/ __pycache__/ .pytest_cache/

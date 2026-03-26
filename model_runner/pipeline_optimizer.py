@@ -654,11 +654,12 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             self._log("[DEBUG _should_rebalance] no time_logs, returning True")
             return True
 
-        #TODO: still rebalance every single call after batch 288 without converging to an optimum
-        # tolerance is probably too high
+        #TODO: you never truly reset best throughput, it should be reset when we leave optimum
+        # so that we dont return to an old obsolete config
 
-        #TODO: once at optimum, only trigger rebalance again if TP is slow for X amount of steps
-        # X should be small
+        #TODO: try to increase optimum escape
+
+        #TODO: optimum escape should be a duration of time rather than steps (try 5 second)
 
         stage_times, slowest_stage_time = self._compute_stage_times(time_logs, current_config)
 

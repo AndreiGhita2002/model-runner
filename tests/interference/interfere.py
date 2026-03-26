@@ -1,20 +1,3 @@
-"""Interference script for the interference experiment.
-
-Starts and stops benchmark processes to simulate system interference
-while the inference server is running.
-
-Supports two modes:
-- deterministic: follows a fixed schedule of interference patterns
-- random: randomly starts/stops processes at random intervals
-
-Benchmark processes:
-- CPU stress: CPU_stress (github.com/nikela/CPU_stress)
-- Memory bandwidth: MLC or STREAM (github.com/intel/memory-bandwidth-benchmarks)
-
-Usage:
-    python -m tests.interference.interfere [options]
-    python -m tests.interference.interfere --duration 600 --mode deterministic
-"""
 import argparse
 import json
 import os
@@ -132,12 +115,8 @@ class InterferenceManager:
 
 
 def run_deterministic(manager: InterferenceManager, duration: int, interval: int):
-    """Run a deterministic interference schedule.
-
-    Cycles through benchmarks, changing every `interval` seconds.
-    Uses varying thread counts: 1, 2, 4, 8.
-    """
-    #TODO: this schedule is too 'random' for deterministic benchmark
+    """Run a deterministic interference schedule."""
+    #TODO: find a good schedule
     schedule = [
         ("idle", 0),
         ("cpu_stress", 2),
@@ -180,15 +159,7 @@ def run_deterministic(manager: InterferenceManager, duration: int, interval: int
 def run_random(manager: InterferenceManager, duration: int,
                min_interval: int = 30, max_interval: int = 120,
                seed: int = 42, idle_start: int = 60):
-    """Run random interference.
-
-    Randomly picks benchmarks and thread counts, with random durations.
-    Starts with an idle period so the optimizer can settle before interference begins.
-
-    Args:
-        seed: Random seed for reproducibility. Saved in the interference log.
-        idle_start: Seconds of idle time at the beginning before interference starts.
-    """
+    """Run random interference."""
     random.seed(seed)
     manager.log_event("seed", str(seed))
 

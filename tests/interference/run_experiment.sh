@@ -1,15 +1,11 @@
 #!/bin/bash
-# Interference experiment orchestrator.
-#
-# Runs evaluation with the adaptive pipeline, optionally with interference
-# (benchmark processes that stress CPU/memory) running alongside.
+# Interference experiment script.
 #
 # Usage:
 #   bash tests/interference/run_experiment.sh                     # with interference, 10 min
 #   bash tests/interference/run_experiment.sh --no-interference   # without interference
 #   bash tests/interference/run_experiment.sh --duration 300      # 5 minutes
-#
-# Safe to Ctrl+C — all child processes are cleaned up.
+
 
 set -euo pipefail
 
@@ -57,7 +53,7 @@ PIDS=()
 cleanup() {
     echo ""
     echo "Cleaning up..."
-    for pid in "${PIDS[@]}"; do
+    for pid in "${PIDS[@]+"${PIDS[@]}"}"; do   # todo: test this
         if kill -0 "$pid" 2>/dev/null; then
             kill "$pid" 2>/dev/null
             wait "$pid" 2>/dev/null || true

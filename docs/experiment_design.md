@@ -3,6 +3,9 @@
 	- [ ] find more models -- we should get like 6 or 8
 		- [ ] find some transformer models
 - [ ] implement interference pipeline
+	- [x] write the code ✅ 2026-03-25
+	- [ ] choose a better order of deterministic interference
+	- [ ] download dependencies
 ## Meeting notes
 - interference experiment
 	- have a shell script that starts inference
@@ -32,3 +35,4 @@
 			- and check other options too
 	- check on adaptive model runner queue and add to it if it is close to finishing
 	- change benchmark every 10 minutes (?)
+- One todo left in code
