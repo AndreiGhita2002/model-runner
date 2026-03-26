@@ -6,3 +6,4 @@ run38,4453b9b1,5000,TimeBasedShishaPipelineOptimizer,3,5,2,0.02,0.08,,17.22,18.5
 run39,4453b9b1,5000,TimeBasedShishaPipelineOptimizer,3,5,2,0.02,0.12,,17.3,21.14,4,26.75,36.03,1504,True,19.71,28.8,2368,True,5.52,4.3,3304,True,17.22,15.45,2216,True
 run40,4bcc3a07,5000,TimeBasedShishaPipelineOptimizer,3,5,2,0.02,0.08,5,16.34,16.32,4,18.37,17.25,3720,True,17.42,14.77,3008,True,5.48,5.54,3784,True,24.08,27.71,896,True
 run41,4bcc3a07,5000,TimeBasedShishaPipelineOptimizer,3,5,2,0.02,0.08,7.0,20.46,26.48,4,32.78,40.93,832,True,25.14,28.6,1024,True,5.53,5.09,4200,True,18.41,31.29,2240,True
+run42,4bcc3a07,5000,TimeBasedShishaPipelineOptimizer,3,5,2,0.02,0.1,6.0,17.33,19.56,4,27.04,17.6,1600,True,17.02,15.2,3232,True,5.84,10.79,3488,True,19.42,34.66,2336,True
