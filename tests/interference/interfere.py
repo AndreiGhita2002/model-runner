@@ -230,6 +230,16 @@ def main():
                         help="Seconds of idle time at the start in random mode (default: 60)")
     args = parser.parse_args()
 
+    # Check that all benchmark binaries exist before starting
+    for name, bench in BENCHMARKS.items():
+        if bench["cmd"] is None:
+            continue
+        path = Path(bench["cmd"][0])
+        if not path.exists() and not shutil.which(str(path)):
+            print(f"Error: benchmark '{name}' not found at '{path}'", file=sys.stderr)
+            print(f"  Set {name.upper().replace(' ', '_')}_PATH environment variable to the correct path", file=sys.stderr)
+            sys.exit(1)
+
     manager = InterferenceManager(log_file=args.output)
 
     # Clean up on SIGTERM
