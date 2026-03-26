@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import random
+import shutil
 import signal
 import subprocess
 import sys
@@ -13,13 +14,14 @@ from pathlib import Path
 # Benchmark commands — adjust paths as needed for your system
 BENCHMARKS = {
     "cpu_stress": {
-        "cmd": ["gemm"],
+        "cmd": [os.environ.get("GEMM_PATH", "gemm")],
         "args_fn": lambda threads: ["9999", str(threads)],
         "description": "CPU-intensive workload (GEMM)",
     },
     "memory_bandwidth": {
         # STREAM with array size > L3 cache (80MB = 10M doubles)
-        "cmd": ["stream_c"],
+        "cmd": [os.environ.get("STREAM_C_PATH", "stream_c")],
+        "cwd": str(Path(os.environ.get("STREAM_C_PATH", "stream_c")).parent) or None,
         "env": {"STREAM_ARRAY_SIZE": "10000000"},
         "description": "Memory bandwidth benchmark (STREAM, 80MB array)",
     },
@@ -55,13 +57,20 @@ class InterferenceManager:
             env.update(bench["env"])
 
         cmd = list(bench["cmd"])
+        # Resolve binary path — subprocess.Popen may not search PATH the same way a shell does
+        resolved = shutil.which(cmd[0])
+        if resolved:
+            cmd[0] = resolved
         if bench.get("args_fn"):
             cmd.extend(bench["args_fn"](num_threads))
+
+        cwd = bench.get("cwd")
 
         try:
             proc = subprocess.Popen(
                 cmd,
                 env=env,
+                cwd=cwd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
