@@ -658,8 +658,6 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             self._log("[DEBUG _should_rebalance] no time_logs, returning True")
             return True
 
-        # TODO: try to increase optimum escape
-
         stage_times, slowest_stage_time = self._compute_stage_times(time_logs, current_config)
 
         # Debug: check UUID overlap
