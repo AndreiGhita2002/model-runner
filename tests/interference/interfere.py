@@ -231,14 +231,19 @@ def main():
     args = parser.parse_args()
 
     # Check that all benchmark binaries exist before starting
+    missing = []
     for name, bench in BENCHMARKS.items():
         if bench["cmd"] is None:
             continue
         path = Path(bench["cmd"][0])
         if not path.exists() and not shutil.which(str(path)):
-            print(f"Error: benchmark '{name}' not found at '{path}'", file=sys.stderr)
-            print(f"  Set {name.upper().replace(' ', '_')}_PATH environment variable to the correct path", file=sys.stderr)
-            sys.exit(1)
+            missing.append((name, path))
+    if len(missing) > 0:
+        print("Error: missing benchmarks:", file=sys.stderr)
+        for name, path in missing:
+            env_var = name.upper().replace(" ", "_") + "_PATH"
+            print(f"  '{name}' not found at '{path}' (set {env_var})", file=sys.stderr)
+        sys.exit(1)
 
     manager = InterferenceManager(log_file=args.output)
 
