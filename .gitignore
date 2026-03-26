@@ -2,6 +2,7 @@
 
 results.txt
 data/old_runs/
+frontend
 
 # Python-generated files
 __pycache__/
