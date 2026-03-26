@@ -1,4 +1,4 @@
-.PHONY: install test-flask test-pipeline eval quick-eval simple-baseline gpipe-baseline benchmark clean \
+.PHONY: install test-flask test-pipeline eval eval-extended quick-eval simple-baseline gpipe-baseline benchmark clean \
        eval-sequential eval-tensor-parallel eval-gpipe eval-gpipe-sweep eval-all-baselines sweep csv \
        interf-eval interf-eval-clean
 
@@ -46,6 +46,9 @@ install:
 
 eval: install
 	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) -o $(RUNS_DIR)
+
+eval-extended: install
+	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) --model-set extended -o $(RUNS_DIR)
 
 quick-eval: install
 	$(TORCHRUN) tests.quick_evaluation

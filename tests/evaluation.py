@@ -16,7 +16,7 @@ import torch.distributed as dist
 from model_runner import PipelineServer, uuids_to_tensor, tensor_to_uuids
 from model_runner.pipeline_optimizer import GreedyPipelineOptimizer, TimeBasedShishaPipelineOptimizer
 
-from tests.testing_models import evaluation_models
+from tests.testing_models import evaluation_models, MODEL_SETS
 from tests.util import generate_batch
 
 # Module-level verbosity and progress state (set by evaluation_main)
@@ -93,6 +93,7 @@ def evaluation_main(
     rebalance_interval=None,
     optimizer_kwargs=None,
     duration=None,
+    models=None,
 ):
     """Run evaluation: queue generated inputs through the adaptive pipeline.
 
@@ -112,35 +113,37 @@ def evaluation_main(
         optimizer_class: What pipeline optimiser to use.
         optimizer_kwargs: Extra keyword arguments forwarded to the optimizer constructor.
     """
+    if models is None:
+        models = evaluation_models
     if optimizer_kwargs is None:
         optimizer_kwargs = {}
     if store_hashes:
         import hashlib
     global _verbose, _total_requests, _completed_requests, _last_progress_pct
     _verbose = verbose
-    _total_requests = num_requests * len(evaluation_models) if duration is None else 0
+    _total_requests = num_requests * len(models) if duration is None else 0
     _completed_requests = 0
     _last_progress_pct = -1
 
     rank = dist.get_rank()
     last_rank = dist.get_world_size() - 1
     is_print_rank = rank == 0
-    requests: dict[str, list[uuid.UUID]] = {name: [] for name, _, _ in evaluation_models}
+    requests: dict[str, list[uuid.UUID]] = {name: [] for name, _, _ in models}
 
     # Init main — only enable verbose logging on rank 0 to avoid duplicate prints
     if is_print_rank:
         if duration is not None:
-            print(f"Evaluation: {len(evaluation_models)} model(s), "
+            print(f"Evaluation: {len(models)} model(s), "
                   f"continuous for {duration}s, world_size={dist.get_world_size()}")
         else:
-            print(f"Evaluation: {len(evaluation_models)} model(s), "
+            print(f"Evaluation: {len(models)} model(s), "
                   f"{num_requests} requests each, world_size={dist.get_world_size()}")
     main = PipelineServer(handle_output, verbose=(verbose and is_print_rank))
 
     # Adding models (all ranks)
     if not verbose and is_print_rank:
         print("Loading models...")
-    for model_name, load_model, rand_input in evaluation_models:
+    for model_name, load_model, rand_input in models:
         if verbose and is_print_rank:
             print(f"> Adding model {model_name} with load function {load_model.__name__}")
         main.add_model(model_name, load_model(), rand_input(),
@@ -153,7 +156,7 @@ def evaluation_main(
     def _queue_batch(request_offset: int):
         """Queue num_requests of work and sync request IDs between rank 0 and last rank."""
         if rank == 0:
-            for model_name, _, rand_inputs in evaluation_models:
+            for model_name, _, rand_inputs in models:
                 for i in range(num_requests):
                     input_seed = seed + request_offset + i
                     x = generate_batch(rand_inputs, batch_size, input_seed)
@@ -162,7 +165,7 @@ def evaluation_main(
 
             # Send request IDs to last rank so it can match outputs
             if last_rank != 0:
-                for model_name, _, _ in evaluation_models:
+                for model_name, _, _ in models:
                     uuids = requests[model_name][-num_requests:]
                     n = torch.tensor([len(uuids)], dtype=torch.int)
                     dist.send(n, dst=last_rank)
@@ -171,7 +174,7 @@ def evaluation_main(
                         dist.send(t, dst=last_rank)
 
         elif rank == last_rank:
-            for model_name, _, _ in evaluation_models:
+            for model_name, _, _ in models:
                 n = torch.zeros(1, dtype=torch.int)
                 dist.recv(n, src=0)
                 count = n.item()
@@ -230,7 +233,7 @@ def evaluation_main(
         meta = {
             "mode": "continuous" if duration is not None else "adaptive",
             "duration": duration,
-            "num_requests": sum(len(v) for v in requests.values()) // max(len(evaluation_models), 1),
+            "num_requests": sum(len(v) for v in requests.values()) // max(len(models), 1),
             "seed": seed,
             "batch_size": batch_size,
             "n_microbatches": n_microbatches,
@@ -400,6 +403,8 @@ if __name__ == '__main__':
                         help='Shisha throughput tolerance fraction when at optimum (default: 0.1)')
     parser.add_argument('--optimum-escape', type=float, default=None,
                         help='Seconds at optimum before restarting exploration (default: 5)')
+    parser.add_argument('--model-set', choices=list(MODEL_SETS.keys()), default='small',
+                        help='Which set of models to evaluate (default: small)')
     parser.add_argument('--duration', type=int, default=None,
                         help='Run continuously for this many seconds (default: None, use --num-requests)')
     args = parser.parse_args()
@@ -452,6 +457,7 @@ if __name__ == '__main__':
         rebalance_interval=rebalance_interval,
         optimizer_kwargs=optimizer_kwargs,
         duration=args.duration,
+        models=MODEL_SETS[args.model_set],
     )
 
     dist.destroy_process_group()
