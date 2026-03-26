@@ -1,3 +1,4 @@
+import time
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -372,7 +373,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  rebalance_interval: int = 3,
                  tolerance: float = 0.02,
                  optimum_tolerance: float = 0.1,
-                 optimum_escape: int = 4,
+                 optimum_escape_duration: float = 5,
                  verbose: bool = False):
         """
         Args:
@@ -382,22 +383,24 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             depth: Depth in the TimedModule hierarchy to collect leaf children at.
             deep_alpha: Non-improving iteration limit for a single stage direction.
                 When deep_alpha consecutive iterations fail to improve throughput,
-                the optimizer stops exploring the current stage and moves on to the
+                the optimiser stops exploring the current stage and moves on to the
                 next slowest stage (increments sibling_gamma).
             sibling_alpha: Number of different stages to try before giving up.
                 After exhausting deep_alpha attempts on sibling_alpha different
-                stages, the optimizer declares an optimum and reverts to best config.
+                stages, the optimiser declares an optimum and reverts to the best config.
             assignment_choice: Strategy for assigning stages to devices.
                 - ``"rank_w"``: Heaviest stage (by parameter count) goes to the fastest device.
                 - ``"rank_l"``: Stage with the most children goes to the fastest device.
             rebalance_interval: Number of forward passes between rebalance attempts.
                 None means no automatic rebalancing.
-            tolerance: Fraction of best throughput that a new config can be worse
+            tolerance: Fraction of the best throughput that a new config can be worse
                 by without counting as a regression during exploration.
-            optimum_tolerance: Fraction of best throughput used as the tolerance
+            optimum_tolerance: Fraction of the best throughput used as the tolerance
                 band when at optimum. Should be larger than tolerance to avoid
                 restarting exploration on noise.
-            verbose: If True, print debug logs during optimization.
+            optimum_escape_duration: duration in second before we restart exploration
+                from an optimum state
+            verbose: If True, print debug logs during optimisation.
         """
         super().__init__(num_stages, root_uuid, device_manager, depth=depth)
         self.verbose = verbose
@@ -416,7 +419,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         self._at_optimum = False
         self._return_best = False
         self._sibling_gamma = 0
-        self.optimum_escape = optimum_escape
+        self.optimum_escape = optimum_escape_duration
         self.optimum_escape_i = 0
 
         # Caches
@@ -654,9 +657,6 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             self._log("[DEBUG _should_rebalance] no time_logs, returning True")
             return True
 
-        #TODO: you never truly reset best throughput, it should be reset when we leave optimum
-        # so that we dont return to an old obsolete config
-
         #TODO: try to increase optimum escape
 
         #TODO: optimum escape should be a duration of time rather than steps (try 5 second)
@@ -664,11 +664,12 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         stage_times, slowest_stage_time = self._compute_stage_times(time_logs, current_config)
 
         # Debug: check UUID overlap
-        children_set = set(self.children)
-        logs_set = set(time_logs.keys())
-        overlap = children_set & logs_set
-        self._log(f"[DEBUG _should_rebalance] children={len(children_set)} time_log_keys={len(logs_set)} "
-              f"overlap={len(overlap)} missing={len(children_set - logs_set)}")
+        if self.verbose:
+            children_set = set(self.children)
+            logs_set = set(time_logs.keys())
+            overlap = children_set & logs_set
+            self._log(f"[DEBUG _should_rebalance] children={len(children_set)} time_log_keys={len(logs_set)} "
+                  f"overlap={len(overlap)} missing={len(children_set - logs_set)}")
 
         # Some stages have no timing data yet — can't make a decision
         if any(t == 0 for t in stage_times):
@@ -678,7 +679,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         # TODO: maybe make it accurate? change this to actual TP
         throughput = 1.0 / slowest_stage_time
 
-        # First config become best config
+        # First config after optimum always becomes best config
         if self._best_throughput == 0.0:
             self._best_throughput = throughput
             self._best_config = current_config
@@ -719,6 +720,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                 # enough worse steps — leave optimum and restart exploration
                 self.optimum_escape_i = 0
                 self._at_optimum = False
+                self._best_throughput = 0.0
+                self._best_config = None
                 self._sibling_gamma = 0
                 self._deep_gamma = 0
 
