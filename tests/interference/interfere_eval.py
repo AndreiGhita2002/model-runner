@@ -72,8 +72,8 @@ def main():
                         help="Interference mode (default: deterministic)")
     parser.add_argument("--interval", type=int, default=60,
                         help="Seconds between interference changes (default: 60)")
-    parser.add_argument("--schedule", type=str, default="full",
-                        help="Deterministic schedule name (default: full)")
+    parser.add_argument("--schedule", type=str, default="small",
+                        help="Deterministic schedule name (default: small)")
     parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small",
                         help="Which model set to evaluate (default: small)")
     parser.add_argument("-o", "--output", type=str, default="./data/interference",
