@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime
@@ -153,11 +154,12 @@ def evaluation_main(
     if not verbose and is_print_rank:
         print("Models loaded. Running pipeline...")
 
-    def _queue_batch(request_offset: int):
-        """Queue num_requests of work and sync request IDs between rank 0 and last rank."""
+    def _queue_batch(request_offset: int, count: int | None = None):
+        """Queue work and sync request IDs between rank 0 and last rank."""
+        n_to_queue = count if count is not None else num_requests
         if rank == 0:
             for model_name, _, rand_inputs in models:
-                for i in range(num_requests):
+                for i in range(n_to_queue):
                     input_seed = seed + request_offset + i
                     x = generate_batch(rand_inputs, batch_size, input_seed)
                     req_id = main.queue_work(model_name, x)
@@ -166,7 +168,7 @@ def evaluation_main(
             # Send request IDs to last rank so it can match outputs
             if last_rank != 0:
                 for model_name, _, _ in models:
-                    uuids = requests[model_name][-num_requests:]
+                    uuids = requests[model_name][-n_to_queue:]
                     n = torch.tensor([len(uuids)], dtype=torch.int)
                     dist.send(n, dst=last_rank)
                     if len(uuids) > 0:
@@ -197,18 +199,26 @@ def evaluation_main(
             if is_print_rank:
                 print("\nInterrupted — saving partial results...")
     else:
-        # Continuous mode: keep queuing and processing until duration expires
+        # Continuous mode: keep queuing and processing until duration expires.
+        # Queue one microbatch worth of requests at a time so the time check
+        # runs frequently and the loop exits promptly when duration expires.
         start_time = time.time()
         end_time = start_time + duration
         total_queued = 0
+
+        # Set force_quit when duration expires so the run loop exits mid-batch if needed
+        if rank == 0:
+            timer = threading.Timer(duration, lambda: setattr(main, 'force_quit', True))
+            timer.daemon = True
+            timer.start()
 
         if is_print_rank:
             print(f"Continuous mode: running for {duration}s")
 
         try:
             while time.time() < end_time:
-                _queue_batch(total_queued)
-                total_queued += num_requests
+                _queue_batch(total_queued, count=n_microbatches)
+                total_queued += n_microbatches
                 main.run(exit_when_done=True)
 
                 elapsed = time.time() - start_time
@@ -405,6 +415,8 @@ if __name__ == '__main__':
                         help='Seconds at optimum before restarting exploration (default: 5)')
     parser.add_argument('--model-set', choices=list(MODEL_SETS.keys()), default='small',
                         help='Which set of models to evaluate (default: small)')
+    parser.add_argument('--model', type=str, default=None,
+                        help='Run only this model (by name). Must exist in the chosen model set.')
     parser.add_argument('--duration', type=int, default=None,
                         help='Run continuously for this many seconds (default: None, use --num-requests)')
     args = parser.parse_args()
@@ -444,6 +456,14 @@ if __name__ == '__main__':
     if args.optimum_escape is not None:
         optimizer_kwargs['optimum_escape_duration'] = args.optimum_escape
 
+    selected_models = MODEL_SETS[args.model_set]
+    if args.model:
+        filtered = [(n, l, r) for n, l, r in selected_models if n == args.model]
+        if not filtered:
+            available = [n for n, _, _ in selected_models]
+            raise ValueError(f"Model '{args.model}' not found in '{args.model_set}' set. Available: {available}")
+        selected_models = filtered
+
     evaluation_main(
         num_requests=args.num_requests,
         seed=args.seed,
@@ -457,7 +477,7 @@ if __name__ == '__main__':
         rebalance_interval=rebalance_interval,
         optimizer_kwargs=optimizer_kwargs,
         duration=args.duration,
-        models=MODEL_SETS[args.model_set],
+        models=selected_models,
     )
 
     dist.destroy_process_group()

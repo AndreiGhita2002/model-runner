@@ -128,10 +128,13 @@ class InterferenceManager:
             print(f"Interference log saved to {self.log_file}")
 
 
-def run_deterministic(manager: InterferenceManager, duration: int, interval: int):
-    """Run a deterministic interference schedule."""
-    #TODO: find a good schedule
-    schedule = [
+SCHEDULES = {
+    "small": [
+        ("idle", 0),
+        ("cpu_stress", 2),
+        ("memory_bandwidth", 1),
+    ],
+    "full": [
         ("idle", 0),
         ("cpu_stress", 2),
         ("cpu_stress", 4),
@@ -141,12 +144,21 @@ def run_deterministic(manager: InterferenceManager, duration: int, interval: int
         ("idle", 0),
         ("cpu_stress", 1),
         ("memory_bandwidth", 4),
-    ]
+    ],
+}
+
+
+def run_deterministic(manager: InterferenceManager, duration: int, interval: int,
+                      schedule: list[tuple[str, int]] | None = None):
+    """Run a deterministic interference schedule."""
+    if schedule is None:
+        schedule = SCHEDULES["full"]
 
     start = time.time()
     step = 0
 
-    print(f"Deterministic interference: {duration}s, change every {interval}s")
+    print(f"Deterministic interference: {duration}s, change every {interval}s, "
+          f"{len(schedule)} steps per cycle")
     try:
         while time.time() - start < duration:
             name, threads = schedule[step % len(schedule)]
@@ -222,6 +234,8 @@ def main():
                         help="Interference mode (default: deterministic)")
     parser.add_argument("--interval", type=int, default=60,
                         help="Seconds between benchmark changes in deterministic mode (default: 60)")
+    parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="small",
+                        help="Deterministic schedule to use (default: full)")
     parser.add_argument("-o", "--output", type=Path, default=None,
                         help="Output JSON file for interference log")
     parser.add_argument("--seed", type=int, default=42,
@@ -251,7 +265,8 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: (manager.stop_all(), sys.exit(0)))
 
     if args.mode == "deterministic":
-        run_deterministic(manager, args.duration, args.interval)
+        run_deterministic(manager, args.duration, args.interval,
+                          schedule=SCHEDULES[args.schedule])
     else:
         run_random(manager, args.duration, seed=args.seed, idle_start=args.idle_start)
 

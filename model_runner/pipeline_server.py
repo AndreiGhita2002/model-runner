@@ -52,6 +52,7 @@ class PipelineServer:
         # Synchronization for cross-thread/process work submission
         self._work_available = threading.Condition()
         self._shutdown_requested = False
+        self.force_quit = False
 
     def _log(self, msg: str):
         if self.verbose:
@@ -178,6 +179,16 @@ class PipelineServer:
         rank = dist.get_rank()
 
         while True:
+            # Check force_quit (broadcast from rank 0 so all ranks agree)
+            if rank == 0:
+                quit_tensor = torch.tensor([1 if self.force_quit else 0], dtype=torch.int)
+            else:
+                quit_tensor = torch.tensor([0], dtype=torch.int)
+            dist.broadcast(quit_tensor, src=0)
+            if quit_tensor.item() == 1:
+                self._log("PipelineServer.run: force_quit requested, exiting")
+                return
+
             did_work = False
 
             for model_name, model_queue in self.work_by_model.items():

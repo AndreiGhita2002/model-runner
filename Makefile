@@ -86,10 +86,10 @@ csv:
 # Interference experiments
 EXPERIMENT_DURATION ?= 600
 interf-eval: install
-	bash tests/interference/run_experiment.sh --duration $(EXPERIMENT_DURATION) --nproc $(NPROC)
+	uv run python -m tests.interference.interfere_eval --duration $(EXPERIMENT_DURATION) --nproc $(NPROC)
 
 interf-test: install
-	bash tests/interference/run_experiment.sh --no-interference --duration 30 --nproc $(NPROC)
+	uv run python -m tests.interference.interfere_eval --no-interference --duration 30 --nproc $(NPROC)
 
 clean:
 	rm -rf build/ *.egg-info/ __pycache__/ .pytest_cache/
