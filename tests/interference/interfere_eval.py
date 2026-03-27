@@ -185,6 +185,9 @@ def main():
             "--nproc_per_node", str(args.nproc),
             "-m", "tests.evaluation",
             "--duration", str(model_duration),
+            "-b", "1",
+            "-m", "32",
+            "--optimizer", "shisha",
             "--model-set", args.model_set,
             "--model", model,
             "-o", str(run_dir / f"eval_{model}.json"),
@@ -201,8 +204,10 @@ def main():
             print(f"  Warning: evaluation for {model} exited with code {exit_code}")
 
         # Wait for interference thread to finish
-        if run_interference and interference_threads:
-            interference_threads[-1].join(timeout=5)
+        if run_interference:
+            for t in interference_threads:
+                t.join(timeout=5)
+            interference_threads.clear()
 
         print(f"  {model} complete.")
 

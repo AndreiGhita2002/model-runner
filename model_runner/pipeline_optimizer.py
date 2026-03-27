@@ -654,6 +654,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
 
     def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]],
                           current_config: PipelineConfig) -> bool:
+        self._now = time.monotonic()
+
         if not time_logs:
             self._log("[DEBUG _should_rebalance] no time_logs, returning True")
             return True
