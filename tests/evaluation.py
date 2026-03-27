@@ -4,7 +4,6 @@ import json
 import os
 import subprocess
 import sys
-import threading
 import time
 import uuid
 from datetime import datetime
@@ -205,12 +204,6 @@ def evaluation_main(
         start_time = time.time()
         end_time = start_time + duration
         total_queued = 0
-
-        # Set force_quit when duration expires so the run loop exits mid-batch if needed
-        if rank == 0:
-            timer = threading.Timer(duration, lambda: setattr(main, 'force_quit', True))
-            timer.daemon = True
-            timer.start()
 
         if is_print_rank:
             print(f"Continuous mode: running for {duration}s")

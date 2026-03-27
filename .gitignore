@@ -15,3 +15,10 @@ wheels/
 # Virtual environments
 .venv
 uv.lock
+
+# Interference temp directories
+.tmp_*
+
+
+# bad run dont include it
+/data/interference/interf1/
