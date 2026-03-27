@@ -38,7 +38,7 @@ class InterferenceManager:
         self.log: list[dict] = []
         self.log_file = log_file
 
-    def start_benchmark(self, name: str, num_threads: int = 1) -> bool:
+    def start_benchmark(self, name: str, num_threads: int = 1, nice: int = 0) -> bool:
         """Start a benchmark process. Returns True if started successfully."""
         bench = BENCHMARKS.get(name)
         if bench is None:
@@ -64,6 +64,10 @@ class InterferenceManager:
         if bench.get("args_fn"):
             cmd.extend(bench["args_fn"](num_threads))
 
+        # Prepend nice if requested
+        if nice != 0:
+            cmd = ["nice", "-n", str(nice)] + cmd
+
         cwd = bench.get("cwd")
 
         try:
@@ -76,7 +80,8 @@ class InterferenceManager:
             )
             self.active_processes.append(proc)
             self.log_event("start", name, num_threads, pid=proc.pid)
-            print(f"  Started {name} (pid={proc.pid}, threads={num_threads})")
+            nice_str = f", nice={nice}" if nice != 0 else ""
+            print(f"  Started {name} (pid={proc.pid}, threads={num_threads}{nice_str})")
             return True
         except FileNotFoundError:
             print(f"  Benchmark not found: {bench['cmd'][0]}", file=sys.stderr)
@@ -128,34 +133,42 @@ class InterferenceManager:
             print(f"Interference log saved to {self.log_file}")
 
 
+# Schedule tuples: (benchmark_name, num_threads, nice_level)
+# nice_level is optional (defaults to 0)
 SCHEDULES = {
     "small": [
-        ("idle", 0),
-        ("cpu_stress", 2),
-        ("memory_bandwidth", 1),
+        ("idle", 0, 0),
+        ("cpu_stress", 2, 0),
+        ("memory_bandwidth", 1, 0),
     ],
     "full": [
-        ("idle", 0),
-        ("cpu_stress", 2),
-        ("cpu_stress", 4),
-        ("memory_bandwidth", 1),
-        ("cpu_stress", 8),
-        ("memory_bandwidth", 2),
-        ("idle", 0),
-        ("cpu_stress", 1),
-        ("memory_bandwidth", 4),
+        ("idle", 0, 0),
+        ("cpu_stress", 2, 0),
+        ("cpu_stress", 4, 0),
+        ("memory_bandwidth", 1, 0),
+        ("cpu_stress", 8, 0),
+        ("memory_bandwidth", 2, 0),
+        ("idle", 0, 0),
+        ("cpu_stress", 1, 0),
+        ("memory_bandwidth", 4, 0),
+    ],
+    "gradient": [
+        ("idle", 0, 0),              # baseline — no interference
+        ("cpu_stress", 1, 19),        # light — 1 thread, lowest priority
+        ("cpu_stress", 2, 10),        # medium — 2 threads, reduced priority
+        ("cpu_stress", 4, 0),         # heavy — 4 threads, normal priority
     ],
 }
 
 
 def run_deterministic(manager: InterferenceManager, step_duration: int,
-                      schedule: list[tuple[str, int]] | None = None):
+                      schedule: list[tuple[str, int, int]] | None = None):
     """Run a deterministic interference schedule.
 
     Args:
         manager: InterferenceManager instance.
         step_duration: Seconds per schedule step.
-        schedule: List of (benchmark_name, num_threads) tuples.
+        schedule: List of (benchmark_name, num_threads, nice_level) tuples.
     """
     if schedule is None:
         schedule = SCHEDULES["full"]
@@ -165,11 +178,11 @@ def run_deterministic(manager: InterferenceManager, step_duration: int,
 
     print(f"Deterministic interference: {len(schedule)} steps × {step_duration}s = {total_duration}s")
     try:
-        for step, (name, threads) in enumerate(schedule):
+        for step, (name, threads, nice) in enumerate(schedule):
             manager.stop_all()
 
             if name != "idle":
-                manager.start_benchmark(name, threads)
+                manager.start_benchmark(name, threads, nice=nice)
             else:
                 print(f"  Idle period ({step_duration}s)")
                 manager.log_event("start", "idle")

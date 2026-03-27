@@ -199,8 +199,6 @@ def evaluation_main(
                 print("\nInterrupted — saving partial results...")
     else:
         # Continuous mode: keep queuing and processing until duration expires.
-        # Queue one microbatch worth of requests at a time so the time check
-        # runs frequently and the loop exits promptly when duration expires.
         start_time = time.time()
         end_time = start_time + duration
         total_queued = 0
@@ -210,8 +208,8 @@ def evaluation_main(
 
         try:
             while time.time() < end_time:
-                _queue_batch(total_queued, count=n_microbatches)
-                total_queued += n_microbatches
+                _queue_batch(total_queued)
+                total_queued += num_requests
                 main.run(exit_when_done=True)
 
                 elapsed = time.time() - start_time

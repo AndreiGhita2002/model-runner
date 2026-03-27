@@ -1,19 +1,18 @@
 """Interference evaluation runner.
 
-Runs each model through its own full interference schedule. Each schedule
-step runs for a fixed number of batches, so every model gets the same
-amount of work under each interference condition.
+Runs each model through its own full interference schedule. The interference
+runs in the background (duration-based switching) while the evaluation runs
+in the foreground for each model.
 
 Usage:
     uv run python -m tests.interference.interfere_eval
-    uv run python -m tests.interference.interfere_eval --batches 500
+    uv run python -m tests.interference.interfere_eval --duration 120 --schedule gradient
     uv run python -m tests.interference.interfere_eval --no-interference
 """
 
 import argparse
 import json
 import os
-import shutil
 import signal
 import subprocess
 import sys
@@ -21,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 from tests.testing_models import MODEL_SETS
-from tests.interference.interfere import SCHEDULES, InterferenceManager
+from tests.interference.interfere import SCHEDULES, InterferenceManager, run_deterministic
 
 
 def run_eval(cmd: list[str], env: dict | None = None,
@@ -45,38 +44,38 @@ def run_eval(cmd: list[str], env: dict | None = None,
     return proc.returncode
 
 
-def merge_results(run_dir: Path, output_file: Path, models: list[str], schedule, args) -> Path:
-    """Merge all per-step eval JSONs into one combined JSON file and clean up temp dir."""
+def merge_results(run_dir: Path, output_file: Path, models: list[str], schedule, args):
+    """Merge per-model eval JSONs and interference logs into one combined JSON."""
+    import shutil
+
     combined = {
         "meta": {
             "experiment": "interference",
             "schedule": args.schedule,
-            "schedule_steps": [(name, threads) for name, threads in schedule],
-            "batches_per_step": args.batches,
+            "schedule_steps": [(name, threads, nice) for name, threads, nice in schedule],
+            "step_duration": args.duration,
             "model_set": args.model_set,
             "nproc": args.nproc,
             "omp_threads": args.omp_threads,
             "interference": not args.no_interference,
         },
         "results": {},
-        "interference": None,
+        "interference": {},
     }
 
-    # Load interference log
-    interf_file = run_dir / "interference.json"
-    if interf_file.exists():
-        with open(interf_file) as f:
-            combined["interference"] = json.load(f)
+    # Load per-model interference logs
+    for model in models:
+        interf_file = run_dir / f"interference_{model}.json"
+        if interf_file.exists():
+            with open(interf_file) as f:
+                combined["interference"][model] = json.load(f)
 
-    # Merge per-step eval JSONs
-    step_files = sorted(run_dir.glob("step_*.json"))
+    # Load per-model eval JSONs
     first_meta = None
-
-    for step_file in step_files:
-        with open(step_file) as f:
+    for eval_file in sorted(run_dir.glob("eval_*.json")):
+        with open(eval_file) as f:
             data = json.load(f)
 
-        # Grab shared meta from the first file
         if first_meta is None:
             first_meta = data.get("meta", {})
             for key in ["optimizer", "optimizer_kwargs", "n_microbatches",
@@ -84,29 +83,8 @@ def merge_results(run_dir: Path, output_file: Path, models: list[str], schedule,
                 if key in first_meta:
                     combined["meta"][key] = first_meta[key]
 
-        # Extract step info from filename: step_<model>_<step_i>_<label>.json
-        stem = step_file.stem  # e.g. "step_conv_next_0_idle"
-
         for model_name, model_result in data.get("results", {}).items():
-            if model_name not in combined["results"]:
-                combined["results"][model_name] = {"batches": []}
-
-            # Tag each batch with the interference step
-            step_tag = stem.split(f"{model_name}_", 1)[-1] if model_name in stem else stem
-            for batch in model_result.get("batches", []):
-                batch["interference_step"] = step_tag
-                combined["results"][model_name]["batches"].append(batch)
-
-    # Compute overall RPS per model
-    for model_name, result in combined["results"].items():
-        batches = result["batches"]
-        timed = [b for b in batches if "timing" in b]
-        if timed:
-            total_time = timed[-1]["timing"]["end"] - timed[0]["timing"]["start"]
-            total_requests = len(timed)
-            result["requests_per_second"] = total_requests / total_time if total_time > 0 else 0
-        else:
-            result["requests_per_second"] = 0
+            combined["results"][model_name] = model_result
 
     # Write combined file
     with open(output_file, "w") as f:
@@ -115,21 +93,19 @@ def merge_results(run_dir: Path, output_file: Path, models: list[str], schedule,
     # Clean up temp directory
     shutil.rmtree(run_dir)
 
-    return output_file
-
 
 def main():
     parser = argparse.ArgumentParser(description="Interference evaluation runner")
-    parser.add_argument("--batches", type=int, default=2000,
-                        help="Number of batches per schedule step (default: 2000)")
+    parser.add_argument("--duration", type=int, default=120,
+                        help="Seconds per schedule step (default: 120)")
     parser.add_argument("--nproc", type=int, default=int(os.environ.get("NPROC", "4")),
                         help="Number of torchrun processes (default: 4)")
     parser.add_argument("--omp-threads", type=int, default=int(os.environ.get("OMP_THREADS", "8")),
                         help="OMP_NUM_THREADS for evaluation (default: 8)")
     parser.add_argument("--no-interference", action="store_true",
                         help="Run evaluation without interference")
-    parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="small",
-                        help="Deterministic schedule name (default: small)")
+    parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="gradient",
+                        help="Interference schedule (default: gradient)")
     parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small",
                         help="Which model set to evaluate (default: small)")
     parser.add_argument("-o", "--output", type=str, default="./data/interference",
@@ -141,7 +117,7 @@ def main():
     models = [name for name, _, _ in MODEL_SETS[args.model_set]]
     run_interference = not args.no_interference
     schedule = SCHEDULES[args.schedule]
-    total_batches_per_model = args.batches * len(schedule)
+    model_duration = args.duration * len(schedule)
 
     # Set up temp working directory and final output path
     output_dir = Path(args.output)
@@ -151,78 +127,86 @@ def main():
     run_dir = output_dir / f".tmp_{timestamp}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
+    total_time = model_duration * len(models)
     print("=" * 44)
     print("Interference Experiment")
     print("=" * 44)
-    print(f"Batches/step:  {args.batches}")
-    print(f"Schedule:      {args.schedule} ({len(schedule)} steps, {total_batches_per_model} batches per model)")
+    print(f"Step duration: {args.duration}s")
+    print(f"Schedule:      {args.schedule} ({len(schedule)} steps, {model_duration}s per model)")
     print(f"Models:        {len(models)} ({args.model_set} set): {', '.join(models)}")
     print(f"Interference:  {run_interference}")
     print(f"NPROC:         {args.nproc}")
-    print(f"Output:        {run_dir}")
+    print(f"Output:        {output_file}")
+    print(f"Total time:    ~{total_time}s ({total_time // 60}m)")
     print("=" * 44)
     print()
 
-    # Interference manager (manages benchmark processes directly)
-    manager = InterferenceManager(log_file=run_dir / "interference.json")
+    eval_env = os.environ.copy()
+    eval_env["OMP_NUM_THREADS"] = str(args.omp_threads)
+
+    # Track interference threads for clean up
+    import threading
+    interference_threads: list[threading.Thread] = []
+    managers: list[InterferenceManager] = []
 
     def cleanup(*_):
         print("\nCleaning up...")
-        manager.stop_all()
-        manager.save_log()
+        for m in managers:
+            m.stop_all()
         print("Done.")
 
     signal.signal(signal.SIGTERM, lambda *_: (cleanup(), sys.exit(0)))
     signal.signal(signal.SIGINT, lambda *_: (cleanup(), sys.exit(1)))
 
-    eval_env = os.environ.copy()
-    eval_env["OMP_NUM_THREADS"] = str(args.omp_threads)
-
     for i, model in enumerate(models):
         print()
         print("=" * 44)
-        print(f"[{i + 1}/{len(models)}] {model} ({len(schedule)} steps × {args.batches} batches)")
+        print(f"[{i + 1}/{len(models)}] {model} ({len(schedule)} steps × {args.duration}s = {model_duration}s)")
         print("=" * 44)
 
-        for step_i, (bench_name, threads) in enumerate(schedule):
-            # Start/stop interference for this step
-            manager.stop_all()
-            if run_interference and bench_name != "idle":
-                manager.start_benchmark(bench_name, threads)
-            else:
-                label = bench_name if bench_name == "idle" else f"{bench_name} (no-interference mode)"
-                print(f"  Step {step_i + 1}/{len(schedule)}: {label}")
-                manager.log_event("start", bench_name, threads)
+        # 1. Start interference in a background thread
+        manager = InterferenceManager(log_file=run_dir / f"interference_{model}.json")
+        managers.append(manager)
 
-            # Run evaluation for this step
-            step_label = f"{bench_name}_{threads}t" if bench_name != "idle" else "idle"
-            step_output = run_dir / f"step_{model}_{step_i}_{step_label}.json"
+        if run_interference:
+            t = threading.Thread(
+                target=run_deterministic,
+                args=(manager, args.duration),
+                kwargs={"schedule": schedule},
+                daemon=True,
+            )
+            t.start()
+            interference_threads.append(t)
 
-            eval_cmd = [
-                "uv", "run", "--no-sync", "torchrun",
-                "--nproc_per_node", str(args.nproc),
-                "-m", "tests.evaluation",
-                "-n", str(args.batches),
-                "--model-set", args.model_set,
-                "--model", model,
-                "-o", str(step_output),
-                *args.eval_args,
-            ]
-            log_file = run_dir / f"eval_{model}_step{step_i}_{step_label}.log"
+        # 2. Run evaluation for this model (foreground)
+        print(f"  Starting evaluation...")
+        eval_cmd = [
+            "uv", "run", "--no-sync", "torchrun",
+            "--nproc_per_node", str(args.nproc),
+            "-m", "tests.evaluation",
+            "--duration", str(model_duration),
+            "--model-set", args.model_set,
+            "--model", model,
+            "-o", str(run_dir / f"eval_{model}.json"),
+            *args.eval_args,
+        ]
+        log_file = run_dir / f"eval_{model}.log"
+        exit_code = run_eval(eval_cmd, env=eval_env, log_file=log_file)
 
-            exit_code = run_eval(eval_cmd, env=eval_env, log_file=log_file)
-
-            if exit_code != 0:
-                print(f"  Warning: {model} step {step_i + 1} exited with code {exit_code}")
-            else:
-                print(f"  Step {step_i + 1}/{len(schedule)} complete ({step_label})")
-
+        # 3. Stop interference
         manager.stop_all()
+        manager.save_log()
+
+        if exit_code != 0:
+            print(f"  Warning: evaluation for {model} exited with code {exit_code}")
+
+        # Wait for interference thread to finish
+        if run_interference and interference_threads:
+            interference_threads[-1].join(timeout=5)
+
         print(f"  {model} complete.")
 
-    manager.save_log()
-
-    # Merge all per-step results into one JSON
+    # Merge all results into one JSON
     print()
     print("Merging results...")
     merge_results(run_dir, output_file, models, schedule, args)
