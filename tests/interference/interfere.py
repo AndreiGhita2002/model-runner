@@ -148,34 +148,36 @@ SCHEDULES = {
 }
 
 
-def run_deterministic(manager: InterferenceManager, duration: int, interval: int,
+def run_deterministic(manager: InterferenceManager, step_duration: int,
                       schedule: list[tuple[str, int]] | None = None):
-    """Run a deterministic interference schedule."""
+    """Run a deterministic interference schedule.
+
+    Args:
+        manager: InterferenceManager instance.
+        step_duration: Seconds per schedule step.
+        schedule: List of (benchmark_name, num_threads) tuples.
+    """
     if schedule is None:
         schedule = SCHEDULES["full"]
 
+    total_duration = step_duration * len(schedule)
     start = time.time()
-    step = 0
 
-    print(f"Deterministic interference: {duration}s, change every {interval}s, "
-          f"{len(schedule)} steps per cycle")
+    print(f"Deterministic interference: {len(schedule)} steps × {step_duration}s = {total_duration}s")
     try:
-        while time.time() - start < duration:
-            name, threads = schedule[step % len(schedule)]
+        for step, (name, threads) in enumerate(schedule):
             manager.stop_all()
 
             if name != "idle":
                 manager.start_benchmark(name, threads)
             else:
-                print(f"  Idle period ({interval}s)")
+                print(f"  Idle period ({step_duration}s)")
                 manager.log_event("start", "idle")
 
-            # Wait for the interval or until duration ends
-            wait_until = min(start + duration, time.time() + interval)
+            # Wait for step_duration
+            wait_until = start + step_duration * (step + 1)
             while time.time() < wait_until:
                 time.sleep(1)
-
-            step += 1
     except KeyboardInterrupt:
         print("\nInterference interrupted.")
     finally:
@@ -228,14 +230,12 @@ def run_random(manager: InterferenceManager, duration: int,
 
 def main():
     parser = argparse.ArgumentParser(description="Interference generator")
-    parser.add_argument("--duration", type=int, default=600,
-                        help="Total duration in seconds (default: 600 = 10 min)")
+    parser.add_argument("--duration", type=int, default=60,
+                        help="Seconds per schedule step (default: 60)")
     parser.add_argument("--mode", choices=["deterministic", "random"], default="deterministic",
                         help="Interference mode (default: deterministic)")
-    parser.add_argument("--interval", type=int, default=60,
-                        help="Seconds between benchmark changes in deterministic mode (default: 60)")
     parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="small",
-                        help="Deterministic schedule to use (default: full)")
+                        help="Deterministic schedule to use (default: small)")
     parser.add_argument("-o", "--output", type=Path, default=None,
                         help="Output JSON file for interference log")
     parser.add_argument("--seed", type=int, default=42,
@@ -264,11 +264,13 @@ def main():
     # Clean up on SIGTERM
     signal.signal(signal.SIGTERM, lambda *_: (manager.stop_all(), sys.exit(0)))
 
+    schedule = SCHEDULES[args.schedule]
+    total_duration = args.duration * len(schedule)
+
     if args.mode == "deterministic":
-        run_deterministic(manager, args.duration, args.interval,
-                          schedule=SCHEDULES[args.schedule])
+        run_deterministic(manager, args.duration, schedule=schedule)
     else:
-        run_random(manager, args.duration, seed=args.seed, idle_start=args.idle_start)
+        run_random(manager, total_duration, seed=args.seed, idle_start=args.idle_start)
 
     manager.save_log()
 

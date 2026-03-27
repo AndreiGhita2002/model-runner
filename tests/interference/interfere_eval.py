@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from tests.testing_models import MODEL_SETS
+from tests.interference.interfere import SCHEDULES
 
 
 def run_cmd(cmd: list[str], env: dict | None = None, log_file: Path | None = None,
@@ -60,8 +61,8 @@ def stop_process(proc: subprocess.Popen):
 
 def main():
     parser = argparse.ArgumentParser(description="Interference evaluation runner")
-    parser.add_argument("--duration", type=int, default=600,
-                        help="Duration per model in seconds (default: 600)")
+    parser.add_argument("--duration", type=int, default=60,
+                        help="Seconds per schedule step (default: 60)")
     parser.add_argument("--nproc", type=int, default=int(os.environ.get("NPROC", "4")),
                         help="Number of torchrun processes (default: 4)")
     parser.add_argument("--omp-threads", type=int, default=int(os.environ.get("OMP_THREADS", "8")),
@@ -70,9 +71,7 @@ def main():
                         help="Run evaluation without interference")
     parser.add_argument("--mode", choices=["deterministic", "random"], default="deterministic",
                         help="Interference mode (default: deterministic)")
-    parser.add_argument("--interval", type=int, default=60,
-                        help="Seconds between interference changes (default: 60)")
-    parser.add_argument("--schedule", type=str, default="small",
+    parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="small",
                         help="Deterministic schedule name (default: small)")
     parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small",
                         help="Which model set to evaluate (default: small)")
@@ -84,19 +83,22 @@ def main():
 
     models = [name for name, _, _ in MODEL_SETS[args.model_set]]
     run_interference = not args.no_interference
+    schedule = SCHEDULES[args.schedule]
+    model_duration = args.duration * len(schedule)
 
     # Set up output directory
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     run_dir = Path(args.output) / timestamp
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    total_time = args.duration * len(models)
+    total_time = model_duration * len(models)
     print("=" * 44)
     print("Interference Experiment")
     print("=" * 44)
-    print(f"Duration:      {args.duration}s per model")
+    print(f"Step duration: {args.duration}s")
+    print(f"Schedule:      {args.schedule} ({len(schedule)} steps, {model_duration}s per model)")
     print(f"Models:        {len(models)} ({args.model_set} set): {', '.join(models)}")
-    print(f"Interference:  {run_interference} ({args.mode}, interval={args.interval}s)")
+    print(f"Interference:  {run_interference} ({args.mode})")
     print(f"NPROC:         {args.nproc}")
     print(f"Output:        {run_dir}")
     print(f"Total time:    ~{total_time}s ({total_time // 60}m)")
@@ -121,7 +123,7 @@ def main():
     for i, model in enumerate(models):
         print()
         print("=" * 44)
-        print(f"[{i + 1}/{len(models)}] Running: {model} ({args.duration}s)")
+        print(f"[{i + 1}/{len(models)}] Running: {model} ({model_duration}s)")
         print("=" * 44)
 
         interference_proc = None
@@ -133,7 +135,6 @@ def main():
                 sys.executable, "-m", "tests.interference.interfere",
                 "--duration", str(args.duration),
                 "--mode", args.mode,
-                "--interval", str(args.interval),
                 "--schedule", args.schedule,
                 "-o", str(run_dir / f"interference_{model}.json"),
             ]
@@ -150,7 +151,7 @@ def main():
             "uv", "run", "--no-sync", "torchrun",
             "--nproc_per_node", str(args.nproc),
             "-m", "tests.evaluation",
-            "--duration", str(args.duration),
+            "--duration", str(model_duration),
             "--model-set", args.model_set,
             "--model", model,
             "-o", str(run_dir),

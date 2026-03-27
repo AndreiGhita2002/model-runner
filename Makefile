@@ -84,12 +84,12 @@ csv:
 	uv run python data/runs_to_csv.py -d $(RUNS_DIR) -o data/runs_summary.csv
 
 # Interference experiments
-EXPERIMENT_DURATION ?= 600
+STEP_DURATION ?= 60
 interf-eval: install
-	uv run python -m tests.interference.interfere_eval --duration $(EXPERIMENT_DURATION) --nproc $(NPROC)
+	uv run python -m tests.interference.interfere_eval --duration $(STEP_DURATION) --nproc $(NPROC)
 
 interf-test: install
-	uv run python -m tests.interference.interfere_eval --no-interference --duration 30 --nproc $(NPROC)
+	uv run python -m tests.interference.interfere_eval --no-interference --duration 10 --nproc $(NPROC)
 
 clean:
 	rm -rf build/ *.egg-info/ __pycache__/ .pytest_cache/
