@@ -89,7 +89,7 @@ interf-csv:
 # Interference experiments
 STEP_DURATION ?= 120
 interf-eval: install
-	uv run python -m tests.interference.interfere_eval --duration $(STEP_DURATION) --nproc $(NPROC)
+	uv run python -m tests.interference.interfere_eval --duration $(STEP_DURATION) --model-set reduced --nproc $(NPROC)
 
 interf-test: install
 	uv run python -m tests.interference.interfere_eval --no-interference --duration 10 --nproc $(NPROC)
