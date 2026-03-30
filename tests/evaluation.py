@@ -160,8 +160,8 @@ def evaluation_main(
             for model_name, _, rand_inputs in models:
                 for i in range(n_to_queue):
                     input_seed = seed + request_offset + i
-                    x = generate_batch(rand_inputs, batch_size, input_seed)
-                    req_id = main.queue_work(model_name, x)
+                    gen_fn = lambda ri=rand_inputs, bs=batch_size, s=input_seed: generate_batch(ri, bs, s)
+                    req_id = main.queue_work(model_name, gen_fn, is_generator_fn=True)
                     requests[model_name].append(req_id)
 
             # Send request IDs to last rank so it can match outputs

@@ -2,6 +2,7 @@ import queue
 import threading
 import uuid
 from typing import Any, List, Dict, Callable
+from enum import Enum
 
 import torch
 import torch.distributed as dist
@@ -10,6 +11,11 @@ from torch import nn
 from .pipeline_runner import PipelineRunner
 from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer
 from .util import uuids_to_tensor, tensor_to_uuids
+
+
+class WorkType(Enum):
+    Raw = 0
+    GeneratorFn = 1
 
 
 class PipelineServer:
@@ -76,12 +82,14 @@ class PipelineServer:
                               device=device, depth=depth, **kwargs)
         self.work_by_model[model_name] = queue.Queue()
 
-    def queue_work(self, model_name: str, x: Any) -> uuid.UUID:
+    def queue_work(self, model_name: str, x: Any, is_generator_fn: bool = False) -> uuid.UUID:
         """Submit an inference request for a model. Must only be called on rank 0.
 
         Args:
             model_name: Name of a model previously registered with ``add_model``.
             x: Input tensor (must include the batch dimension).
+            is_generator_fn: (optional) True if x is a function that outputs the model input,
+                rather than being the input itself. Default: False
 
         Returns:
             The UUID assigned to this request.
@@ -94,8 +102,11 @@ class PipelineServer:
             raise RuntimeError("queue_work() must only be called on rank 0")
         if model_name not in self.work_by_model:
             raise ValueError(f"Model '{model_name}' not found. Add it with add_model() first.")
+        if is_generator_fn and not callable(x):
+            raise TypeError("x must be callable when is_generator_fn=True")
         request_id = uuid.uuid4()
-        self.work_by_model[model_name].put((request_id, x))
+        work_type = WorkType.GeneratorFn if is_generator_fn else WorkType.Raw
+        self.work_by_model[model_name].put((request_id, work_type, x))
         with self._work_available:
             self._work_available.notify()
         return request_id
@@ -121,15 +132,18 @@ class PipelineServer:
 
         if rank == 0:
             # Collect up to n_microbatches items from this model's queue
-            work_items: list[tuple[uuid.UUID, Any]] = []
-            while len(work_items) < n_microbatches and not model_queue.empty():
-                work_items.append(model_queue.get(block=False))
-
-            req_ids = [item[0] for item in work_items]
-            inputs = [item[1] for item in work_items]
+            req_ids: list[uuid.UUID] = []
+            inputs: list[Any] = []
+            while len(inputs) < n_microbatches and not model_queue.empty():
+                req_id, work_type, payload = model_queue.get(block=False)
+                if work_type == WorkType.GeneratorFn:
+                    inputs.append(payload())
+                else:
+                    inputs.append(payload)
+                req_ids.append(req_id)
 
             self._log(
-                f"PipelineServer.run: processing {len(work_items)} requests for model '{model_name}' "
+                f"PipelineServer.run: processing {len(inputs)} requests for model '{model_name}' "
                 f"(microbatch size: {n_microbatches})")
 
             # Send request IDs to last rank via P2P (after forward, but prepare tensor now)
@@ -168,7 +182,7 @@ class PipelineServer:
         """Run the main processing loop. Must be called on all ranks.
 
         Continuously drains work queues for every registered model. All ranks
-        participate in each pipeline forward pass (synchronized via broadcast).
+        participate in each pipeline forward pass (synchronised via broadcast).
 
         Args:
             exit_when_done: If True, return once all queues are empty. If False
