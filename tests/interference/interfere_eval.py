@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 from tests.testing_models import MODEL_SETS
-from tests.interference.interfere import SCHEDULES, InterferenceManager, run_deterministic
+from tests.interference.interfere import SCHEDULES, InterferenceManager, run_deterministic, step_label
 
 
 def run_eval_background(cmd: list[str], env: dict | None = None,
@@ -50,7 +50,7 @@ def merge_results(run_dir: Path, output_file: Path, models: list[str], schedule,
         "meta": {
             "experiment": "interference",
             "schedule": args.schedule,
-            "schedule_steps": [(name, threads, cores) for name, threads, cores in schedule],
+            "schedule_steps": [list(specs) for specs in schedule],
             "step_duration": args.duration,
             "num_requests": "continuous",
             "model_set": args.model_set,

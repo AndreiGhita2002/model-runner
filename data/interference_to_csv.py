@@ -14,28 +14,6 @@ import sys
 from pathlib import Path
 
 
-def get_interference_regions(interf_log: dict) -> list[tuple[float, float, str, int]]:
-    """Extract (start, end, benchmark, threads) regions from an interference log."""
-    events = interf_log.get("events", [])
-    regions = []
-    current_bench = None
-    current_start = None
-    current_threads = 0
-
-    for e in events:
-        if e["event"] == "start":
-            if current_bench is not None:
-                regions.append((current_start, e["time"], current_bench, current_threads))
-            current_bench = e["benchmark"]
-            current_start = e["time"]
-            current_threads = e.get("threads", 0)
-        elif e["event"] == "stop" and e.get("benchmark") == "all":
-            if current_bench is not None:
-                regions.append((current_start, e["time"], current_bench, current_threads))
-                current_bench = None
-
-    return regions
-
 
 def compute_clock_offset(timed_batches: list[dict], regions: list[tuple]) -> float:
     """Compute offset between perf_counter (batches) and time.time (interference).
@@ -50,11 +28,9 @@ def compute_clock_offset(timed_batches: list[dict], regions: list[tuple]) -> flo
     return region_start - batch_start
 
 
-def step_rps(timed_batches: list[dict], region: tuple[float, float, str, int],
+def step_rps(timed_batches: list[dict], r_start: float, r_end: float,
              clock_offset: float = 0.0) -> float:
     """Compute RPS for batches within a time region, adjusting for clock offset."""
-    r_start, r_end, _, _ = region
-    # Convert region bounds to batch clock
     r_start_adj = r_start - clock_offset
     r_end_adj = r_end - clock_offset
     step_batches = [b for b in timed_batches if r_start_adj <= b["timing"]["start"] < r_end_adj]
@@ -64,22 +40,41 @@ def step_rps(timed_batches: list[dict], region: tuple[float, float, str, int],
     return 0
 
 
-def step_label(name: str, threads: int, cores: str = "") -> str:
-    """Short label for a schedule step."""
-    if name == "idle":
+def _normalize_step(step) -> list[list]:
+    """Normalise a schedule step to the new format (list of specs).
+
+    Old format: ["idle", 0, 0] or ["cpu_stress", 2, "32-33"]
+    New format: [["idle", 0, ""]] or [["cpu_stress", 2, "32-33"]]
+    """
+    if not step:
+        return []
+    # Old format: first element is a string (benchmark name)
+    if isinstance(step[0], str):
+        return [step]
+    # New format: list of specs
+    return step
+
+
+def fmt_step_label(step) -> str:
+    """Short label for a schedule step (list of specs, or old-format tuple)."""
+    specs = _normalize_step(step)
+    if not specs:
         return "idle"
-    cores_str = f"_c{cores}" if cores else ""
-    return f"{name}_{threads}t{cores_str}"
+    parts = []
+    for spec in specs:
+        name, threads = spec[0], spec[1]
+        cores = spec[2] if len(spec) > 2 else ""
+        if name == "idle":
+            parts.append("idle")
+        else:
+            cores_str = f"_c{cores}" if cores else ""
+            parts.append(f"{name}_{threads}t{cores_str}")
+    return "+".join(parts)
 
 
 def schedule_summary(steps: list) -> str:
     """One-line readable schedule summary."""
-    parts = []
-    for s in steps:
-        name, threads = s[0], s[1]
-        cores = s[2] if len(s) > 2 else ""
-        parts.append(step_label(name, threads, cores))
-    return " -> ".join(parts)
+    return " -> ".join(fmt_step_label(step) for step in steps)
 
 
 def analyse_run(path: Path) -> list[dict]:
@@ -105,18 +100,26 @@ def analyse_run(path: Path) -> list[dict]:
             "batches": len(timed),
         }
 
-        # Per-step RPS
+        # Compute step time regions from metadata
         interf_log = interference_logs.get(model_name, {})
-        regions = get_interference_regions(interf_log)
+        events = interf_log.get("events", [])
+        step_duration = meta.get("step_duration", 0)
+
+        if events and step_duration:
+            first_time = events[0]["time"]
+            regions = [(first_time + i * step_duration, first_time + (i + 1) * step_duration)
+                       for i in range(len(schedule_steps))]
+        else:
+            regions = []
+
         offset = compute_clock_offset(timed, regions)
 
         for i, step in enumerate(schedule_steps):
-            name, threads = step[0], step[1]
-            cores = step[2] if len(step) > 2 else ""
-            label = step_label(name, threads, cores)
+            label = fmt_step_label(step)
 
             if i < len(regions):
-                rps = step_rps(timed, regions[i], clock_offset=offset)
+                r_start, r_end = regions[i]
+                rps = step_rps(timed, r_start, r_end, clock_offset=offset)
                 row[label] = f"{rps:.2f}" if rps > 0 else "N/A"
             else:
                 row[label] = "N/A"

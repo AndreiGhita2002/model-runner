@@ -31,22 +31,31 @@ BENCHMARKS = {
     },
 }
 
+# A benchmark instance: (name, threads, cores)
+BenchSpec = tuple[str, int, str]
+
 
 class InterferenceManager:
     def __init__(self, log_file: Path | None = None):
-        self.active_processes: list[subprocess.Popen] = []
+        # Map from BenchSpec -> Popen process
+        self.active: dict[BenchSpec, subprocess.Popen] = {}
         self.log: list[dict] = []
         self.log_file = log_file
 
     def start_benchmark(self, name: str, num_threads: int = 1, cores: str = "") -> bool:
         """Start a benchmark process. Returns True if started successfully."""
+        spec = (name, num_threads, cores)
+
+        # Already running with same spec — skip
+        if spec in self.active and self.active[spec].poll() is None:
+            return True
+
         bench = BENCHMARKS.get(name)
         if bench is None:
             print(f"  Unknown benchmark: {name}", file=sys.stderr)
             return False
 
         if bench["cmd"] is None:
-            # "idle" benchmark — just log it
             self.log_event("start", name, num_threads, pid=None)
             return True
 
@@ -57,14 +66,12 @@ class InterferenceManager:
             env.update(bench["env"])
 
         cmd = list(bench["cmd"])
-        # Resolve binary path — subprocess.Popen may not search PATH the same way a shell does
         resolved = shutil.which(cmd[0])
         if resolved:
             cmd[0] = resolved
         if bench.get("args_fn"):
             cmd.extend(bench["args_fn"](num_threads))
 
-        # Pin to specific cores if requested
         if cores:
             cmd = ["taskset", "-c", cores] + cmd
 
@@ -78,7 +85,7 @@ class InterferenceManager:
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            self.active_processes.append(proc)
+            self.active[spec] = proc
             self.log_event("start", name, num_threads, pid=proc.pid)
             cores_str = f", cores={cores}" if cores else ""
             print(f"  Started {name} (pid={proc.pid}, threads={num_threads}{cores_str})")
@@ -90,30 +97,39 @@ class InterferenceManager:
             print(f"  Failed to start {name}: {e}", file=sys.stderr)
             return False
 
-    def stop_all(self):
-        """Stop all running benchmark processes."""
-        for proc in self.active_processes:
-            if proc.poll() is None:
-                proc.terminate()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    proc.kill()
-                self.log_event("stop", "all", pid=proc.pid)
-        self.active_processes = []
-
-    def stop_one(self):
-        """Stop the oldest running benchmark process."""
-        alive = [p for p in self.active_processes if p.poll() is None]
-        if alive:
-            proc = alive[0]
+    def stop_benchmark(self, spec: BenchSpec):
+        """Stop a specific benchmark by spec."""
+        proc = self.active.pop(spec, None)
+        if proc is None:
+            return
+        if proc.poll() is None:
             proc.terminate()
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 proc.kill()
-            self.log_event("stop", "oldest", pid=proc.pid)
-            self.active_processes.remove(proc)
+        name, threads, cores = spec
+        self.log_event("stop", name, threads, pid=proc.pid)
+        cores_str = f", cores={cores}" if cores else ""
+        print(f"  Stopped {name} (pid={proc.pid}, threads={threads}{cores_str})")
+
+    def apply_step(self, step: list[BenchSpec]):
+        """Transition to a new set of benchmarks, keeping unchanged ones running."""
+        desired = set(step)
+        current = set(self.active.keys())
+
+        # Stop benchmarks not in the new step
+        for spec in current - desired:
+            self.stop_benchmark(spec)
+
+        # Start benchmarks not yet running
+        for name, threads, cores in desired - current:
+            self.start_benchmark(name, threads, cores=cores)
+
+    def stop_all(self):
+        """Stop all running benchmark processes."""
+        for spec in list(self.active.keys()):
+            self.stop_benchmark(spec)
 
     def log_event(self, event_type: str, benchmark: str, threads: int = 0, pid: int = None):
         entry = {
@@ -133,44 +149,54 @@ class InterferenceManager:
             print(f"Interference log saved to {self.log_file}")
 
 
-# Schedule tuples: (benchmark_name, num_threads, cores)
-# cores: taskset -c spec for pinning benchmarks to specific cores (empty = no pinning)
+# Schedule: each step is a list of (benchmark_name, num_threads, cores) specs.
 # On fisherman: cores 0-31 are real, 32-63 are hyperthreads.
 # Adaptive pipeline runs on 0-31, benchmarks on 32-63.
 SCHEDULES = {
     "small": [
-        ("idle", 0, ""),
-        ("cpu_stress", 2, "32-33"),
-        ("memory_bandwidth", 1, "32"),
+        [],  # idle
+        [("cpu_stress", 2, "32-33")],
+        [("memory_bandwidth", 1, "32")],
     ],
     "full": [
-        ("idle", 0, ""),
-        ("cpu_stress", 2, "32-33"),
-        ("cpu_stress", 4, "32-35"),
-        ("memory_bandwidth", 1, "32"),
-        ("cpu_stress", 8, "32-39"),
-        ("memory_bandwidth", 2, "32-33"),
-        ("idle", 0, ""),
-        ("cpu_stress", 1, "32"),
-        ("memory_bandwidth", 4, "32-35"),
+        [],  # idle
+        [("cpu_stress", 2, "32-33")],
+        [("cpu_stress", 4, "32-35")],
+        [("memory_bandwidth", 1, "32")],
+        [("cpu_stress", 8, "32-39")],
+        [("memory_bandwidth", 2, "32-33")],
+        [],  # idle
+        [("cpu_stress", 1, "32")],
+        [("memory_bandwidth", 4, "32-35")],
     ],
     "gradient": [
-        ("idle", 0, ""),               # baseline — no interference
-        ("cpu_stress", 4, "32-35"),     # light — 4 threads on hyperthreads only
-        ("cpu_stress", 8, "32-39"),     # medium — 8 threads on hyperthreads
-        ("cpu_stress", 16, "32-47"),    # heavy — 16 threads, half the hyperthreads
+        [],                                  # baseline — no interference
+        [("cpu_stress", 4, "32-35")],        # light
+        [("cpu_stress", 8, "32-39")],        # medium
+        [("cpu_stress", 16, "32-47")],       # heavy
     ],
 }
 
 
+def step_label(step: list[BenchSpec]) -> str:
+    """Short readable label for a schedule step."""
+    if not step:
+        return "idle"
+    parts = []
+    for name, threads, cores in step:
+        cores_str = f"_c{cores}" if cores else ""
+        parts.append(f"{name}_{threads}t{cores_str}")
+    return "+".join(parts)
+
+
 def run_deterministic(manager: InterferenceManager, step_duration: int,
-                      schedule: list[tuple[str, int, str]] | None = None):
+                      schedule: list[list[BenchSpec]] | None = None):
     """Run a deterministic interference schedule.
 
     Args:
         manager: InterferenceManager instance.
         step_duration: Seconds per schedule step.
-        schedule: List of (benchmark_name, num_threads, cores) tuples.
+        schedule: List of steps, where each step is a list of BenchSpec tuples.
     """
     if schedule is None:
         schedule = SCHEDULES["full"]
@@ -180,17 +206,16 @@ def run_deterministic(manager: InterferenceManager, step_duration: int,
 
     print(f"Deterministic interference: {len(schedule)} steps × {step_duration}s = {total_duration}s")
     try:
-        for step, (name, threads, cores) in enumerate(schedule):
-            manager.stop_all()
+        for step_i, step in enumerate(schedule):
+            manager.apply_step(step)
 
-            if name != "idle":
-                manager.start_benchmark(name, threads, cores=cores)
-            else:
-                print(f"  Idle period ({step_duration}s)")
+            if not step:
+                print(f"  Step {step_i + 1}/{len(schedule)}: idle ({step_duration}s)")
                 manager.log_event("start", "idle")
+            else:
+                print(f"  Step {step_i + 1}/{len(schedule)}: {step_label(step)} ({step_duration}s)")
 
-            # Wait for step_duration
-            wait_until = start + step_duration * (step + 1)
+            wait_until = start + step_duration * (step_i + 1)
             while time.time() < wait_until:
                 time.sleep(1)
     except KeyboardInterrupt:
