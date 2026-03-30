@@ -1,0 +1,13 @@
+model/run,overall_rps,batches,idle,cpu_stress_1t_c19,cpu_stress_2t_c10,cpu_stress_4t,schedule,cpu_stress_4t_c32-35,cpu_stress_8t_c32-39,cpu_stress_16t_c32-47
+conv_next/interf2,22.66,400,0.72,1.10,0.77,0.81,idle -> cpu_stress_1t_c19 -> cpu_stress_2t_c10 -> cpu_stress_4t,,,
+conv_next_base/interf2,18.86,300,0.84,0.60,0.63,0.95,idle -> cpu_stress_1t_c19 -> cpu_stress_2t_c10 -> cpu_stress_4t,,,
+efficientnet_b6/interf2,1.99,100,N/A,N/A,N/A,0.08,idle -> cpu_stress_1t_c19 -> cpu_stress_2t_c10 -> cpu_stress_4t,,,
+regnet_x_16gf/interf2,10.97,200,0.43,0.52,0.26,0.55,idle -> cpu_stress_1t_c19 -> cpu_stress_2t_c10 -> cpu_stress_4t,,,
+conv_next/interf3,26.28,12416,29.08,,,,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47,26.20,26.81,22.85
+conv_next_base/interf3,22.24,10560,23.95,,,,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47,23.36,23.84,17.94
+efficientnet_b6/interf3,4.77,2272,4.82,,,,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47,4.70,4.80,5.04
+regnet_x_16gf/interf3,21.06,10016,17.73,,,,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47,25.33,21.77,19.55
+conv_next/run41,32.78,5000,32.78,,,,no interference,,,
+conv_next_base/run41,25.14,5000,25.14,,,,no interference,,,
+efficientnet_b6/run41,5.53,5000,5.53,,,,no interference,,,
+regnet_x_16gf/run41,18.41,5000,18.41,,,,no interference,,,

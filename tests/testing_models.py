@@ -196,7 +196,13 @@ evaluation_models_extended: list[tuple[str, types.FunctionType, types.FunctionTy
     ("maxvit_t", load_maxvit_t, maxvit_t_rand_inputs),                # hybrid attention (~31M)
 ]
 
+evaluation_models_reduced: list[tuple[str, types.FunctionType, types.FunctionType]] = [
+    ("conv_next", load_conv_next, conv_next_rand_inputs),
+    ("efficientnet_b6", load_efficientnet_b6, efficientnet_b6_rand_inputs),
+]
+
 MODEL_SETS = {
     "small": evaluation_models,
     "extended": evaluation_models_extended,
+    "reduced": evaluation_models_reduced,
 }

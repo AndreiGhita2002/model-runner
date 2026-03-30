@@ -83,6 +83,9 @@ graphs: install
 csv:
 	uv run python data/runs_to_csv.py -d $(RUNS_DIR) -o data/runs_summary.csv
 
+interf-csv:
+	uv run python data/interference_to_csv.py --baseline $(RUNS_DIR)/run41.json -o data/interference_summary.csv
+
 # Interference experiments
 STEP_DURATION ?= 120
 interf-eval: install
