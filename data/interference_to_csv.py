@@ -16,24 +16,28 @@ from pathlib import Path
 
 
 def compute_clock_offset(timed_batches: list[dict], regions: list[tuple]) -> float:
-    """Compute offset between perf_counter (batches) and time.time (interference).
+    """Compute offset between batch clock and interference clock.
 
-    Both start roughly at the same wall-clock moment, so we align the first
-    batch timestamp with the first interference event.
+    Returns 0 if clocks are compatible (both perf_counter), or the offset
+    needed to align old runs where interference used time.time().
     """
     if not timed_batches or not regions:
         return 0.0
     batch_start = timed_batches[0]["timing"]["start"]
     region_start = regions[0][0]
-    return region_start - batch_start
+    # If both use perf_counter, they'll be in the same ballpark (< 1e9).
+    # If interference used time.time() (epoch ~1.7e9), the difference is huge.
+    diff = abs(region_start - batch_start)
+    if diff > 1e9:
+        return region_start - batch_start
+    return 0.0
 
 
 def step_rps(timed_batches: list[dict], r_start: float, r_end: float,
              clock_offset: float = 0.0) -> float:
-    """Compute RPS for batches within a time region, adjusting for clock offset."""
-    r_start_adj = r_start - clock_offset
-    r_end_adj = r_end - clock_offset
-    step_batches = [b for b in timed_batches if r_start_adj <= b["timing"]["start"] < r_end_adj]
+    """Compute RPS for batches within a time region."""
+    step_batches = [b for b in timed_batches
+                    if r_start - clock_offset <= b["timing"]["start"] < r_end - clock_offset]
     if len(step_batches) >= 2:
         wall = step_batches[-1]["timing"]["end"] - step_batches[0]["timing"]["start"]
         return len(step_batches) / wall if wall > 0 else 0

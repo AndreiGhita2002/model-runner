@@ -133,7 +133,7 @@ class InterferenceManager:
 
     def log_event(self, event_type: str, benchmark: str, threads: int = 0, pid: int = None):
         entry = {
-            "time": time.time(),
+            "time": time.perf_counter(),
             "event": event_type,
             "benchmark": benchmark,
             "threads": threads,
@@ -202,7 +202,7 @@ def run_deterministic(manager: InterferenceManager, step_duration: int,
         schedule = SCHEDULES["full"]
 
     total_duration = step_duration * len(schedule)
-    start = time.time()
+    start = time.perf_counter()
 
     print(f"Deterministic interference: {len(schedule)} steps × {step_duration}s = {total_duration}s")
     try:
@@ -216,7 +216,7 @@ def run_deterministic(manager: InterferenceManager, step_duration: int,
                 print(f"  Step {step_i + 1}/{len(schedule)}: {step_label(step)} ({step_duration}s)")
 
             wait_until = start + step_duration * (step_i + 1)
-            while time.time() < wait_until:
+            while time.perf_counter() < wait_until:
                 time.sleep(1)
     except KeyboardInterrupt:
         print("\nInterference interrupted.")
@@ -234,7 +234,7 @@ def run_random(manager: InterferenceManager, duration: int,
     benchmarks = [k for k in BENCHMARKS if k != "idle"]
     thread_choices = [1, 2, 4, 8]
 
-    start = time.time()
+    start = time.perf_counter()
     print(f"Random interference: {duration}s, intervals {min_interval}-{max_interval}s, seed={seed}")
 
     # Initial idle period
@@ -242,11 +242,11 @@ def run_random(manager: InterferenceManager, duration: int,
         print(f"  Initial idle period ({idle_start}s)")
         manager.log_event("start", "idle")
         wait_until = min(start + duration, start + idle_start)
-        while time.time() < wait_until:
+        while time.perf_counter() < wait_until:
             time.sleep(1)
 
     try:
-        while time.time() - start < duration:
+        while time.perf_counter() - start < duration:
             manager.stop_all()
 
             # 30% chance of idle
@@ -259,8 +259,8 @@ def run_random(manager: InterferenceManager, duration: int,
                 manager.start_benchmark(name, threads)
 
             interval = random.randint(min_interval, max_interval)
-            wait_until = min(start + duration, time.time() + interval)
-            while time.time() < wait_until:
+            wait_until = min(start + duration, time.perf_counter() + interval)
+            while time.perf_counter() < wait_until:
                 time.sleep(1)
     except KeyboardInterrupt:
         print("\nInterference interrupted.")
