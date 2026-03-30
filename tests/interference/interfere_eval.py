@@ -1,21 +1,25 @@
 """Interference evaluation runner.
 
-Runs each model through its own full interference schedule. The interference
-runs in the background (duration-based switching) while the evaluation runs
-in the foreground for each model.
+Runs each model through its own full interference schedule. Uses
+PipelineServer.run_continuous() via continuous_eval.py for maximum
+throughput — the eval runs until SIGTERM, with interference switching
+in the background.
 
 Usage:
     uv run python -m tests.interference.interfere_eval
-    uv run python -m tests.interference.interfere_eval --duration 120 --schedule gradient
+    uv run python -m tests.interference.interfere_eval --duration 120
     uv run python -m tests.interference.interfere_eval --no-interference
 """
 
 import argparse
 import json
 import os
+import shutil
 import signal
 import subprocess
 import sys
+import threading
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -23,37 +27,32 @@ from tests.testing_models import MODEL_SETS
 from tests.interference.interfere import SCHEDULES, InterferenceManager, run_deterministic
 
 
-def run_eval(cmd: list[str], env: dict | None = None,
-             log_file: Path | None = None) -> int:
-    """Run an evaluation command, returning the exit code."""
+def run_eval_background(cmd: list[str], env: dict | None = None,
+                        log_file: Path | None = None) -> subprocess.Popen:
+    """Start an evaluation subprocess in the background."""
     if log_file:
         log_file.parent.mkdir(parents=True, exist_ok=True)
         f = open(log_file, "w")
     else:
         f = None
 
-    proc = subprocess.Popen(
+    return subprocess.Popen(
         cmd,
         env=env,
         stdout=f or sys.stdout,
         stderr=subprocess.STDOUT,
     )
-    proc.wait()
-    if f:
-        f.close()
-    return proc.returncode
 
 
 def merge_results(run_dir: Path, output_file: Path, models: list[str], schedule, args):
     """Merge per-model eval JSONs and interference logs into one combined JSON."""
-    import shutil
-
     combined = {
         "meta": {
             "experiment": "interference",
             "schedule": args.schedule,
-            "schedule_steps": [(name, threads, nice) for name, threads, nice in schedule],
+            "schedule_steps": [(name, threads, cores) for name, threads, cores in schedule],
             "step_duration": args.duration,
+            "num_requests": "continuous",
             "model_set": args.model_set,
             "nproc": args.nproc,
             "omp_threads": args.omp_threads,
@@ -72,14 +71,17 @@ def merge_results(run_dir: Path, output_file: Path, models: list[str], schedule,
 
     # Load per-model eval JSONs
     first_meta = None
-    for eval_file in sorted(run_dir.glob("eval_*.json")):
+    for model in models:
+        eval_file = run_dir / f"eval_{model}.json"
+        if not eval_file.exists():
+            continue
         with open(eval_file) as f:
             data = json.load(f)
 
         if first_meta is None:
             first_meta = data.get("meta", {})
-            for key in ["optimizer", "optimizer_kwargs", "n_microbatches",
-                        "batch_size", "seed", "world_size", "clock", "git_commit"]:
+            for key in ["optimizer", "n_microbatches", "batch_size",
+                        "world_size", "clock", "git_commit"]:
                 if key in first_meta:
                     combined["meta"][key] = first_meta[key]
 
@@ -110,8 +112,6 @@ def main():
                         help="Which model set to evaluate (default: small)")
     parser.add_argument("-o", "--output", type=str, default="./data/interference",
                         help="Output directory (default: ./data/interference)")
-    parser.add_argument("eval_args", nargs="*",
-                        help="Additional arguments passed to evaluation.py")
     args = parser.parse_args()
 
     models = [name for name, _, _ in MODEL_SETS[args.model_set]]
@@ -127,7 +127,6 @@ def main():
     run_dir = output_dir / f".tmp_{timestamp}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    total_time = model_duration * len(models)
     print("=" * 44)
     print("Interference Experiment")
     print("=" * 44)
@@ -137,16 +136,12 @@ def main():
     print(f"Interference:  {run_interference}")
     print(f"NPROC:         {args.nproc}")
     print(f"Output:        {output_file}")
-    print(f"Total time:    ~{total_time}s ({total_time // 60}m)")
     print("=" * 44)
     print()
 
     eval_env = os.environ.copy()
     eval_env["OMP_NUM_THREADS"] = str(args.omp_threads)
 
-    # Track interference threads for clean up
-    import threading
-    interference_threads: list[threading.Thread] = []
     managers: list[InterferenceManager] = []
 
     def cleanup(*_):
@@ -164,50 +159,44 @@ def main():
         print(f"[{i + 1}/{len(models)}] {model} ({len(schedule)} steps × {args.duration}s = {model_duration}s)")
         print("=" * 44)
 
-        # 1. Start interference in a background thread
         manager = InterferenceManager(log_file=run_dir / f"interference_{model}.json")
         managers.append(manager)
 
-        if run_interference:
-            t = threading.Thread(
-                target=run_deterministic,
-                args=(manager, args.duration),
-                kwargs={"schedule": schedule},
-                daemon=True,
-            )
-            t.start()
-            interference_threads.append(t)
-
-        # 2. Run evaluation for this model (foreground)
+        # 1. Start eval in background (runs until SIGTERM)
         print(f"  Starting evaluation...")
         eval_cmd = [
+            "taskset", "-c", "0-31",
             "uv", "run", "--no-sync", "torchrun",
             "--nproc_per_node", str(args.nproc),
-            "-m", "tests.evaluation",
-            "--duration", str(model_duration),
-            "-b", "1",
-            "-m", "32",
-            "--optimizer", "shisha",
+            "-m", "tests.interference.continuous_eval",
             "--model-set", args.model_set,
             "--model", model,
             "-o", str(run_dir / f"eval_{model}.json"),
-            *args.eval_args,
         ]
-        log_file = run_dir / f"eval_{model}.log"
-        exit_code = run_eval(eval_cmd, env=eval_env, log_file=log_file)
+        eval_proc = run_eval_background(
+            eval_cmd, env=eval_env,
+            log_file=run_dir / f"eval_{model}.log",
+        )
 
-        # 3. Stop interference
+        # 2. Run interference schedule (blocking, takes model_duration seconds)
+        if run_interference:
+            run_deterministic(manager, args.duration, schedule=schedule)
+        else:
+            # No interference — just wait for the same duration
+            print(f"  No interference — waiting {model_duration}s...")
+            time.sleep(model_duration)
+
+        # 3. Stop eval via SIGTERM
         manager.stop_all()
         manager.save_log()
 
-        if exit_code != 0:
-            print(f"  Warning: evaluation for {model} exited with code {exit_code}")
-
-        # Wait for interference thread to finish
-        if run_interference:
-            for t in interference_threads:
-                t.join(timeout=5)
-            interference_threads.clear()
+        print(f"  Stopping evaluation...")
+        eval_proc.terminate()
+        try:
+            eval_proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            eval_proc.kill()
+            eval_proc.wait()
 
         print(f"  {model} complete.")
 

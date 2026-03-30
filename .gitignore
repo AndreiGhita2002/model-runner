@@ -22,3 +22,4 @@ uv.lock
 
 # bad run dont include it
 /data/interference/interf1/
+/docs/untracked/

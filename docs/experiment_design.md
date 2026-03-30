@@ -6,6 +6,7 @@
 	- [x] write the code ✅ 2026-03-25
 	- [ ] choose a better order of deterministic interference
 	- [ ] download dependencies
+
 ## Meeting notes
 - interference experiment
 	- have a shell script that starts inference
@@ -36,3 +37,6 @@
 	- check on adaptive model runner queue and add to it if it is close to finishing
 	- change benchmark every 10 minutes (?)
 - One todo left in code
+- use taskset to select what cpu cores to use
+  	- 32 real cores, 64 total virtual cores
+  	- adaptive pipeline should be on the first 32 cores, while the last 32 cores should have the benchmarks on them

@@ -89,7 +89,7 @@ interf-eval: install
 	uv run python -m tests.interference.interfere_eval --duration $(STEP_DURATION) --nproc $(NPROC)
 
 interf-test: install
-	uv run python -m tests.interference.interfere_eval --no-interference --duration 30 --nproc $(NPROC)
+	uv run python -m tests.interference.interfere_eval --no-interference --duration 10 --nproc $(NPROC)
 
 clean:
 	rm -rf build/ *.egg-info/ __pycache__/ .pytest_cache/

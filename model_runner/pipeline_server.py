@@ -58,6 +58,7 @@ class PipelineServer:
         # Synchronization for cross-thread/process work submission
         self._work_available = threading.Condition()
         self._shutdown_requested = False
+        self._stop_continuous = False
 
     def _log(self, msg: str):
         if self.verbose:
@@ -232,6 +233,77 @@ class PipelineServer:
                 if shutdown_tensor.item() == 1:
                     self._log("PipelineServer.run: shutdown requested, exiting")
                     return
+
+    def run_continuous(self, model_name: str, input_generator: Callable[[], Any],
+                       handle_output_fn: Callable[[uuid.UUID, str, Any, dict | None], None] | None = None):
+        """Run a single model continuously, generating inputs on the fly.
+
+        Designed for interference experiments. Generates inputs inline (no queue),
+        calls forward, invokes the callback, and repeats until ``stop_continuous()``
+        is called. Must be called on all ranks.
+
+        Args:
+            model_name: Registered model to run.
+            input_generator: Callable that returns one input tensor per call.
+                Only called on rank 0.
+            handle_output_fn: Optional callback invoked on the last rank per request.
+                Overrides the server-level ``handle_output_fn`` if provided.
+        """
+        pipeline = self.runner.pipelines[model_name]
+        n_microbatches = pipeline.n_microbatches
+        rank = dist.get_rank()
+        last_rank = dist.get_world_size() - 1
+        output_fn = handle_output_fn or self.handle_output_fn
+        self._stop_continuous = False
+
+        self._log(f"PipelineServer.run_continuous: starting for model '{model_name}'")
+
+        while True:
+            # Check stop flag (broadcast from rank 0)
+            if rank == 0:
+                stop = torch.tensor([1 if self._stop_continuous else 0], dtype=torch.int)
+            else:
+                stop = torch.tensor([0], dtype=torch.int)
+            dist.broadcast(stop, src=0)
+            if stop.item() == 1:
+                self._log("PipelineServer.run_continuous: stop requested, exiting")
+                return
+
+            # Generate inputs and request IDs on rank 0
+            inputs = None
+            req_ids = []
+            t_req_ids = None
+
+            if rank == 0:
+                req_ids = [uuid.uuid4() for _ in range(n_microbatches)]
+                inputs = [input_generator() for _ in range(n_microbatches)]
+
+                if dist.get_world_size() != 1:
+                    t_req_ids = uuids_to_tensor(req_ids, n_microbatches)
+
+            # All ranks call forward together
+            fwd_result = self.runner.forward(model_name, inputs)
+
+            # Send req_ids after forward
+            if rank == 0 and dist.get_world_size() != 1:
+                dist.send(t_req_ids, dst=last_rank)
+
+            # Handle outputs on last rank
+            if rank == last_rank:
+                if dist.get_world_size() != 1:
+                    t_req_ids = torch.zeros(n_microbatches * 4, dtype=torch.int)
+                    dist.recv(t_req_ids, src=0)
+                    req_ids = tensor_to_uuids(t_req_ids)
+
+                for i, req_id in enumerate(req_ids):
+                    if req_id is None:
+                        continue
+                    if output_fn is not None:
+                        output_fn(req_id, model_name, fwd_result.outputs[i], fwd_result.timing)
+
+    def stop_continuous(self):
+        """Signal ``run_continuous`` to stop after the current forward pass."""
+        self._stop_continuous = True
 
     def shutdown(self):
         """Request a graceful shutdown of the server."""
