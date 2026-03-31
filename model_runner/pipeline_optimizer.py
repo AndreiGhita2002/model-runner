@@ -373,7 +373,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  rebalance_interval: int = 3,
                  tolerance: float = 0.02,
                  optimum_tolerance: float = 0.08,
-                 optimum_escape_duration: float = 7,
+                 optimum_escape_duration: float = 5,
                  verbose: bool = False):
         """
         Args:
