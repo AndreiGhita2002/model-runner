@@ -190,12 +190,13 @@ def main():
         print("No data to export.", file=sys.stderr)
         sys.exit(1)
 
-    # Collect all column names (preserving order)
+    # Collect all column names (preserving order, schedule always last)
     columns = []
     for row in all_rows:
         for key in row:
-            if key not in columns:
+            if key not in columns and key != "schedule":
                 columns.append(key)
+    columns.append("schedule")
 
     out = open(args.output, "w", newline="") if args.output else sys.stdout
     writer = csv.DictWriter(out, fieldnames=columns)
