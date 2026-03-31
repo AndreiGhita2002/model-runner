@@ -24,7 +24,9 @@ from datetime import datetime
 from pathlib import Path
 
 from tests.testing_models import MODEL_SETS
-from tests.interference.interfere import SCHEDULES, InterferenceManager, run_deterministic, step_label
+from tests.interference.interfere import (
+    SCHEDULES, InterferenceManager, run_deterministic, step_label, resolve_model_schedule,
+)
 
 
 def run_eval_background(cmd: list[str], env: dict | None = None,
@@ -44,14 +46,23 @@ def run_eval_background(cmd: list[str], env: dict | None = None,
     )
 
 
-def merge_results(run_dir: Path, output_file: Path, models: list[str], schedule, args):
+def merge_results(run_dir: Path, output_file: Path, models: list[str],
+                   model_schedules: dict[str, dict], args):
     """Merge per-model eval JSONs and interference logs into one combined JSON."""
+    # Store per-model schedule info
+    per_model_meta = {}
+    for model in models:
+        ms = model_schedules[model]
+        per_model_meta[model] = {
+            "schedule_steps": [list(specs) for specs in ms["steps"]],
+            "step_duration": ms["step_duration"],
+        }
+
     combined = {
         "meta": {
             "experiment": "interference",
             "schedule": args.schedule,
-            "schedule_steps": [list(specs) for specs in schedule],
-            "step_duration": args.duration,
+            "model_schedules": per_model_meta,
             "num_requests": "continuous",
             "model_set": args.model_set,
             "nproc": args.nproc,
@@ -98,8 +109,8 @@ def merge_results(run_dir: Path, output_file: Path, models: list[str], schedule,
 
 def main():
     parser = argparse.ArgumentParser(description="Interference evaluation runner")
-    parser.add_argument("--duration", type=int, default=120,
-                        help="Seconds per schedule step (default: 120)")
+    parser.add_argument("--duration", type=int, default=None,
+                        help="Override seconds per schedule step (default: from schedule)")
     parser.add_argument("--nproc", type=int, default=int(os.environ.get("NPROC", "4")),
                         help="Number of torchrun processes (default: 4)")
     parser.add_argument("--omp-threads", type=int, default=int(os.environ.get("OMP_THREADS", "8")),
@@ -116,8 +127,12 @@ def main():
 
     models = [name for name, _, _ in MODEL_SETS[args.model_set]]
     run_interference = not args.no_interference
-    schedule = SCHEDULES[args.schedule]
-    model_duration = args.duration * len(schedule)
+
+    # Resolve per-model schedules
+    model_schedules = {}
+    for model in models:
+        model_schedules[model] = resolve_model_schedule(
+            args.schedule, model, duration_override=args.duration)
 
     # Set up temp working directory and final output path
     output_dir = Path(args.output)
@@ -130,9 +145,13 @@ def main():
     print("=" * 44)
     print("Interference Experiment")
     print("=" * 44)
-    print(f"Step duration: {args.duration}s")
-    print(f"Schedule:      {args.schedule} ({len(schedule)} steps, {model_duration}s per model)")
-    print(f"Models:        {len(models)} ({args.model_set} set): {', '.join(models)}")
+    print(f"Schedule:      {args.schedule}")
+    for model in models:
+        ms = model_schedules[model]
+        n_steps = len(ms["steps"])
+        dur = ms["step_duration"]
+        print(f"  {model}: {n_steps} steps × {dur}s = {n_steps * dur}s")
+    print(f"Models:        {len(models)} ({args.model_set} set)")
     print(f"Interference:  {run_interference}")
     print(f"NPROC:         {args.nproc}")
     print(f"Output:        {output_file}")
@@ -154,9 +173,14 @@ def main():
     signal.signal(signal.SIGINT, lambda *_: (cleanup(), sys.exit(1)))
 
     for i, model in enumerate(models):
+        ms = model_schedules[model]
+        steps = ms["steps"]
+        step_dur = ms["step_duration"]
+        model_duration = step_dur * len(steps)
+
         print()
         print("=" * 44)
-        print(f"[{i + 1}/{len(models)}] {model} ({len(schedule)} steps × {args.duration}s = {model_duration}s)")
+        print(f"[{i + 1}/{len(models)}] {model} ({len(steps)} steps × {step_dur}s = {model_duration}s)")
         print("=" * 44)
 
         manager = InterferenceManager(log_file=run_dir / f"interference_{model}.json")
@@ -180,9 +204,8 @@ def main():
 
         # 2. Run interference schedule (blocking, takes model_duration seconds)
         if run_interference:
-            run_deterministic(manager, args.duration, schedule=schedule)
+            run_deterministic(manager, step_dur, schedule=steps)
         else:
-            # No interference — just wait for the same duration
             print(f"  No interference — waiting {model_duration}s...")
             time.sleep(model_duration)
 
@@ -203,7 +226,7 @@ def main():
     # Merge all results into one JSON
     print()
     print("Merging results...")
-    merge_results(run_dir, output_file, models, schedule, args)
+    merge_results(run_dir, output_file, models, model_schedules, args)
 
     print()
     print("=" * 44)

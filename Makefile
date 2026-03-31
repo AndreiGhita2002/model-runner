@@ -84,12 +84,11 @@ csv:
 	uv run python data/runs_to_csv.py -d $(RUNS_DIR) -o data/runs_summary.csv
 
 interf-csv:
-	uv run python data/interference_to_csv.py --baseline $(RUNS_DIR)/run41.json -o data/interference_summary.csv
+	uv run python data/interference_to_csv.py -o data/interference_summary.csv
 
 # Interference experiments
-STEP_DURATION ?= 120
 interf-eval: install
-	uv run python -m tests.interference.interfere_eval --duration $(STEP_DURATION) --model-set reduced --nproc $(NPROC)
+	uv run python -m tests.interference.interfere_eval --model-set reduced --nproc $(NPROC)
 
 interf-test: install
 	uv run python -m tests.interference.interfere_eval --no-interference --duration 10 --nproc $(NPROC)

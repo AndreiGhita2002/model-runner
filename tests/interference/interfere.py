@@ -31,6 +31,69 @@ BENCHMARKS = {
     },
 }
 
+# Schedule format:
+#   "all": default settings for all models
+#   "<model_name>": per-model overrides (merged on top of "all")
+# Each entry can have:
+#   "step_duration": seconds per step (overrides CLI --duration)
+#   "steps": list of steps, each a list of BenchSpec tuples
+#
+# On fisherman: cores 0-31 are real, 32-63 are hyper threads.
+# Adaptive pipeline runs on 0-31, benchmarks on 32-63.
+SCHEDULES = {
+    "gradient": {
+        "all": {
+            "step_duration": 120,
+            "steps": [
+                # baseline — no interference
+                [],
+                # light
+                [("cpu_stress", 4, "32-35")],
+                # medium
+                [("cpu_stress", 8, "32-39")],
+                # medium with memory
+                [("cpu_stress", 8, "32-39"),
+                 ("memory_bandwidth", 1, "48")],
+                # heavy with memory
+                [("cpu_stress", 8, "32-39"),
+                 ("cpu_stress", 8, "39-47"),
+                 ("memory_bandwidth", 1, "48"),
+                 ("memory_bandwidth", 1, "49")],
+            ],
+        },
+        "efficientnet_b6": {
+            "step_duration": 180,
+        }
+    },
+    "small": {
+        "all": {
+            "step_duration": 120,
+            "steps": [
+                [],  # idle
+                [("cpu_stress", 2, "32-33")],
+                [("memory_bandwidth", 1, "32")],
+            ],
+        },
+    },
+    "full": {
+        "all": {
+            "step_duration": 120,
+            "steps": [
+                [],  # idle
+                [("cpu_stress", 2, "32-33")],
+                [("cpu_stress", 4, "32-35")],
+                [("memory_bandwidth", 1, "32")],
+                [("cpu_stress", 8, "32-39")],
+                [("memory_bandwidth", 2, "32-33")],
+                [],  # idle
+                [("cpu_stress", 1, "32")],
+                [("memory_bandwidth", 4, "32-35")],
+            ],
+        },
+    },
+}
+
+
 # A benchmark instance: (name, threads, cores)
 BenchSpec = tuple[str, int, str]
 
@@ -149,33 +212,24 @@ class InterferenceManager:
             print(f"Interference log saved to {self.log_file}")
 
 
-# Schedule: each step is a list of (benchmark_name, num_threads, cores) specs.
-# On fisherman: cores 0-31 are real, 32-63 are hyperthreads.
-# Adaptive pipeline runs on 0-31, benchmarks on 32-63.
-SCHEDULES = {
-    "small": [
-        [],  # idle
-        [("cpu_stress", 2, "32-33")],
-        [("memory_bandwidth", 1, "32")],
-    ],
-    "full": [
-        [],  # idle
-        [("cpu_stress", 2, "32-33")],
-        [("cpu_stress", 4, "32-35")],
-        [("memory_bandwidth", 1, "32")],
-        [("cpu_stress", 8, "32-39")],
-        [("memory_bandwidth", 2, "32-33")],
-        [],  # idle
-        [("cpu_stress", 1, "32")],
-        [("memory_bandwidth", 4, "32-35")],
-    ],
-    "gradient": [
-        [],                                  # baseline — no interference
-        [("cpu_stress", 4, "32-35")],        # light
-        [("cpu_stress", 8, "32-39")],        # medium
-        [("cpu_stress", 16, "32-47")],       # heavy
-    ],
-}
+def resolve_model_schedule(schedule_name: str, model_name: str,
+                           duration_override: int | None = None) -> dict:
+    """Resolve schedule settings for a specific model.
+
+    Merges "all" defaults with model-specific overrides.
+    Returns dict with "step_duration" and "steps".
+    """
+    schedule = SCHEDULES[schedule_name]
+    defaults = dict(schedule.get("all", {}))
+    overrides = schedule.get(model_name, {})
+
+    result = {**defaults, **overrides}
+
+    # CLI --duration overrides schedule step_duration
+    if duration_override is not None:
+        result["step_duration"] = duration_override
+
+    return result
 
 
 def step_label(step: list[BenchSpec]) -> str:

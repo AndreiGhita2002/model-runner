@@ -5,7 +5,7 @@ Usage:
     python data/interference_to_csv.py                                  # all runs, stdout
     python data/interference_to_csv.py -o data/interference_summary.csv # save to file
     python data/interference_to_csv.py -r data/interference/interf3.json
-    python data/interference_to_csv.py --baseline data/runs/run41.json  # include baseline
+    python data/interference_to_csv.py --baseline data/runs/run42.json  # different baseline
 """
 import argparse
 import csv
@@ -13,6 +13,7 @@ import json
 import sys
 from pathlib import Path
 
+DEFAULT_BASELINE = Path("data/runs/run41.json")
 
 
 def compute_clock_offset(timed_batches: list[dict], regions: list[tuple]) -> float:
@@ -25,8 +26,6 @@ def compute_clock_offset(timed_batches: list[dict], regions: list[tuple]) -> flo
         return 0.0
     batch_start = timed_batches[0]["timing"]["start"]
     region_start = regions[0][0]
-    # If both use perf_counter, they'll be in the same ballpark (< 1e9).
-    # If interference used time.time() (epoch ~1.7e9), the difference is huge.
     diff = abs(region_start - batch_start)
     if diff > 1e9:
         return region_start - batch_start
@@ -45,22 +44,16 @@ def step_rps(timed_batches: list[dict], r_start: float, r_end: float,
 
 
 def _normalize_step(step) -> list[list]:
-    """Normalise a schedule step to the new format (list of specs).
-
-    Old format: ["idle", 0, 0] or ["cpu_stress", 2, "32-33"]
-    New format: [["idle", 0, ""]] or [["cpu_stress", 2, "32-33"]]
-    """
+    """Normalise a schedule step to the new format (list of specs)."""
     if not step:
         return []
-    # Old format: first element is a string (benchmark name)
     if isinstance(step[0], str):
         return [step]
-    # New format: list of specs
     return step
 
 
 def fmt_step_label(step) -> str:
-    """Short label for a schedule step (list of specs, or old-format tuple)."""
+    """Short label for a schedule step."""
     specs = _normalize_step(step)
     if not specs:
         return "idle"
@@ -81,13 +74,24 @@ def schedule_summary(steps: list) -> str:
     return " -> ".join(fmt_step_label(step) for step in steps)
 
 
+def _get_model_schedule(meta: dict, model: str) -> tuple[list, int]:
+    """Get schedule_steps and step_duration for a model, handling old and new formats."""
+    model_schedules = meta.get("model_schedules", {})
+    if model in model_schedules:
+        ms = model_schedules[model]
+        return ms.get("schedule_steps", []), ms.get("step_duration", 0)
+    if "all" in model_schedules:
+        ms = model_schedules["all"]
+        return ms.get("schedule_steps", []), ms.get("step_duration", 0)
+    return meta.get("schedule_steps", []), meta.get("step_duration", 0)
+
+
 def analyse_run(path: Path) -> list[dict]:
     """Analyse one interference JSON, returning one row per model."""
     with open(path) as f:
         data = json.load(f)
 
     meta = data.get("meta", {})
-    schedule_steps = meta.get("schedule_steps", [])
     interference_logs = data.get("interference", {})
     results = data.get("results", {})
     run_name = path.stem
@@ -104,10 +108,12 @@ def analyse_run(path: Path) -> list[dict]:
             "batches": len(timed),
         }
 
+        # Resolve per-model schedule
+        schedule_steps, step_duration = _get_model_schedule(meta, model_name)
+
         # Compute step time regions from metadata
         interf_log = interference_logs.get(model_name, {})
         events = interf_log.get("events", [])
-        step_duration = meta.get("step_duration", 0)
 
         if events and step_duration:
             first_time = events[0]["time"]
@@ -119,14 +125,13 @@ def analyse_run(path: Path) -> list[dict]:
         offset = compute_clock_offset(timed, regions)
 
         for i, step in enumerate(schedule_steps):
-            label = fmt_step_label(step)
-
+            col = f"step {i} RPS"
             if i < len(regions):
                 r_start, r_end = regions[i]
                 rps = step_rps(timed, r_start, r_end, clock_offset=offset)
-                row[label] = f"{rps:.2f}" if rps > 0 else "N/A"
+                row[col] = f"{rps:.2f}" if rps > 0 else "N/A"
             else:
-                row[label] = "N/A"
+                row[col] = "N/A"
 
         row["schedule"] = schedule_summary(schedule_steps)
         rows.append(row)
@@ -142,8 +147,10 @@ def main():
                         help="Specific JSON files to process")
     parser.add_argument("-o", "--output", type=str, default=None,
                         help="Output CSV path (default: stdout)")
-    parser.add_argument("--baseline", type=Path, default=None,
-                        help="Baseline run JSON (e.g. data/runs/run41.json)")
+    parser.add_argument("--baseline", type=Path, default=DEFAULT_BASELINE,
+                        help=f"Baseline run JSON (default: {DEFAULT_BASELINE})")
+    parser.add_argument("--no-baseline", action="store_true",
+                        help="Skip baseline rows")
     args = parser.parse_args()
 
     if args.runs:
@@ -155,40 +162,29 @@ def main():
         print("No interference runs found.", file=sys.stderr)
         sys.exit(1)
 
-    # Load baseline if provided
-    baseline_rps: dict[str, tuple[float, int]] = {}
-    baseline_name = ""
-    if args.baseline and args.baseline.exists():
+    all_rows = []
+
+    # Load baseline first (appears at top of CSV)
+    if not args.no_baseline and args.baseline.exists():
         with open(args.baseline) as f:
             bl_data = json.load(f)
         baseline_name = args.baseline.stem
         for model_name, result in bl_data.get("results", {}).items():
             rps = result.get("requests_per_second", 0)
             n_batches = len([b for b in result.get("batches", []) if "timing" in b])
-            baseline_rps[model_name] = (rps, n_batches)
+            all_rows.append({
+                "model/run": f"{model_name}/{baseline_name}",
+                "overall_rps": f"{rps:.2f}",
+                "batches": n_batches,
+                "step 0 RPS": f"{rps:.2f}",
+                "schedule": "no interference",
+            })
 
-    all_rows = []
     for f in files:
         try:
             all_rows.extend(analyse_run(f))
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Skipping {f}: {e}", file=sys.stderr)
-
-    # Add baseline rows (RPS in the idle column, N/A for interference steps)
-    if baseline_rps and all_rows:
-        # Use first run's step columns to build matching baseline rows
-        sample_row = all_rows[0]
-        step_keys = [k for k in sample_row if k not in ("model/run", "overall_rps", "batches", "schedule")]
-        for model_name, (rps, n_batches) in baseline_rps.items():
-            row = {
-                "model/run": f"{model_name}/{baseline_name}",
-                "overall_rps": f"{rps:.2f}",
-                "batches": n_batches,
-            }
-            for i, key in enumerate(step_keys):
-                row[key] = f"{rps:.2f}" if i == 0 else ""  # RPS in idle column only
-            row["schedule"] = "no interference"
-            all_rows.append(row)
 
     if not all_rows:
         print("No data to export.", file=sys.stderr)
