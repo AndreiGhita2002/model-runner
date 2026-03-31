@@ -1,13 +1,17 @@
-model/run,overall_rps,batches,step 0 RPS,schedule,step 1 RPS,step 2 RPS,step 3 RPS,step 4 RPS
-conv_next/run41,32.78,5000,32.78,no interference,,,,
-conv_next_base/run41,25.14,5000,25.14,no interference,,,,
-efficientnet_b6/run41,5.53,5000,5.53,no interference,,,,
-regnet_x_16gf/run41,18.41,5000,18.41,no interference,,,,
-conv_next/interf3,26.28,12416,29.08,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47,26.20,26.81,22.85,
-conv_next_base/interf3,22.24,10560,23.95,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47,23.36,23.84,17.94,
-efficientnet_b6/interf3,4.77,2272,4.82,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47,4.70,4.80,5.04,
-regnet_x_16gf/interf3,21.06,10016,17.73,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47,25.33,21.77,19.55,
-conv_next/interf4,25.20,11968,25.12,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47,26.44,26.25,23.26,
-efficientnet_b6/interf4,4.79,2272,4.88,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47,4.77,4.70,4.96,
-conv_next/interf5,28.22,16736,26.54,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_8t_c32-39+memory_bandwidth_1t_c48 -> cpu_stress_8t_c32-39+cpu_stress_8t_c39-47+memory_bandwidth_1t_c48+memory_bandwidth_1t_c49,32.03,36.19,26.66,19.95
-efficientnet_b6/interf5,4.80,4288,4.74,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_8t_c32-39+memory_bandwidth_1t_c48 -> cpu_stress_8t_c32-39+cpu_stress_8t_c39-47+memory_bandwidth_1t_c48+memory_bandwidth_1t_c49,4.97,5.13,5.15,4.18
+model/run,overall_rps,batches,step 0 RPS,step 1 RPS,step 2 RPS,step 3 RPS,step 4 RPS,schedule
+conv_next/run41,32.78,5000,32.78,,,,,no interference
+conv_next_base/run41,25.14,5000,25.14,,,,,no interference
+efficientnet_b6/run41,5.53,5000,5.53,,,,,no interference
+regnet_x_16gf/run41,18.41,5000,18.41,,,,,no interference
+conv_next/interf3,26.28,12416,29.08,26.20,26.81,22.85,,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47
+conv_next_base/interf3,22.24,10560,23.95,23.36,23.84,17.94,,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47
+efficientnet_b6/interf3,4.77,2272,4.82,4.70,4.80,5.04,,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47
+regnet_x_16gf/interf3,21.06,10016,17.73,25.33,21.77,19.55,,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47
+conv_next/interf4,25.20,11968,25.12,26.44,26.25,23.26,,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47
+efficientnet_b6/interf4,4.79,2272,4.88,4.77,4.70,4.96,,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_16t_c32-47
+conv_next/interf5,28.22,16736,26.54,32.03,36.19,26.66,19.95,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_8t_c32-39+memory_bandwidth_1t_c48 -> cpu_stress_8t_c32-39+cpu_stress_8t_c39-47+memory_bandwidth_1t_c48+memory_bandwidth_1t_c49
+efficientnet_b6/interf5,4.80,4288,4.74,4.97,5.13,5.15,4.18,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_8t_c32-39+memory_bandwidth_1t_c48 -> cpu_stress_8t_c32-39+cpu_stress_8t_c39-47+memory_bandwidth_1t_c48+memory_bandwidth_1t_c49
+conv_next/interf6,24.04,14240,27.78,28.48,23.42,22.43,18.83,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_8t_c32-39+memory_bandwidth_1t_c48 -> cpu_stress_8t_c32-39+cpu_stress_8t_c39-47+memory_bandwidth_1t_c48+memory_bandwidth_1t_c49
+conv_next_base/interf6,19.10,11328,21.15,21.05,19.47,17.38,16.72,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_8t_c32-39+memory_bandwidth_1t_c48 -> cpu_stress_8t_c32-39+cpu_stress_8t_c39-47+memory_bandwidth_1t_c48+memory_bandwidth_1t_c49
+efficientnet_b6/interf6,4.98,5952,4.81,5.06,5.80,4.89,4.46,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_8t_c32-39+memory_bandwidth_1t_c48 -> cpu_stress_8t_c32-39+cpu_stress_8t_c39-47+memory_bandwidth_1t_c48+memory_bandwidth_1t_c49
+regnet_x_16gf/interf6,18.62,11072,17.52,21.60,21.20,17.64,15.28,idle -> cpu_stress_4t_c32-35 -> cpu_stress_8t_c32-39 -> cpu_stress_8t_c32-39+memory_bandwidth_1t_c48 -> cpu_stress_8t_c32-39+cpu_stress_8t_c39-47+memory_bandwidth_1t_c48+memory_bandwidth_1t_c49
