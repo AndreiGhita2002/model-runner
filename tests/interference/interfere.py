@@ -62,7 +62,7 @@ SCHEDULES = {
             ],
         },
         "efficientnet_b6": {
-            "step_duration": 180,
+            "step_duration": 240,
         }
     },
     "small": {

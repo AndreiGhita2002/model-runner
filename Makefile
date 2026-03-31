@@ -88,7 +88,7 @@ interf-csv:
 
 # Interference experiments
 interf-eval: install
-	uv run python -m tests.interference.interfere_eval --model-set reduced --nproc $(NPROC)
+	uv run python -m tests.interference.interfere_eval --nproc $(NPROC)
 
 interf-test: install
 	uv run python -m tests.interference.interfere_eval --no-interference --duration 10 --nproc $(NPROC)
