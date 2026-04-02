@@ -207,6 +207,7 @@ def main():
                 "--optimizer", "shisha",
                 "--stop-at-first-optimum",
                 "--wait-for-optimum",
+                "--tolerance", "0.0",
                 "--mode", "random", "--seed", str(interf_seed),
                 "--schedule", args.schedule,
                 "--model-set", args.model_set,

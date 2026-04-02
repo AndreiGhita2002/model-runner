@@ -132,6 +132,12 @@ def main():
                         help="Stop exploring after first optimum is found (run D)")
     parser.add_argument("--wait-for-optimum", action="store_true",
                         help="Wait for optimum before starting interference (run D)")
+    parser.add_argument("--optimum-timeout", type=int, default=300,
+                        help="Max seconds to wait for optimum (default: 600)")
+    parser.add_argument("--tolerance", type=float, default=None,
+                        help="Optimizer tolerance override")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="Verbose optimizer logging")
     parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small",
                         help="Which model set to evaluate (default: small)")
     parser.add_argument("-o", "--output", type=str, default="./data/interference",
@@ -216,6 +222,10 @@ def main():
         ]
         if args.stop_at_first_optimum:
             eval_cmd.append("--stop-at-first-optimum")
+        if args.tolerance is not None:
+            eval_cmd.extend(["--tolerance", str(args.tolerance)])
+        if args.verbose:
+            eval_cmd.append("-v")
         if signal_file:
             eval_cmd.extend(["--signal-file", str(signal_file)])
         eval_proc = run_eval_background(
@@ -225,15 +235,19 @@ def main():
 
         # 2. Wait for optimum if requested, then run interference
         if signal_file:
-            print(f"  Waiting for optimum before starting interference...")
+            print(f"  Waiting for optimum (timeout: {args.optimum_timeout}s)...")
+            wait_start = time.perf_counter()
             while not signal_file.exists():
-                # Check if eval crashed
                 if eval_proc.poll() is not None:
                     print(f"  Warning: eval exited before reaching optimum")
                     break
+                if time.perf_counter() - wait_start > args.optimum_timeout:
+                    print(f"  Timeout waiting for optimum — starting interference anyway")
+                    break
                 time.sleep(1)
             if signal_file.exists():
-                print(f"  Optimum reached — starting interference schedule")
+                elapsed = time.perf_counter() - wait_start
+                print(f"  Optimum reached after {elapsed:.0f}s — starting interference schedule")
                 signal_file.unlink()
 
         if run_interference:

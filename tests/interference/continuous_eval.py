@@ -62,8 +62,12 @@ def main():
     parser.add_argument("--optimizer", choices=list(OPTIMIZER_CHOICES.keys()), default="shisha")
     parser.add_argument("--stop-at-first-optimum", action="store_true",
                         help="Stop exploring after first optimum is found")
+    parser.add_argument("--tolerance", type=float, default=None,
+                        help="Optimizer tolerance (default: from optimizer)")
     parser.add_argument("--signal-file", type=str, default=None,
                         help="Write this file when optimum is first reached (for external coordination)")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="Verbose optimizer logging")
     parser.add_argument("-o", "--output", type=str, required=True, help="Output JSON path")
     args = parser.parse_args()
 
@@ -101,11 +105,15 @@ def main():
     optimizer_kwargs = {}
     if args.stop_at_first_optimum:
         optimizer_kwargs['stop_at_first_optimum'] = True
+    if args.tolerance is not None:
+        optimizer_kwargs['tolerance'] = args.tolerance
     optimizer_class = OPTIMIZER_CHOICES[args.optimizer]
     server.add_model(model_name, load_model(), rand_inputs(),
                      optimizer_class=optimizer_class,
                      n_microbatches=args.n_microbatches,
-                     async_optimization=False, **optimizer_kwargs)
+                     async_optimization=False,
+                     verbose=(args.verbose and is_print_rank),
+                     **optimizer_kwargs)
 
     # Input generator — uses incrementing seed for determinism
     seed_counter = [0]
