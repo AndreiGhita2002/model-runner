@@ -197,7 +197,7 @@ class StaticGPipeOptimizer(PipelineOptimizer):
             # Fallback to base class uniform split
             return super().initial_setup()
 
-        model = root.module
+        model = root._inner
         split_spec = gpipe_split_spec(model, self.num_stages)
 
         num_devices = self.device_manager.num_devices()
