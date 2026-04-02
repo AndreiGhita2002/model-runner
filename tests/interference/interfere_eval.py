@@ -25,7 +25,8 @@ from pathlib import Path
 
 from tests.testing_models import MODEL_SETS
 from tests.interference.interfere import (
-    SCHEDULES, InterferenceManager, run_deterministic, step_label, resolve_model_schedule,
+    SCHEDULES, InterferenceManager, run_deterministic, run_random,
+    step_label, resolve_model_schedule,
 )
 
 
@@ -62,6 +63,8 @@ def merge_results(run_dir: Path, output_file: Path, models: list[str],
         "meta": {
             "experiment": "interference",
             "schedule": args.schedule,
+            "mode": args.mode,
+            "seed": args.seed,
             "model_schedules": per_model_meta,
             "num_requests": "continuous",
             "model_set": args.model_set,
@@ -117,8 +120,12 @@ def main():
                         help="OMP_NUM_THREADS for evaluation (default: 8)")
     parser.add_argument("--no-interference", action="store_true",
                         help="Run evaluation without interference")
+    parser.add_argument("--mode", choices=["deterministic", "random"], default="deterministic",
+                        help="Interference mode (default: deterministic)")
     parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="gradient",
                         help="Interference schedule (default: gradient)")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Random seed for random mode (default: random)")
     parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small",
                         help="Which model set to evaluate (default: small)")
     parser.add_argument("-o", "--output", type=str, default="./data/interference",
@@ -145,7 +152,7 @@ def main():
     print("=" * 44)
     print("Interference Experiment")
     print("=" * 44)
-    print(f"Schedule:      {args.schedule}")
+    print(f"Schedule:      {args.schedule} ({args.mode})")
     for model in models:
         ms = model_schedules[model]
         n_steps = len(ms["steps"])
@@ -153,6 +160,8 @@ def main():
         print(f"  {model}: {n_steps} steps × {dur}s = {n_steps * dur}s")
     print(f"Models:        {len(models)} ({args.model_set} set)")
     print(f"Interference:  {run_interference}")
+    if args.mode == "random":
+        print(f"Seed:          {args.seed or 'random'}")
     print(f"NPROC:         {args.nproc}")
     print(f"Output:        {output_file}")
     print("=" * 44)
@@ -204,7 +213,10 @@ def main():
 
         # 2. Run interference schedule (blocking, takes model_duration seconds)
         if run_interference:
-            run_deterministic(manager, step_dur, schedule=steps)
+            if args.mode == "random":
+                run_random(manager, step_dur, schedule=steps, seed=args.seed)
+            else:
+                run_deterministic(manager, step_dur, schedule=steps)
         else:
             print(f"  No interference — waiting {model_duration}s...")
             time.sleep(model_duration)

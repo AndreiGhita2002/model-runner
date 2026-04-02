@@ -278,42 +278,61 @@ def run_deterministic(manager: InterferenceManager, step_duration: int,
         manager.stop_all()
 
 
-def run_random(manager: InterferenceManager, duration: int,
-               min_interval: int = 30, max_interval: int = 120,
-               seed: int = 42, idle_start: int = 60):
-    """Run random interference."""
+def run_random(manager: InterferenceManager, step_duration: int,
+               schedule: list[list[BenchSpec]] | None = None,
+               seed: int | None = None, first_step: int | None = 0):
+    """Run schedule steps in a random order.
+
+    Each step runs exactly once for ``step_duration`` seconds, so total time
+    is the same as deterministic mode. The order is shuffled based on ``seed``.
+
+    Args:
+        manager: InterferenceManager instance.
+        step_duration: Seconds per schedule step.
+        schedule: List of steps (same format as deterministic).
+        seed: Random seed for reproducibility. None = random seed.
+        first_step: Index of the step to run first (default 0, typically idle).
+            None = fully random order (no pinned first step).
+    """
+    if schedule is None:
+        schedule = SCHEDULES["full"]["all"]["steps"]
+
+    if seed is None:
+        seed = random.randint(0, 2**31)
+
     random.seed(seed)
-    manager.log_event("seed", str(seed))
 
-    benchmarks = [k for k in BENCHMARKS if k != "idle"]
-    thread_choices = [1, 2, 4, 8]
+    # Build shuffled order, optionally pinning the first step
+    indices = list(range(len(schedule)))
+    if first_step is not None and 0 <= first_step < len(indices):
+        indices.remove(first_step)
+        random.shuffle(indices)
+        indices.insert(0, first_step)
+    else:
+        random.shuffle(indices)
 
+    manager.log_event("config", "random", pid=None)
+    manager.log.append({"seed": seed, "step_order": indices})
+
+    total_duration = step_duration * len(schedule)
     start = time.perf_counter()
-    print(f"Random interference: {duration}s, intervals {min_interval}-{max_interval}s, seed={seed}")
 
-    # Initial idle period
-    if idle_start > 0:
-        print(f"  Initial idle period ({idle_start}s)")
-        manager.log_event("start", "idle")
-        wait_until = min(start + duration, start + idle_start)
-        while time.perf_counter() < wait_until:
-            time.sleep(1)
+    order_str = " -> ".join(str(i) for i in indices)
+    print(f"Random interference: {len(schedule)} steps × {step_duration}s = {total_duration}s, "
+          f"seed={seed}, order=[{order_str}]")
 
     try:
-        while time.perf_counter() - start < duration:
-            manager.stop_all()
+        for run_i, step_i in enumerate(indices):
+            step = schedule[step_i]
+            manager.apply_step(step)
 
-            # 30% chance of idle
-            if random.random() < 0.3:
-                print(f"  Random idle period")
+            if not step:
+                print(f"  [{run_i + 1}/{len(schedule)}] Step {step_i}: idle ({step_duration}s)")
                 manager.log_event("start", "idle")
             else:
-                name = random.choice(benchmarks)
-                threads = random.choice(thread_choices)
-                manager.start_benchmark(name, threads)
+                print(f"  [{run_i + 1}/{len(schedule)}] Step {step_i}: {step_label(step)} ({step_duration}s)")
 
-            interval = random.randint(min_interval, max_interval)
-            wait_until = min(start + duration, time.perf_counter() + interval)
+            wait_until = start + step_duration * (run_i + 1)
             while time.perf_counter() < wait_until:
                 time.sleep(1)
     except KeyboardInterrupt:
@@ -332,10 +351,8 @@ def main():
                         help="Deterministic schedule to use (default: small)")
     parser.add_argument("-o", "--output", type=Path, default=None,
                         help="Output JSON file for interference log")
-    parser.add_argument("--seed", type=int, default=42,
-                        help="Random seed for random mode (default: 42)")
-    parser.add_argument("--idle-start", type=int, default=60,
-                        help="Seconds of idle time at the start in random mode (default: 60)")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Random seed for random mode (default: random)")
     args = parser.parse_args()
 
     # Check that all benchmark binaries exist before starting
@@ -358,13 +375,12 @@ def main():
     # Clean up on SIGTERM
     signal.signal(signal.SIGTERM, lambda *_: (manager.stop_all(), sys.exit(0)))
 
-    schedule = SCHEDULES[args.schedule]
-    total_duration = args.duration * len(schedule)
+    schedule_steps = SCHEDULES[args.schedule]["all"]["steps"]
 
     if args.mode == "deterministic":
-        run_deterministic(manager, args.duration, schedule=schedule)
+        run_deterministic(manager, args.duration, schedule=schedule_steps)
     else:
-        run_random(manager, total_duration, seed=args.seed, idle_start=args.idle_start)
+        run_random(manager, args.duration, schedule=schedule_steps, seed=args.seed)
 
     manager.save_log()
 
