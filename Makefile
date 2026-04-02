@@ -1,4 +1,4 @@
-.PHONY: install test-flask test-pipeline eval eval-extended quick-eval simple-baseline gpipe-baseline benchmark clean \
+.PHONY: install test-flask test-pipeline eval eval-extended-set quick-eval simple-baseline gpipe-baseline benchmark clean \
        eval-sequential eval-tensor-parallel eval-gpipe eval-gpipe-sweep eval-all-baselines sweep csv \
        interf-eval interf-eval-clean
 
@@ -16,7 +16,9 @@ SIBLING_ALPHA ?=
 TOLERANCE ?=
 OPTIMUM_TOLERANCE ?=
 OPTIMUM_ESCAPE ?=
+MODEL_SET ?=
 COMMON_ARGS ?= -n $(REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES) --optimizer $(OPTIMIZER) \
+	$(if $(MODEL_SET),--model-set $(MODEL_SET)) \
 	$(if $(REBALANCE_INTERVAL),--rebalance-interval $(REBALANCE_INTERVAL)) \
 	$(if $(ASSIGNMENT_CHOICE),--assignment-choice $(ASSIGNMENT_CHOICE)) \
 	$(if $(DEEP_ALPHA),--alpha $(DEEP_ALPHA)) \
@@ -48,7 +50,7 @@ eval: install
 	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) -o $(RUNS_DIR)
 
 eval-extended: install
-	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) --model-set extended -o $(RUNS_DIR)
+	$(MAKE) eval MODEL_SET=extended
 
 quick-eval: install
 	$(TORCHRUN) tests.quick_evaluation
