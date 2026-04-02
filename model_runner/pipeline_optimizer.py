@@ -187,6 +187,10 @@ class StaticGPipeOptimizer(PipelineOptimizer):
     dynamic rebalancing.
     """
 
+    def __init__(self, num_stages, root_uuid, device_manager, depth=1, **kwargs):
+        # Accept and ignore extra kwargs (e.g. rebalance_interval) for compatibility
+        super().__init__(num_stages, root_uuid, device_manager, depth=depth)
+
     def initial_setup(self) -> PipelineConfig:
         root = timed_module_registry.get(self.root_uuid)
         if root is None:
