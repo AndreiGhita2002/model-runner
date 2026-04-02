@@ -208,6 +208,7 @@ def main():
                 "--stop-at-first-optimum",
                 "--wait-for-optimum",
                 "--tolerance", "0.0",
+                "-v", # TODO: remove verbose mode from run D
                 "--mode", "random", "--seed", str(interf_seed),
                 "--schedule", args.schedule,
                 "--model-set", args.model_set,

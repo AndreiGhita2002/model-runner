@@ -65,3 +65,4 @@ E. interference with exploration and rebalancing
 - [X] Output structure: orchestrator writes all runs to `data/experiments/<timestamp>/`
 - [X] Error capture: errors saved to `errors.txt` + per-run `.log` files preserved
 - [X] Repetition: `--repetitions N` runs the full suite N times, each in its own timestamped dir
+- [ ] Run D implementation: current approach (wait for optimum, then start interference) is unreliable — optimizer may take too long to reach optimum, or never reach it for some models. Need a better design.
