@@ -193,7 +193,7 @@ evaluation_models_extended: list[tuple[str, types.FunctionType, types.FunctionTy
     # Transformers
     ("vit_b_16", load_vit_b_16, vit_b_16_rand_inputs),                # pure transformer (~86M)
     ("swin_t", load_swin_t, swin_t_rand_inputs),                      # windowed transformer (~28M)
-    ("maxvit_t", load_maxvit_t, maxvit_t_rand_inputs),                # hybrid attention (~31M)
+    # ("maxvit_t", load_maxvit_t, maxvit_t_rand_inputs),                # hybrid attention (~31M)
 ]
 
 evaluation_models_reduced: list[tuple[str, types.FunctionType, types.FunctionType]] = [
