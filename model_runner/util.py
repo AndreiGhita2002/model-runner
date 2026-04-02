@@ -28,10 +28,21 @@ def uuids_to_tensor(uuids: list[uuid.UUID], pad_to: int) -> torch.Tensor:
     return torch.tensor(ints, dtype=torch.int)
 
 
+def _unwrap(module: nn.Module) -> nn.Module:
+    """Unwrap TimedModule wrappers to get the raw module."""
+    while hasattr(module, '_inner'):
+        module = module._inner
+    return module
+
+
 def _children_at_depth(
     module: nn.Module, depth: int, prefix: str = ""
 ) -> Generator[tuple[str, nn.Module], None, None]:
-    """Yield (dotted_path, submodule) pairs at a given depth."""
+    """Yield (dotted_path, submodule) pairs at a given depth.
+
+    Transparently unwraps TimedModule wrappers when traversing.
+    """
+    module = _unwrap(module)
     if depth <= 0:
         if prefix:
             yield prefix, module

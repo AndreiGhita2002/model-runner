@@ -99,7 +99,13 @@ def main():
                         help="Output directory (default: ./data/experiments)")
     parser.add_argument("--skip", nargs="*", choices=["A", "B", "C", "D", "E"], default=[],
                         help="Skip specific runs (e.g. --skip A C)")
+    parser.add_argument("--only", nargs="*", choices=["A", "B", "C", "D", "E"], default=None,
+                        help="Run only these (e.g. --only A B)")
     args = parser.parse_args()
+
+    # --only overrides --skip
+    if args.only is not None:
+        args.skip = [r for r in ["A", "B", "C", "D", "E"] if r not in args.only]
 
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
