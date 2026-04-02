@@ -20,9 +20,17 @@ import torch
 import torch.distributed as dist
 
 from model_runner import PipelineServer
-from model_runner.pipeline_optimizer import TimeBasedShishaPipelineOptimizer
+from model_runner.pipeline_optimizer import (
+    GreedyPipelineOptimizer, StaticGPipeOptimizer, TimeBasedShishaPipelineOptimizer,
+)
 from tests.testing_models import MODEL_SETS
 from tests.util import generate_batch
+
+OPTIMIZER_CHOICES = {
+    "shisha": TimeBasedShishaPipelineOptimizer,
+    "greedy": GreedyPipelineOptimizer,
+    "gpipe": StaticGPipeOptimizer,
+}
 
 
 # Collect results on last rank
@@ -41,7 +49,7 @@ def main():
     parser.add_argument("--model", type=str, required=True, help="Model name to evaluate")
     parser.add_argument("-b", "--batch-size", type=int, default=1)
     parser.add_argument("-m", "--n-microbatches", type=int, default=32)
-    parser.add_argument("--optimizer", default="shisha")
+    parser.add_argument("--optimizer", choices=list(OPTIMIZER_CHOICES.keys()), default="shisha")
     parser.add_argument("--stop-at-first-optimum", action="store_true",
                         help="Stop exploring after first optimum is found")
     parser.add_argument("-o", "--output", type=str, required=True, help="Output JSON path")
@@ -77,8 +85,9 @@ def main():
     optimizer_kwargs = {}
     if args.stop_at_first_optimum:
         optimizer_kwargs['stop_at_first_optimum'] = True
+    optimizer_class = OPTIMIZER_CHOICES[args.optimizer]
     server.add_model(model_name, load_model(), rand_inputs(),
-                     optimizer_class=TimeBasedShishaPipelineOptimizer,
+                     optimizer_class=optimizer_class,
                      n_microbatches=args.n_microbatches,
                      async_optimization=False, **optimizer_kwargs)
 

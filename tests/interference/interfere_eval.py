@@ -126,6 +126,8 @@ def main():
                         help="Interference schedule (default: gradient)")
     parser.add_argument("--seed", type=int, default=None,
                         help="Random seed for random mode (default: random)")
+    parser.add_argument("--optimizer", choices=["shisha", "greedy", "gpipe"], default="shisha",
+                        help="Pipeline optimizer (default: shisha)")
     parser.add_argument("--stop-at-first-optimum", action="store_true",
                         help="Stop exploring after first optimum is found (run D)")
     parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small",
@@ -206,6 +208,7 @@ def main():
             "-m", "tests.interference.continuous_eval",
             "--model-set", args.model_set,
             "--model", model,
+            "--optimizer", args.optimizer,
             "-o", str(run_dir / f"eval_{model}.json"),
         ]
         if args.stop_at_first_optimum:

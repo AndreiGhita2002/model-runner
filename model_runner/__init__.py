@@ -3,7 +3,7 @@ from .pipeline_server import PipelineServer
 from .util import uuids_to_tensor, tensor_to_uuids
 from .pipeline_runner import PipelineRunner, ForwardResult
 from .timed_module import TimedModule, make_module_timed, timed_module_registry, timed_module_hierarchy
-from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer, PipelineConfig
+from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer, StaticGPipeOptimizer, PipelineConfig
 from .adaptive_pipeline import AdaptivePipeline
 from .device_manager import DeviceManager
 from .flask_app import create_flask_app
@@ -21,6 +21,7 @@ __all__ = [
     "DeviceManager",
     "PipelineOptimizer",
     "GreedyPipelineOptimizer",
+    "StaticGPipeOptimizer",
     "AdaptivePipeline",
     "PipelineConfig",
     "TimedModule",

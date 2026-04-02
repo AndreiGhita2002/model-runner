@@ -10,6 +10,7 @@ import torch
 
 from .timed_module import timed_module_hierarchy, timed_module_registry
 from .device_manager import DeviceManager
+from .util import gpipe_split_spec
 
 def nth_largest_index(arr: list, n: int):
     """
@@ -175,6 +176,34 @@ class PipelineOptimizer(ABC):
         device_mapping = {i: self.device_manager.get_device(i % num_devices) for i in range(len(split_spec) + 1)}
 
         return PipelineConfig(split_spec=split_spec, device_mapping=device_mapping)
+
+
+class StaticGPipeOptimizer(PipelineOptimizer):
+    """Static GPipe optimizer — cost-balanced initial split, never rebalances.
+
+    Uses parameter-count-based DP partitioning (GPipe paper Section 2.2) for
+    the initial split and returns ``None`` from ``optimize()`` so the pipeline
+    config never changes. Useful as a baseline to measure the impact of
+    dynamic rebalancing.
+    """
+
+    def initial_setup(self) -> PipelineConfig:
+        root = timed_module_registry.get(self.root_uuid)
+        if root is None:
+            # Fallback to base class uniform split
+            return super().initial_setup()
+
+        model = root.module
+        split_spec = gpipe_split_spec(model, self.num_stages)
+
+        num_devices = self.device_manager.num_devices()
+        device_mapping = {i: self.device_manager.get_device(i % num_devices)
+                          for i in range(len(split_spec) + 1)}
+
+        return PipelineConfig(split_spec=split_spec, device_mapping=device_mapping)
+
+    def optimize(self, time_logs, old_config, force_rebalance=False):
+        return None
 
 
 class GreedyPipelineOptimizer(PipelineOptimizer):

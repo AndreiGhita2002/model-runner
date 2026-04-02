@@ -14,7 +14,7 @@ import torch
 import torch.distributed as dist
 
 from model_runner import PipelineServer, uuids_to_tensor, tensor_to_uuids
-from model_runner.pipeline_optimizer import GreedyPipelineOptimizer, TimeBasedShishaPipelineOptimizer
+from model_runner.pipeline_optimizer import GreedyPipelineOptimizer, StaticGPipeOptimizer, TimeBasedShishaPipelineOptimizer
 
 from tests.testing_models import evaluation_models, MODEL_SETS
 from tests.util import generate_batch
@@ -28,6 +28,7 @@ _last_progress_pct = -1
 optimizer_choices = {
     "shisha": TimeBasedShishaPipelineOptimizer,
     "greedy": GreedyPipelineOptimizer,
+    "gpipe": StaticGPipeOptimizer,
 }
 
 def _get_full_optimizer_kwargs(optimizer_class, explicit_kwargs: dict) -> dict:
