@@ -126,6 +126,8 @@ def main():
                         help="Interference schedule (default: gradient)")
     parser.add_argument("--seed", type=int, default=None,
                         help="Random seed for random mode (default: random)")
+    parser.add_argument("--stop-at-first-optimum", action="store_true",
+                        help="Stop exploring after first optimum is found (run D)")
     parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small",
                         help="Which model set to evaluate (default: small)")
     parser.add_argument("-o", "--output", type=str, default="./data/interference",
@@ -206,6 +208,8 @@ def main():
             "--model", model,
             "-o", str(run_dir / f"eval_{model}.json"),
         ]
+        if args.stop_at_first_optimum:
+            eval_cmd.append("--stop-at-first-optimum")
         eval_proc = run_eval_background(
             eval_cmd, env=eval_env,
             log_file=run_dir / f"eval_{model}.log",

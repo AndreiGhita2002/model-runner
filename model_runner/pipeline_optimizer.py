@@ -374,6 +374,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  tolerance: float = 0.02,
                  optimum_tolerance: float = 0.08,
                  optimum_escape_duration: float = 5,
+                 stop_at_first_optimum: bool = False,
                  verbose: bool = False):
         """
         Args:
@@ -400,6 +401,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                 restarting exploration on noise.
             optimum_escape_duration: duration in second before we restart exploration
                 from an optimum state
+            stop_at_first_optimum: If True, permanently stay at the first optimum
+                found and never restart exploration. Used for experiment run D.
             verbose: If True, print debug logs during optimisation.
         """
         super().__init__(num_stages, root_uuid, device_manager, depth=depth)
@@ -420,6 +423,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         self._return_best = False
         self._sibling_gamma = 0
         self.optimum_escape = optimum_escape_duration
+        self.stop_at_first_optimum = stop_at_first_optimum
         self._optimum_escape_start: float | None = None
         self._now: float = 0.0
 
@@ -712,6 +716,9 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             # no longer at optimum if we were there
             # unless we haven't been worse for long enough
             if self._at_optimum:
+                if self.stop_at_first_optimum:
+                    # Never leave optimum — stay with current config permanently
+                    return False
                 self._now = time.monotonic()
                 if self._optimum_escape_start is None:
                     self._optimum_escape_start = self._now

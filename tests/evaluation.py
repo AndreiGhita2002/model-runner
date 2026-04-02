@@ -402,6 +402,8 @@ if __name__ == '__main__':
                         help='Shisha throughput tolerance fraction when at optimum (default: 0.1)')
     parser.add_argument('--optimum-escape', type=float, default=None,
                         help='Seconds at optimum before restarting exploration (default: 5)')
+    parser.add_argument('--stop-at-first-optimum', action='store_true',
+                        help='Stop exploring after first optimum is found')
     parser.add_argument('--model-set', choices=list(MODEL_SETS.keys()), default='small',
                         help='Which set of models to evaluate (default: small)')
     parser.add_argument('--model', type=str, default=None,
@@ -444,6 +446,8 @@ if __name__ == '__main__':
         optimizer_kwargs['optimum_tolerance'] = args.optimum_tolerance
     if args.optimum_escape is not None:
         optimizer_kwargs['optimum_escape_duration'] = args.optimum_escape
+    if args.stop_at_first_optimum:
+        optimizer_kwargs['stop_at_first_optimum'] = True
 
     selected_models = MODEL_SETS[args.model_set]
     if args.model:

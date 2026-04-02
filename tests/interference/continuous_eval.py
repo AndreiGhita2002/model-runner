@@ -42,6 +42,8 @@ def main():
     parser.add_argument("-b", "--batch-size", type=int, default=1)
     parser.add_argument("-m", "--n-microbatches", type=int, default=32)
     parser.add_argument("--optimizer", default="shisha")
+    parser.add_argument("--stop-at-first-optimum", action="store_true",
+                        help="Stop exploring after first optimum is found")
     parser.add_argument("-o", "--output", type=str, required=True, help="Output JSON path")
     args = parser.parse_args()
 
@@ -72,10 +74,13 @@ def main():
     server = PipelineServer(handle_output, verbose=False)
     if is_print_rank:
         print(f"Loading {model_name}...")
+    optimizer_kwargs = {}
+    if args.stop_at_first_optimum:
+        optimizer_kwargs['stop_at_first_optimum'] = True
     server.add_model(model_name, load_model(), rand_inputs(),
                      optimizer_class=TimeBasedShishaPipelineOptimizer,
                      n_microbatches=args.n_microbatches,
-                     async_optimization=False)
+                     async_optimization=False, **optimizer_kwargs)
 
     # Input generator — uses incrementing seed for determinism
     seed_counter = [0]
