@@ -198,7 +198,7 @@ class StaticGPipeOptimizer(PipelineOptimizer):
             return super().initial_setup()
 
         model = root._inner
-        split_spec = gpipe_split_spec(model, self.num_stages)
+        split_spec = gpipe_split_spec(model, self.num_stages, depth=self.depth)
 
         num_devices = self.device_manager.num_devices()
         device_mapping = {i: self.device_manager.get_device(i % num_devices)
