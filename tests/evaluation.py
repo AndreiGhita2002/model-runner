@@ -141,16 +141,14 @@ def evaluation_main(
     main = PipelineServer(handle_output, verbose=(verbose and is_print_rank))
 
     # Adding models (all ranks)
-    if not verbose and is_print_rank:
-        print("Loading models...")
     for model_name, load_model, rand_input in models:
-        if verbose and is_print_rank:
-            print(f"> Adding model {model_name} with load function {load_model.__name__}")
+        if is_print_rank:
+            print(f"  Loading {model_name}...")
         main.add_model(model_name, load_model(), rand_input(),
                        optimizer_class=optimizer_class,
                        rebalance_interval=rebalance_interval, n_microbatches=n_microbatches,
                        async_optimization=False, **optimizer_kwargs)
-    if not verbose and is_print_rank:
+    if is_print_rank:
         print("Models loaded. Running pipeline...")
 
     def _queue_batch(request_offset: int, count: int | None = None):
