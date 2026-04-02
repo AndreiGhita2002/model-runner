@@ -61,7 +61,7 @@ E. interference with exploration and rebalancing
 ## TODOs
 - [X] Run D: implement `--stop-at-first-optimum` flag in the optimiser/evaluation so it freezes the config after first optimum
 - [X] Run C: GPipe baseline doesn't support interference yet — need to run it through `continuous_eval.py` with no-rebalance optimiser, or wrap the baseline script with the interference manager
-- [ ] Seed coordination: C, D, E need the same `--seed` passed explicitly to get identical interference patterns
-- [ ] Output structure: current code uses `data/interference/` and `data/runs/` separately — the orchestrator script needs to unify these under `data/eval/<timestamp>/`
-- [ ] Error capture: preserve eval logs on failure (currently deleted during merge)
-- [ ] Repetition: clarify how many repetitions and whether each uses a different seed
+- [X] Seed coordination: C, D, E share the same `--seed` via `tests/experiment.py`
+- [X] Output structure: orchestrator writes all runs to `data/experiments/<timestamp>/`
+- [X] Error capture: errors saved to `errors.txt` + per-run `.log` files preserved
+- [X] Repetition: `--repetitions N` runs the full suite N times, each in its own timestamped dir

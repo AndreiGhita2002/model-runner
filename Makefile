@@ -1,6 +1,6 @@
 .PHONY: install test-flask test-pipeline eval eval-extended-set quick-eval simple-baseline gpipe-baseline benchmark clean \
        eval-sequential eval-tensor-parallel eval-gpipe eval-gpipe-sweep eval-all-baselines sweep csv \
-       interf-eval interf-eval-clean
+       interf-eval interf-eval-clean experiment
 
 MAX_CORES ?= 32  # should be 32 on fisherman
 MAX_NPROC ?= $(MAX_CORES)
@@ -94,6 +94,12 @@ interf-eval: install
 
 interf-test: install
 	uv run python -m tests.interference.interfere_eval --no-interference --duration 10 --nproc $(NPROC)
+
+# Full experiment suite (runs A-E)
+REPETITIONS ?= 1
+experiment: install
+	uv run python -m tests.experiment --nproc $(NPROC) --repetitions $(REPETITIONS) \
+		$(if $(MODEL_SET),--model-set $(MODEL_SET))
 
 clean:
 	rm -rf build/ *.egg-info/ __pycache__/ .pytest_cache/
