@@ -206,6 +206,7 @@ def main():
                 "uv", "run", "python", "-m", "tests.interference.interfere_eval",
                 "--optimizer", "shisha",
                 "--stop-at-first-optimum",
+                "--wait-for-optimum",
                 "--mode", "random", "--seed", str(interf_seed),
                 "--schedule", args.schedule,
                 "--model-set", args.model_set,

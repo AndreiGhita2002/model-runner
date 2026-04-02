@@ -130,6 +130,8 @@ def main():
                         help="Pipeline optimizer (default: shisha)")
     parser.add_argument("--stop-at-first-optimum", action="store_true",
                         help="Stop exploring after first optimum is found (run D)")
+    parser.add_argument("--wait-for-optimum", action="store_true",
+                        help="Wait for optimum before starting interference (run D)")
     parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small",
                         help="Which model set to evaluate (default: small)")
     parser.add_argument("-o", "--output", type=str, default="./data/interference",
@@ -200,6 +202,7 @@ def main():
         managers.append(manager)
 
         # 1. Start eval in background (runs until SIGTERM)
+        signal_file = run_dir / f".optimum_{model}" if args.wait_for_optimum else None
         print(f"  Starting evaluation...")
         eval_cmd = [
             "taskset", "-c", "0-31",
@@ -213,12 +216,26 @@ def main():
         ]
         if args.stop_at_first_optimum:
             eval_cmd.append("--stop-at-first-optimum")
+        if signal_file:
+            eval_cmd.extend(["--signal-file", str(signal_file)])
         eval_proc = run_eval_background(
             eval_cmd, env=eval_env,
             log_file=run_dir / f"eval_{model}.log",
         )
 
-        # 2. Run interference schedule (blocking, takes model_duration seconds)
+        # 2. Wait for optimum if requested, then run interference
+        if signal_file:
+            print(f"  Waiting for optimum before starting interference...")
+            while not signal_file.exists():
+                # Check if eval crashed
+                if eval_proc.poll() is not None:
+                    print(f"  Warning: eval exited before reaching optimum")
+                    break
+                time.sleep(1)
+            if signal_file.exists():
+                print(f"  Optimum reached — starting interference schedule")
+                signal_file.unlink()
+
         if run_interference:
             if args.mode == "random":
                 run_random(manager, step_dur, schedule=steps, seed=args.seed)

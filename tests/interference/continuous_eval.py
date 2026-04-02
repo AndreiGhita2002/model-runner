@@ -36,11 +36,21 @@ OPTIMIZER_CHOICES = {
 # Collect results on last rank
 result_timings: list[dict | None] = []
 result_req_ids: list[uuid.UUID] = []
+_signal_file: str | None = None
+_signal_written = False
 
 
 def handle_output(request_id: uuid.UUID, model_name: str, output: Any, timing: dict | None):
+    global _signal_written
     result_req_ids.append(request_id)
     result_timings.append(timing)
+
+    # Write sentinel file when optimum is first reached
+    if _signal_file and not _signal_written and timing is not None:
+        reb = timing.get("rebalance", {})
+        if reb.get("at_optimum", False):
+            Path(_signal_file).touch()
+            _signal_written = True
 
 
 def main():
@@ -52,6 +62,8 @@ def main():
     parser.add_argument("--optimizer", choices=list(OPTIMIZER_CHOICES.keys()), default="shisha")
     parser.add_argument("--stop-at-first-optimum", action="store_true",
                         help="Stop exploring after first optimum is found")
+    parser.add_argument("--signal-file", type=str, default=None,
+                        help="Write this file when optimum is first reached (for external coordination)")
     parser.add_argument("-o", "--output", type=str, required=True, help="Output JSON path")
     args = parser.parse_args()
 
@@ -77,6 +89,10 @@ def main():
     rank = dist.get_rank()
     last_rank = dist.get_world_size() - 1
     is_print_rank = rank == 0
+
+    # Set up signal file for external coordination
+    global _signal_file
+    _signal_file = args.signal_file
 
     # Set up server with one model
     server = PipelineServer(handle_output, verbose=False)
