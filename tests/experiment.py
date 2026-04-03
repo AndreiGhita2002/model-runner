@@ -200,14 +200,11 @@ def main():
 
         # ── Run D: Shisha, stop at first optimum, under interference ──
         if "D" not in args.skip:
-            print(f"\n--- Run D: Shisha (first optimum only) under interference ---")
+            print(f"\n--- Run D: Exhaustive Shisha (explore then freeze) under interference ---")
             cmd = [
                 "uv", "run", "python", "-m", "tests.interference.interfere_eval",
-                "--optimizer", "shisha",
-                "--stop-at-first-optimum",
+                "--optimizer", "exhaustive",
                 "--wait-for-optimum",
-                "--tolerance", "0.0",
-                "-v", # TODO: remove verbose mode from run D
                 "--mode", "random", "--seed", str(interf_seed),
                 "--schedule", args.schedule,
                 "--model-set", args.model_set,

@@ -42,6 +42,8 @@ class PipelineConfig:
     device_mapping: dict[int, torch.device]
 
 
+#TODO: move the pipeline optimizer used for baselines into tests module maybe
+
 class PipelineOptimizer(ABC):
     """Abstract base class for pipeline optimisers.
 
@@ -407,8 +409,8 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                  tolerance: float = 0.02,
                  optimum_tolerance: float = 0.08,
                  optimum_escape_duration: float = 5,
-                 stop_at_first_optimum: bool = False,
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 **kwargs):
         """
         Args:
             num_stages: Number of pipeline stages.
@@ -434,8 +436,6 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
                 restarting exploration on noise.
             optimum_escape_duration: duration in second before we restart exploration
                 from an optimum state
-            stop_at_first_optimum: If True, permanently stay at the first optimum
-                found and never restart exploration. Used for experiment run D.
             verbose: If True, print debug logs during optimisation.
         """
         super().__init__(num_stages, root_uuid, device_manager, depth=depth)
@@ -456,7 +456,6 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         self._return_best = False
         self._sibling_gamma = 0
         self.optimum_escape = optimum_escape_duration
-        self.stop_at_first_optimum = stop_at_first_optimum
         self._optimum_escape_start: float | None = None
         self._now: float = 0.0
 
@@ -749,9 +748,6 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
             # no longer at optimum if we were there
             # unless we haven't been worse for long enough
             if self._at_optimum:
-                if self.stop_at_first_optimum:
-                    # Never leave optimum — stay with current config permanently
-                    return False
                 self._now = time.monotonic()
                 if self._optimum_escape_start is None:
                     self._optimum_escape_start = self._now
@@ -823,3 +819,82 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         result = self._online_tuning(time_logs, old_config)
         self._log(f"[DEBUG optimize] _online_tuning returned {'new config' if result is not None else 'None'}")
         return result
+
+
+class ExhaustiveShishaOptimizer(TimeBasedShishaPipelineOptimizer):
+    """Shisha variant that explores exhaustively then freezes at the best config.
+
+    Explores all configurations (deep_alpha × sibling_alpha attempts) without
+    any tolerance — every config is evaluated and the best throughput is tracked.
+    Once exploration is complete (gamma reaches alpha), reverts to the best
+    config found and stays there permanently. No optimum escape.
+
+    Used for experiment run D: find the single best config, then measure how
+    it holds up under interference without further adaptation.
+    """
+
+    def __init__(self, num_stages, root_uuid, device_manager, depth=1,
+                 deep_alpha=5, sibling_alpha=2, assignment_choice="rank_w",
+                 rebalance_interval=3, verbose=False, **kwargs):
+        super().__init__(
+            num_stages, root_uuid, device_manager, depth=depth,
+            deep_alpha=deep_alpha, sibling_alpha=sibling_alpha,
+            assignment_choice=assignment_choice,
+            rebalance_interval=rebalance_interval,
+            tolerance=0.0, optimum_tolerance=0.0,
+            optimum_escape_duration=999999,
+            stop_at_first_optimum=True,
+            verbose=verbose,
+        )
+
+    def _should_rebalance(self, time_logs, current_config):
+        """Explore exhaustively: no tolerance, just track best and count gamma."""
+        self._now = time.monotonic()
+
+        if not time_logs:
+            return True
+
+        stage_times, slowest_stage_time = self._compute_stage_times(time_logs, current_config)
+
+        if any(t == 0 for t in stage_times):
+            return True
+
+        throughput = 1.0 / slowest_stage_time
+
+        # First config becomes best
+        if self._best_throughput == 0.0:
+            self._best_throughput = throughput
+            self._best_config = current_config
+            self._log(f"[Exhaustive] first config, tp={throughput:.4f}")
+            return True
+
+        # Already at optimum — stay permanently
+        if self._at_optimum:
+            return False
+
+        # Track the best config seen
+        if throughput > self._best_throughput:
+            self._best_throughput = throughput
+            self._best_config = current_config
+            self._deep_gamma = 0
+            self._sibling_gamma = 0
+            self._log(f"[Exhaustive] new best tp={throughput:.4f}, reset gamma")
+            return True
+
+        # Count non-improving steps
+        self._deep_gamma += 1
+        self._log(f"[Exhaustive] tp={throughput:.4f} best={self._best_throughput:.4f} "
+                  f"gamma_d={self._deep_gamma} gamma_s={self._sibling_gamma}")
+
+        if self._deep_gamma >= self.deep_alpha:
+            self._deep_gamma = 0
+            self._sibling_gamma += 1
+
+            if self._sibling_gamma >= self.sibling_alpha:
+                # Exploration complete — freeze at best config
+                self._return_best = True
+                self._at_optimum = True
+                self._log(f"[Exhaustive] exploration complete, freezing at best tp={self._best_throughput:.4f}")
+                return False
+
+        return True

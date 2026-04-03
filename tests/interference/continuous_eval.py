@@ -21,13 +21,15 @@ import torch.distributed as dist
 
 from model_runner import PipelineServer
 from model_runner.pipeline_optimizer import (
-    GreedyPipelineOptimizer, StaticGPipeOptimizer, TimeBasedShishaPipelineOptimizer,
+    GreedyPipelineOptimizer, StaticGPipeOptimizer,
+    TimeBasedShishaPipelineOptimizer, ExhaustiveShishaOptimizer,
 )
 from tests.testing_models import MODEL_SETS
 from tests.util import generate_batch
 
 OPTIMIZER_CHOICES = {
     "shisha": TimeBasedShishaPipelineOptimizer,
+    "exhaustive": ExhaustiveShishaOptimizer,
     "greedy": GreedyPipelineOptimizer,
     "gpipe": StaticGPipeOptimizer,
 }
@@ -60,8 +62,6 @@ def main():
     parser.add_argument("-b", "--batch-size", type=int, default=1)
     parser.add_argument("-m", "--n-microbatches", type=int, default=32)
     parser.add_argument("--optimizer", choices=list(OPTIMIZER_CHOICES.keys()), default="shisha")
-    parser.add_argument("--stop-at-first-optimum", action="store_true",
-                        help="Stop exploring after first optimum is found")
     parser.add_argument("--tolerance", type=float, default=None,
                         help="Optimizer tolerance (default: from optimizer)")
     parser.add_argument("--signal-file", type=str, default=None,
@@ -103,8 +103,6 @@ def main():
     if is_print_rank:
         print(f"Loading {model_name}...")
     optimizer_kwargs = {}
-    if args.stop_at_first_optimum:
-        optimizer_kwargs['stop_at_first_optimum'] = True
     if args.tolerance is not None:
         optimizer_kwargs['tolerance'] = args.tolerance
     optimizer_class = OPTIMIZER_CHOICES[args.optimizer]

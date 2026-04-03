@@ -14,7 +14,10 @@ import torch
 import torch.distributed as dist
 
 from model_runner import PipelineServer, uuids_to_tensor, tensor_to_uuids
-from model_runner.pipeline_optimizer import GreedyPipelineOptimizer, StaticGPipeOptimizer, TimeBasedShishaPipelineOptimizer
+from model_runner.pipeline_optimizer import (
+    GreedyPipelineOptimizer, StaticGPipeOptimizer,
+    TimeBasedShishaPipelineOptimizer, ExhaustiveShishaOptimizer,
+)
 
 from tests.testing_models import evaluation_models, MODEL_SETS
 from tests.util import generate_batch
@@ -27,6 +30,7 @@ _last_progress_pct = -1
 
 optimizer_choices = {
     "shisha": TimeBasedShishaPipelineOptimizer,
+    "exhaustive": ExhaustiveShishaOptimizer,
     "greedy": GreedyPipelineOptimizer,
     "gpipe": StaticGPipeOptimizer,
 }
@@ -403,8 +407,6 @@ if __name__ == '__main__':
                         help='Shisha throughput tolerance fraction when at optimum (default: 0.1)')
     parser.add_argument('--optimum-escape', type=float, default=None,
                         help='Seconds at optimum before restarting exploration (default: 5)')
-    parser.add_argument('--stop-at-first-optimum', action='store_true',
-                        help='Stop exploring after first optimum is found')
     parser.add_argument('--model-set', choices=list(MODEL_SETS.keys()), default='small',
                         help='Which set of models to evaluate (default: small)')
     parser.add_argument('--model', type=str, default=None,
@@ -447,9 +449,6 @@ if __name__ == '__main__':
         optimizer_kwargs['optimum_tolerance'] = args.optimum_tolerance
     if args.optimum_escape is not None:
         optimizer_kwargs['optimum_escape_duration'] = args.optimum_escape
-    if args.stop_at_first_optimum:
-        optimizer_kwargs['stop_at_first_optimum'] = True
-
     selected_models = MODEL_SETS[args.model_set]
     if args.model:
         filtered = [(n, l, r) for n, l, r in selected_models if n == args.model]
