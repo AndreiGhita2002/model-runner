@@ -41,8 +41,7 @@ def run_cmd(cmd: list[str], env: dict | None = None, log_file: Path | None = Non
         return proc.returncode
 
 
-def torchrun_cmd(nproc: int, module: str, args: list[str], omp_threads: int = 8,
-                 taskset_cores: str | None = None) -> list[str]:
+def torchrun_cmd(nproc: int, module: str, args: list[str], taskset_cores: str | None = None) -> list[str]:
     """Build a torchrun command."""
     cmd = []
     if taskset_cores:
