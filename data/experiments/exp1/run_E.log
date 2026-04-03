@@ -1,0 +1,71 @@
+============================================
+Interference Experiment
+============================================
+Schedule:      gradient (random)
+  conv_next: 5 steps × 120s = 600s
+  efficientnet_b6: 5 steps × 240s = 1200s
+Models:        2 (reduced set)
+Interference:  True
+Seed:          1912795924
+NPROC:         4
+Output:        data/experiments/2026-04-03_12-28-10/2026-04-03_13-56-21.json
+============================================
+
+
+============================================
+[1/2] conv_next (5 steps × 120s = 600s)
+============================================
+  Starting evaluation...
+Random interference: 5 steps × 120s = 600s, seed=1912795924, order=[0 -> 4 -> 3 -> 1 -> 2]
+  [1/5] Step 0: idle (120s)
+  Started memory_bandwidth (pid=154361, threads=1, cores=49)
+  Started memory_bandwidth (pid=154362, threads=1, cores=48)
+  Started cpu_stress (pid=154363, threads=8, cores=39-47)
+  Started cpu_stress (pid=154365, threads=8, cores=32-39)
+  [2/5] Step 4: cpu_stress_8t_c32-39+cpu_stress_8t_c39-47+memory_bandwidth_1t_c48+memory_bandwidth_1t_c49 (120s)
+  Stopped memory_bandwidth (pid=154361, threads=1, cores=49)
+  Stopped cpu_stress (pid=154363, threads=8, cores=39-47)
+  [3/5] Step 3: cpu_stress_8t_c32-39+memory_bandwidth_1t_c48 (120s)
+  Stopped memory_bandwidth (pid=154362, threads=1, cores=48)
+  Stopped cpu_stress (pid=154365, threads=8, cores=32-39)
+  Started cpu_stress (pid=154718, threads=4, cores=32-35)
+  [4/5] Step 1: cpu_stress_4t_c32-35 (120s)
+  Stopped cpu_stress (pid=154718, threads=4, cores=32-35)
+  Started cpu_stress (pid=154815, threads=8, cores=32-39)
+  [5/5] Step 2: cpu_stress_8t_c32-39 (120s)
+  Stopped cpu_stress (pid=154815, threads=8, cores=32-39)
+Interference log saved to data/experiments/2026-04-03_12-28-10/.tmp_2026-04-03_13-56-21/interference_conv_next.json
+  Stopping evaluation...
+  conv_next complete.
+
+============================================
+[2/2] efficientnet_b6 (5 steps × 240s = 1200s)
+============================================
+  Starting evaluation...
+Random interference: 5 steps × 240s = 1200s, seed=1912795924, order=[0 -> 4 -> 3 -> 1 -> 2]
+  [1/5] Step 0: idle (240s)
+  Started memory_bandwidth (pid=155753, threads=1, cores=49)
+  Started memory_bandwidth (pid=155754, threads=1, cores=48)
+  Started cpu_stress (pid=155755, threads=8, cores=39-47)
+  Started cpu_stress (pid=155756, threads=8, cores=32-39)
+  [2/5] Step 4: cpu_stress_8t_c32-39+cpu_stress_8t_c39-47+memory_bandwidth_1t_c48+memory_bandwidth_1t_c49 (240s)
+  Stopped memory_bandwidth (pid=155753, threads=1, cores=49)
+  Stopped cpu_stress (pid=155755, threads=8, cores=39-47)
+  [3/5] Step 3: cpu_stress_8t_c32-39+memory_bandwidth_1t_c48 (240s)
+  Stopped memory_bandwidth (pid=155754, threads=1, cores=48)
+  Stopped cpu_stress (pid=155756, threads=8, cores=32-39)
+  Started cpu_stress (pid=156269, threads=4, cores=32-35)
+  [4/5] Step 1: cpu_stress_4t_c32-35 (240s)
+  Stopped cpu_stress (pid=156269, threads=4, cores=32-35)
+  Started cpu_stress (pid=156281, threads=8, cores=32-39)
+  [5/5] Step 2: cpu_stress_8t_c32-39 (240s)
+  Stopped cpu_stress (pid=156281, threads=8, cores=32-39)
+Interference log saved to data/experiments/2026-04-03_12-28-10/.tmp_2026-04-03_13-56-21/interference_efficientnet_b6.json
+  Stopping evaluation...
+  efficientnet_b6 complete.
+
+Merging results...
+
+============================================
+Experiment complete: data/experiments/2026-04-03_12-28-10/2026-04-03_13-56-21.json
+============================================

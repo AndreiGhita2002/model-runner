@@ -1,0 +1,24 @@
+[Gloo] Rank 0 is connected to 3 peer ranks. Expected number of connected peer ranks is : 3
+Evaluation: 2 model(s), 5000 requests each, world_size=4
+[Gloo] Rank 1 is connected to 3 peer ranks. Expected number of connected peer ranks is : 3
+  Loading conv_next...
+[Gloo] Rank 2 is connected to 3 peer ranks. Expected number of connected peer ranks is : 3
+[Gloo] Rank 3 is connected to 3 peer ranks. Expected number of connected peer ranks is : 3
+  Loading efficientnet_b6...
+Models loaded. Running pipeline...
+  Processing... 10%
+  Processing... 20%
+  Processing... 30%
+  Processing... 40%
+  Processing... 50%
+  Processing... 60%
+  Processing... 70%
+  Processing... 80%
+  Processing... 90%
+  Processing... 100%
+
+Evaluation results saved to data/experiments/2026-04-03_12-28-10/run_B.json
+  [conv_next] 5000 requests, 26.90 samples/sec
+    Rebalanced 1216 time(s)
+  [efficientnet_b6] 5000 requests, 5.00 samples/sec
+    Rebalanced 3136 time(s)

@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-04-03_12-28-10",
+  "repetition": 1,
+  "total_repetitions": 1,
+  "model_set": "reduced",
+  "num_requests": 5000,
+  "schedule": "gradient",
+  "interference_seed": 1912795924,
+  "nproc": 4,
+  "omp_threads": 8,
+  "skipped": []
+}
