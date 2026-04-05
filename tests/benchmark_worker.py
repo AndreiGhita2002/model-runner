@@ -16,7 +16,7 @@ import torch
 import torch.distributed as dist
 
 from model_runner import PipelineServer, uuids_to_tensor, tensor_to_uuids
-from model_runner.pipeline_optimizer import TimeBasedShishaPipelineOptimizer
+from model_runner.pipeline_optimizer import ReactiveShishaOptimiser
 from tests.testing_models import evaluation_models
 
 
@@ -54,7 +54,7 @@ def worker_main(config_path: str):
     for model_name, load_model, rand_input_fn in models:
         main.add_model(
             model_name, load_model(), rand_input_fn(),
-            optimizer_class=TimeBasedShishaPipelineOptimizer,
+            optimizer_class=ReactiveShishaOptimiser,
             rebalance_interval=4, n_microbatches=5, async_optimization=False,
         )
 

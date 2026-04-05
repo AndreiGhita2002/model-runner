@@ -126,8 +126,8 @@ def main():
                         help="Interference schedule (default: gradient)")
     parser.add_argument("--seed", type=int, default=None,
                         help="Random seed for random mode (default: random)")
-    parser.add_argument("--optimizer", choices=["shisha", "exhaustive", "greedy", "gpipe"], default="shisha",
-                        help="Pipeline optimizer (default: shisha)")
+    parser.add_argument("--optimizer", choices=["reactive", "shisha", "exhaustive", "greedy", "gpipe"], default="reactive",
+                        help="Pipeline optimizer (default: reactive)")
     parser.add_argument("--wait-for-optimum", action="store_true",
                         help="Wait for optimum before starting interference (run D)")
     parser.add_argument("--optimum-timeout", type=int, default=300,

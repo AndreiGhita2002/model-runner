@@ -16,7 +16,7 @@ import torch.distributed as dist
 from model_runner import PipelineServer, uuids_to_tensor, tensor_to_uuids
 from model_runner.pipeline_optimizer import (
     GreedyPipelineOptimizer, StaticGPipeOptimizer,
-    TimeBasedShishaPipelineOptimizer, ExhaustiveShishaOptimizer,
+    ReactiveShishaOptimiser, ExhaustiveShishaOptimizer,
 )
 
 from tests.testing_models import evaluation_models, MODEL_SETS
@@ -29,7 +29,8 @@ _completed_requests = 0
 _last_progress_pct = -1
 
 optimizer_choices = {
-    "shisha": TimeBasedShishaPipelineOptimizer,
+    "reactive": ReactiveShishaOptimiser,
+    "shisha": ReactiveShishaOptimiser,  # backward-compat alias
     "exhaustive": ExhaustiveShishaOptimizer,
     "greedy": GreedyPipelineOptimizer,
     "gpipe": StaticGPipeOptimizer,
@@ -94,7 +95,7 @@ def evaluation_main(
     verbose=False,
     store_hashes=False,
     n_microbatches=32,
-    optimizer_class=TimeBasedShishaPipelineOptimizer,
+    optimizer_class=ReactiveShishaOptimiser,
     rebalance_interval=None,
     optimizer_kwargs=None,
     duration=None,
@@ -391,8 +392,8 @@ if __name__ == '__main__':
                         help='Requests per forward pass (default: 32)')
     parser.add_argument('--store-hashes', action='store_true',
                         help='Store output hashes in JSON')
-    parser.add_argument('--optimizer', choices=optimizer_choices.keys(), default='shisha',
-                        help='Pipeline optimizer class (default: shisha)')
+    parser.add_argument('--optimizer', choices=optimizer_choices.keys(), default='reactive',
+                        help='Pipeline optimizer class (default: reactive)')
     parser.add_argument('--rebalance-interval', type=int, default=None,
                         help='Check rebalance every N batches (default: None, check every batch)')
     parser.add_argument('--assignment-choice', choices=['rank_w', 'rank_l'], default=None,

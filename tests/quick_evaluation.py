@@ -8,7 +8,7 @@ import torch
 import torch.distributed as dist
 
 from model_runner import PipelineServer, uuids_to_tensor, tensor_to_uuids
-from model_runner.pipeline_optimizer import TimeBasedShishaPipelineOptimizer
+from model_runner.pipeline_optimizer import ReactiveShishaOptimiser
 from tests.testing_models import load_conv_next, conv_next_rand_inputs
 from tests.util import generate_batch
 
@@ -43,7 +43,7 @@ def quick_evaluation_main(baseline_file: str = None):
 
     print(f"> Adding model {QUICK_MODEL_NAME}")
     main.add_model(QUICK_MODEL_NAME, load_conv_next(), conv_next_rand_inputs(),
-                   optimizer_class=TimeBasedShishaPipelineOptimizer,
+                   optimizer_class=ReactiveShishaOptimiser,
                    rebalance_interval=4, async_optimization=False)
 
     requests: list[uuid.UUID] = []

@@ -22,13 +22,14 @@ import torch.distributed as dist
 from model_runner import PipelineServer
 from model_runner.pipeline_optimizer import (
     GreedyPipelineOptimizer, StaticGPipeOptimizer,
-    TimeBasedShishaPipelineOptimizer, ExhaustiveShishaOptimizer,
+    ReactiveShishaOptimiser, ExhaustiveShishaOptimizer,
 )
 from tests.testing_models import MODEL_SETS
 from tests.util import generate_batch
 
 OPTIMIZER_CHOICES = {
-    "shisha": TimeBasedShishaPipelineOptimizer,
+    "reactive": ReactiveShishaOptimiser,
+    "shisha": ReactiveShishaOptimiser,  # backward-compat alias
     "exhaustive": ExhaustiveShishaOptimizer,
     "greedy": GreedyPipelineOptimizer,
     "gpipe": StaticGPipeOptimizer,
@@ -61,7 +62,7 @@ def main():
     parser.add_argument("--model", type=str, required=True, help="Model name to evaluate")
     parser.add_argument("-b", "--batch-size", type=int, default=1)
     parser.add_argument("-m", "--n-microbatches", type=int, default=32)
-    parser.add_argument("--optimizer", choices=list(OPTIMIZER_CHOICES.keys()), default="shisha")
+    parser.add_argument("--optimizer", choices=list(OPTIMIZER_CHOICES.keys()), default="reactive")
     parser.add_argument("--tolerance", type=float, default=None,
                         help="Optimizer tolerance (default: from optimizer)")
     parser.add_argument("--signal-file", type=str, default=None,
@@ -179,7 +180,7 @@ def main():
                 "world_size": dist.get_world_size(),
                 "clock": "time.perf_counter (cross-rank)",
                 "git_commit": git_hash,
-                "optimizer": "TimeBasedShishaPipelineOptimizer",
+                "optimizer": optimizer_class.__name__,
             },
             "results": {
                 model_name: {

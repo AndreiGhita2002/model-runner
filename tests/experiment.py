@@ -170,11 +170,11 @@ def main():
 
         # ── Run B: Shisha (no interference, with rebalancing) ──
         if "B" not in args.skip:
-            print(f"\n--- Run B: Shisha (no interference) ---")
+            print(f"\n--- Run B: Reactive Shisha (no interference) ---")
             cmd = torchrun_cmd(args.nproc, "tests.evaluation", [
                 "-n", str(args.num_requests),
                 "-b", "1", "-m", "32",
-                "--optimizer", "shisha",
+                "--optimizer", "reactive",
                 "--model-set", args.model_set,
                 "-o", str(run_dir / "run_B.json"),
             ])
@@ -218,10 +218,10 @@ def main():
 
         # ── Run E: Shisha with full rebalancing under interference ──
         if "E" not in args.skip:
-            print(f"\n--- Run E: Shisha (full rebalancing) under interference ---")
+            print(f"\n--- Run E: Reactive Shisha (full rebalancing) under interference ---")
             cmd = [
                 "uv", "run", "python", "-m", "tests.interference.interfere_eval",
-                "--optimizer", "shisha",
+                "--optimizer", "reactive",
                 "--mode", "random", "--seed", str(interf_seed),
                 "--schedule", args.schedule,
                 "--model-set", args.model_set,

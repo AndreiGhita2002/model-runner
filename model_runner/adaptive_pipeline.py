@@ -15,7 +15,7 @@ from torch.distributed.pipelining.schedules import PipelineScheduleSingle, Pipel
 
 from .timed_module import TimedModule, timed_module_registry, timed_module_hierarchy
 from .device_manager import DeviceManager
-from .pipeline_optimizer import PipelineOptimizer, PipelineConfig, TimeBasedShishaPipelineOptimizer
+from .pipeline_optimizer import PipelineOptimizer, PipelineConfig, ReactiveShishaOptimiser
 
 # The ATen op that pipe_split() compiles to in the FX graph
 _aten_pipe_split = torch.ops.pippy._pipe_split.default
@@ -129,7 +129,7 @@ class AdaptivePipeline:
             model_name: str,
             device_manager: DeviceManager,
             example_input: Any,
-            optimizer_class: type[PipelineOptimizer] = TimeBasedShishaPipelineOptimizer,
+            optimizer_class: type[PipelineOptimizer] = ReactiveShishaOptimiser,
             max_log_entries: int = 20, #todo: used to be 5; should ideally be a running average or smth
             n_microbatches: int = 4,
             initial_pipeline_config: PipelineConfig | None = None,
@@ -149,7 +149,7 @@ class AdaptivePipeline:
                 internally with ``num_stages``, ``root_uuid``, and ``device_manager``.
                 Defaults to ``GreedyPipelineOptimizer``.
             optimizer_kwargs: Extra keyword arguments forwarded to the optimiser
-                constructor (e.g. ``alpha`` for ``TimeBasedShishaPipelineOptimizer``).
+                constructor (e.g. ``alpha`` for ``ReactiveShishaOptimiser``).
             max_log_entries: Maximum number of timing measurements to keep per module.
                 Older entries are discarded when the cap is reached.
             n_microbatches: Number of microbatches per pipeline step. Clamped to at

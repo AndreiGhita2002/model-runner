@@ -387,9 +387,13 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
 
         return split_spec
 
-class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
+class ReactiveShishaOptimiser(PipelineOptimizer):
     """
-    Pipeline optimiser based on the Shisha paper (Soomro et al., PPAM 2022).
+    Reactive pipeline optimiser based on the Shisha paper (Soomro et al., PPAM 2022).
+
+    Extends Shisha with two-level exploration (deep_alpha × sibling_alpha),
+    explicit optimum detection with revert-to-best, and time-based optimum
+    escape that restarts exploration when the environment changes.
 
     Uses a two-phase approach:
     1. Seed Generation (Algorithm 1): merges children into balanced groups using
@@ -397,8 +401,6 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
     2. Online Tuning (Algorithm 2): iteratively moves children from the slowest
        stage toward lighter stages, with patience parameter alpha.
     """
-
-    #TODO(naming): TimeBasedShishaPipelineOptimizer is an awful name
 
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
                  depth: int = 1,
@@ -821,7 +823,7 @@ class TimeBasedShishaPipelineOptimizer(PipelineOptimizer):
         return result
 
 
-class ExhaustiveShishaOptimizer(TimeBasedShishaPipelineOptimizer):
+class ExhaustiveShishaOptimizer(ReactiveShishaOptimiser):
     """Shisha variant that explores exhaustively then freezes at the best config.
 
     Explores all configurations (deep_alpha × sibling_alpha attempts) without
@@ -898,3 +900,7 @@ class ExhaustiveShishaOptimizer(TimeBasedShishaPipelineOptimizer):
                 return False
 
         return True
+
+
+# Backward-compat alias
+TimeBasedShishaPipelineOptimizer = ReactiveShishaOptimiser
