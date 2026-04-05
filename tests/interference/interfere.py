@@ -41,6 +41,34 @@ BENCHMARKS = {
 # On fisherman: cores 0-31 are real, 32-63 are hyper threads.
 # Adaptive pipeline runs on 0-31, benchmarks on 32-63.
 SCHEDULES = {
+    "experiment": {
+        "all": {
+            "step_duration": 240,
+            "steps": [
+                # baseline — no interference
+                [],
+                # level 1 (= gradient's "heavy": 16 CPU + 2 MEM)
+                [("cpu_stress", 16, "32-47"),
+                 ("memory_bandwidth", 2, "60-61")],
+                # level 2 — 20 CPU + 4 MEM
+                [("cpu_stress", 16, "32-47"),
+                 ("cpu_stress", 4, "48-51"),
+                 ("memory_bandwidth", 2, "60-61"),
+                 ("memory_bandwidth", 2, "62-63")],
+                # level 3 — 24 CPU + 4 MEM
+                [("cpu_stress", 16, "32-47"),
+                 ("cpu_stress", 8, "48-55"),
+                 ("memory_bandwidth", 2, "60-61"),
+                 ("memory_bandwidth", 2, "62-63")],
+                # level 4 — 28 CPU + 4 MEM (near saturation)
+                [("cpu_stress", 16, "32-47"),
+                 ("cpu_stress", 8, "48-55"),
+                 ("cpu_stress", 4, "56-59"),
+                 ("memory_bandwidth", 2, "60-61"),
+                 ("memory_bandwidth", 2, "62-63")],
+            ],
+        },
+    },
     "gradient": {
         "all": {
             "step_duration": 120,

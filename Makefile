@@ -49,6 +49,14 @@ install:
 eval: install
 	$(TORCHRUN) tests.evaluation $(COMMON_ARGS) -o $(RUNS_DIR)
 
+# Full experiment suite (runs A-E)
+REPETITIONS ?= 1
+SCHEDULE ?= experiment
+experiment: install
+	uv run python -m tests.experiment --nproc $(NPROC) --repetitions $(REPETITIONS) \
+		$(if $(MODEL_SET),--model-set $(MODEL_SET)) \
+		--schedule $(SCHEDULE)
+
 eval-extended: install
 	$(MAKE) eval MODEL_SET=extended
 
@@ -94,12 +102,6 @@ interf-eval: install
 
 interf-test: install
 	uv run python -m tests.interference.interfere_eval --no-interference --duration 10 --nproc $(NPROC)
-
-# Full experiment suite (runs A-E)
-REPETITIONS ?= 1
-experiment: install
-	uv run python -m tests.experiment --nproc $(NPROC) --repetitions $(REPETITIONS) \
-		$(if $(MODEL_SET),--model-set $(MODEL_SET))
 
 clean:
 	rm -rf build/ *.egg-info/ __pycache__/ .pytest_cache/
