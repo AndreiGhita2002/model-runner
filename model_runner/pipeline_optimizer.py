@@ -1,7 +1,9 @@
+import json
 import time
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Tuple
 
 from torch.distributed.pipelining import SplitPoint
@@ -40,6 +42,24 @@ def nth_largest_index(arr: list, n: int):
 class PipelineConfig:
     split_spec: dict[str, SplitPoint]  # module path → SplitPoint
     device_mapping: dict[int, torch.device]
+
+    def save(self, path: str | Path):
+        """Save config to a JSON file."""
+        data = {
+            "split_spec": {k: v.name for k, v in self.split_spec.items()},
+            "device_mapping": {str(k): str(v) for k, v in self.device_mapping.items()},
+        }
+        with open(path, "w") as f:
+            json.dump(data, f, indent=2)
+
+    @classmethod
+    def load(cls, path: str | Path) -> "PipelineConfig":
+        """Load config from a JSON file."""
+        with open(path) as f:
+            data = json.load(f)
+        split_spec = {k: SplitPoint[v] for k, v in data["split_spec"].items()}
+        device_mapping = {int(k): torch.device(v) for k, v in data["device_mapping"].items()}
+        return cls(split_spec=split_spec, device_mapping=device_mapping)
 
 
 #TODO: move the pipeline optimizer used for baselines into tests module maybe
@@ -210,6 +230,32 @@ class StaticGPipeOptimizer(PipelineOptimizer):
 
     def optimize(self, time_logs, old_config, force_rebalance=False):
         return None
+
+
+class StaticConfigOptimizer(PipelineOptimizer):
+    """Static optimizer that loads a pre-computed config from a file.
+
+    Uses the saved split_spec/device_mapping as the initial setup and never
+    rebalances. Used to skip exhaustive exploration when a known-good config
+    already exists.
+    """
+
+    def __init__(self, num_stages, root_uuid, device_manager, depth=1,
+                 config_path=None, **kwargs):
+        super().__init__(num_stages, root_uuid, device_manager, depth=depth)
+        if config_path is None:
+            raise ValueError("StaticConfigOptimizer requires config_path")
+        self._config = PipelineConfig.load(config_path)
+
+    def initial_setup(self) -> PipelineConfig:
+        return self._config
+
+    def optimize(self, time_logs, old_config, force_rebalance=False):
+        return None
+
+    @property
+    def at_optimum(self):
+        return True
 
 
 class GreedyPipelineOptimizer(PipelineOptimizer):
@@ -837,7 +883,8 @@ class ExhaustiveShishaOptimizer(ReactiveShishaOptimiser):
 
     def __init__(self, num_stages, root_uuid, device_manager, depth=1,
                  deep_alpha=5, sibling_alpha=2, assignment_choice="rank_w",
-                 rebalance_interval=3, verbose=False, **kwargs):
+                 rebalance_interval=3, verbose=False,
+                 save_config_path=None, **kwargs):
         super().__init__(
             num_stages, root_uuid, device_manager, depth=depth,
             deep_alpha=deep_alpha, sibling_alpha=sibling_alpha,
@@ -848,6 +895,7 @@ class ExhaustiveShishaOptimizer(ReactiveShishaOptimiser):
             stop_at_first_optimum=True,
             verbose=verbose,
         )
+        self._save_config_path = save_config_path
 
     def _should_rebalance(self, time_logs, current_config):
         """Explore exhaustively: no tolerance, just track best and count gamma."""
@@ -897,6 +945,9 @@ class ExhaustiveShishaOptimizer(ReactiveShishaOptimiser):
                 self._return_best = True
                 self._at_optimum = True
                 self._log(f"[Exhaustive] exploration complete, freezing at best tp={self._best_throughput:.4f}")
+                if self._save_config_path and self._best_config is not None:
+                    self._best_config.save(self._save_config_path)
+                    self._log(f"[Exhaustive] saved config to {self._save_config_path}")
                 return False
 
         return True

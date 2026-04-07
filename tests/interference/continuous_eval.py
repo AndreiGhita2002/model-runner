@@ -23,6 +23,7 @@ from model_runner import PipelineServer
 from model_runner.pipeline_optimizer import (
     GreedyPipelineOptimizer, StaticGPipeOptimizer,
     ReactiveShishaOptimiser, ExhaustiveShishaOptimizer,
+    StaticConfigOptimizer,
 )
 from tests.testing_models import MODEL_SETS
 from tests.util import generate_batch
@@ -69,6 +70,10 @@ def main():
                         help="Write this file when optimum is first reached (for external coordination)")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Verbose optimizer logging")
+    parser.add_argument("--save-config", type=str, default=None,
+                        help="Save exhaustive optimizer's best config to this path")
+    parser.add_argument("--load-config", type=str, default=None,
+                        help="Load a pre-computed config and use it as a static optimizer")
     parser.add_argument("-o", "--output", type=str, required=True, help="Output JSON path")
     args = parser.parse_args()
 
@@ -106,7 +111,13 @@ def main():
     optimizer_kwargs = {}
     if args.tolerance is not None:
         optimizer_kwargs['tolerance'] = args.tolerance
-    optimizer_class = OPTIMIZER_CHOICES[args.optimizer]
+    if args.load_config:
+        optimizer_class = StaticConfigOptimizer
+        optimizer_kwargs['config_path'] = args.load_config
+    else:
+        optimizer_class = OPTIMIZER_CHOICES[args.optimizer]
+    if args.save_config:
+        optimizer_kwargs['save_config_path'] = args.save_config
     server.add_model(model_name, load_model(), rand_inputs(),
                      optimizer_class=optimizer_class,
                      n_microbatches=args.n_microbatches,

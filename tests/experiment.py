@@ -200,18 +200,39 @@ def main():
 
         # ── Run D: Shisha, stop at first optimum, under interference ──
         if "D" not in args.skip:
-            print(f"\n--- Run D: Exhaustive Shisha (explore then freeze) under interference ---")
-            cmd = [
-                "uv", "run", "python", "-m", "tests.interference.interfere_eval",
-                "--optimizer", "exhaustive",
-                "--wait-for-optimum",
-                "--mode", "deterministic",
-                "--schedule", args.schedule,
-                "--model-set", args.model_set,
-                "--nproc", str(args.nproc),
-                "--omp-threads", str(args.omp_threads),
-                "-o", str(run_dir),
-            ]
+            config_prefix = output_dir / "exhaustive_config"
+            # Check if cached configs exist for all models
+            models = [name for name, _, _ in MODEL_SETS[args.model_set]]
+            cached_configs = all(
+                Path(f"{config_prefix}_{m}.json").exists() for m in models
+            )
+
+            if cached_configs:
+                print(f"\n--- Run D: Using cached exhaustive config ---")
+                cmd = [
+                    "uv", "run", "python", "-m", "tests.interference.interfere_eval",
+                    "--load-config", str(config_prefix),
+                    "--mode", "deterministic",
+                    "--schedule", args.schedule,
+                    "--model-set", args.model_set,
+                    "--nproc", str(args.nproc),
+                    "--omp-threads", str(args.omp_threads),
+                    "-o", str(run_dir),
+                ]
+            else:
+                print(f"\n--- Run D: Exhaustive Shisha (explore then freeze) under interference ---")
+                cmd = [
+                    "uv", "run", "python", "-m", "tests.interference.interfere_eval",
+                    "--optimizer", "exhaustive",
+                    "--wait-for-optimum",
+                    "--save-config", str(config_prefix),
+                    "--mode", "deterministic",
+                    "--schedule", args.schedule,
+                    "--model-set", args.model_set,
+                    "--nproc", str(args.nproc),
+                    "--omp-threads", str(args.omp_threads),
+                    "-o", str(run_dir),
+                ]
             success = run_experiment(run_dir, "run_D", cmd, env)
             if success:
                 _rename_latest_json(run_dir, "run_D.json")

@@ -136,6 +136,10 @@ def main():
                         help="Optimizer tolerance override")
     parser.add_argument("-v", "--verbose", action="store_true",
                         help="Verbose optimizer logging")
+    parser.add_argument("--save-config", type=str, default=None,
+                        help="Save exhaustive optimizer's best config to this path (prefix, model name appended)")
+    parser.add_argument("--load-config", type=str, default=None,
+                        help="Load pre-computed config from this path (prefix, model name appended)")
     parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small",
                         help="Which model set to evaluate (default: small)")
     parser.add_argument("-o", "--output", type=str, default="./data/interference",
@@ -224,6 +228,10 @@ def main():
             eval_cmd.append("-v")
         if signal_file:
             eval_cmd.extend(["--signal-file", str(signal_file)])
+        if args.save_config:
+            eval_cmd.extend(["--save-config", f"{args.save_config}_{model}.json"])
+        if args.load_config:
+            eval_cmd.extend(["--load-config", f"{args.load_config}_{model}.json"])
         eval_proc = run_eval_background(
             eval_cmd, env=eval_env,
             log_file=run_dir / f"eval_{model}.log",

@@ -5,6 +5,7 @@ from .pipeline_runner import PipelineRunner, ForwardResult
 from .timed_module import TimedModule, make_module_timed, timed_module_registry, timed_module_hierarchy
 from .pipeline_optimizer import (
     PipelineOptimizer, GreedyPipelineOptimizer, StaticGPipeOptimizer,
+    StaticConfigOptimizer,
     ReactiveShishaOptimiser, ExhaustiveShishaOptimizer, PipelineConfig,
     TimeBasedShishaPipelineOptimizer,  # backward-compat alias
 )
@@ -26,6 +27,7 @@ __all__ = [
     "PipelineOptimizer",
     "GreedyPipelineOptimizer",
     "StaticGPipeOptimizer",
+    "StaticConfigOptimizer",
     "ReactiveShishaOptimiser",
     "ExhaustiveShishaOptimizer",
     "TimeBasedShishaPipelineOptimizer",  # backward-compat alias
