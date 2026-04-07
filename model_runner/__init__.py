@@ -9,7 +9,7 @@ from .pipeline_optimizer import (
     ReactiveShishaOptimiser, ExhaustiveShishaOptimizer, PipelineConfig,
     TimeBasedShishaPipelineOptimizer,  # backward-compat alias
 )
-from .adaptive_pipeline import AdaptivePipeline
+from .dynamic_pipeline import DynamicPipeline
 from .device_manager import DeviceManager
 from .flask_app import create_flask_app
 import warnings
@@ -31,7 +31,7 @@ __all__ = [
     "ReactiveShishaOptimiser",
     "ExhaustiveShishaOptimizer",
     "TimeBasedShishaPipelineOptimizer",  # backward-compat alias
-    "AdaptivePipeline",
+    "DynamicPipeline",
     "PipelineConfig",
     "TimedModule",
     "make_module_timed",

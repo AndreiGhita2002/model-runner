@@ -5,7 +5,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from .adaptive_pipeline import AdaptivePipeline
+from .dynamic_pipeline import DynamicPipeline
 from .device_manager import DeviceManager
 from .pipeline_optimizer import PipelineOptimizer, GreedyPipelineOptimizer
 from .timed_module import make_module_timed
@@ -29,7 +29,7 @@ class ForwardResult:
 class PipelineRunner:
     """Manages models and executes single pipeline batches across distributed ranks.
 
-    Handles model registration (wrapping in ``TimedModule`` and ``AdaptivePipeline``),
+    Handles model registration (wrapping in ``TimedModule`` and ``DynamicPipeline``),
     executing a single forward pass with automatic padding, and relaying outputs from
     the last rank back to rank 0.
 
@@ -43,7 +43,7 @@ class PipelineRunner:
             default_timing_depth: Default depth for TimedModule profiling.
             verbose: Enable verbose logging to stdout.
         """
-        self.pipelines: dict[str, AdaptivePipeline] = {}
+        self.pipelines: dict[str, DynamicPipeline] = {}
         self.default_timing_depth = default_timing_depth
         self.verbose = verbose
 
@@ -60,7 +60,7 @@ class PipelineRunner:
         """Register a model and create its adaptive pipeline. Must be called on all ranks.
 
         The model is wrapped in a ``TimedModule`` for profiling and then handed to an
-        ``AdaptivePipeline`` which manages stage splitting and rebalancing.
+        ``DynamicPipeline`` which manages stage splitting and rebalancing.
 
         Args:
             model_name: Unique name for the model.
@@ -69,7 +69,7 @@ class PipelineRunner:
             optimizer_class: Pipeline optimiser class. Defaults to ``GreedyPipelineOptimizer``.
             device: Device to run the model on (default: primary device).
             depth: Depth for TimedModule profiling (default: ``default_timing_depth``).
-            **kwargs: Forwarded to ``AdaptivePipeline``.
+            **kwargs: Forwarded to ``DynamicPipeline``.
 
         Raises:
             ValueError: If a model with the same name is already registered.
@@ -91,7 +91,7 @@ class PipelineRunner:
         if 'verbose' not in kwargs:
             kwargs['verbose'] = self.verbose
 
-        self.pipelines[model_name] = AdaptivePipeline(
+        self.pipelines[model_name] = DynamicPipeline(
             timed_model,
             model_name,
             self.device_manager,

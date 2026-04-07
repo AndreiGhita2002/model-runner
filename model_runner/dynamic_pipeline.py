@@ -102,7 +102,7 @@ def _optimizer_process_worker(
         result_queue.put(new_config)
 
 
-class AdaptivePipeline:
+class DynamicPipeline:
     """Manages a PyTorch pipeline with automatic stage rebalancing.
 
     Wraps a ``TimedModule`` in a ``ScheduleGPipe`` pipeline and periodically

@@ -76,7 +76,7 @@ class PipelineServer:
             optimizer_class: Pipeline optimiser class. Defaults to ``GreedyPipelineOptimizer``.
             device: Device to run the model on (default: primary device).
             depth: Depth for TimedModule profiling.
-            **kwargs: Forwarded to ``AdaptivePipeline``.
+            **kwargs: Forwarded to ``DynamicPipeline``.
         """
         self.runner.add_model(model_name, model, example_input,
                               optimizer_class=optimizer_class,
