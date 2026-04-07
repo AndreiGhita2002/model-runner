@@ -20,9 +20,11 @@ BENCHMARKS = {
     },
     "memory_bandwidth": {
         # STREAM with array size > L3 cache (80MB = 10M doubles)
+        # Needs unlimited stack for large static arrays compiled with icc
         "cmd": [os.environ.get("STREAM_C_PATH", "stream_c")],
         "cwd": str(Path(os.environ.get("STREAM_C_PATH", "stream_c")).parent) or None,
         "env": {"STREAM_ARRAY_SIZE": "10000000"},
+        "shell_prefix": "ulimit -s unlimited && ",
         "description": "Memory bandwidth benchmark (STREAM, 80MB array)",
     },
     "idle": {
@@ -114,12 +116,16 @@ SCHEDULES = {
 BenchSpec = tuple[str, int, str]
 
 
+MAX_RESTARTS = 10
+
+
 class InterferenceManager:
     def __init__(self, log_file: Path | None = None):
         # Map from BenchSpec -> Popen process
         self.active: dict[BenchSpec, subprocess.Popen] = {}
         self.log: list[dict] = []
         self.log_file = log_file
+        self.restart_count = 0
 
     def start_benchmark(self, name: str, num_threads: int = 1, cores: str = "") -> bool:
         """Start a benchmark process. Returns True if started successfully."""
@@ -154,6 +160,12 @@ class InterferenceManager:
         if cores:
             cmd = ["taskset", "-c", cores] + cmd
 
+        # Wrap in shell if a prefix is needed (e.g. ulimit -s unlimited)
+        shell_prefix = bench.get("shell_prefix")
+        use_shell = shell_prefix is not None
+        if use_shell:
+            cmd = shell_prefix + " ".join(cmd)
+
         cwd = bench.get("cwd")
 
         try:
@@ -161,6 +173,7 @@ class InterferenceManager:
                 cmd,
                 env=env,
                 cwd=cwd,
+                shell=use_shell,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -207,6 +220,25 @@ class InterferenceManager:
         """Stop all running benchmark processes."""
         for spec in list(self.active.keys()):
             self.stop_benchmark(spec)
+
+    def check_and_restart(self):
+        """Restart any benchmark processes that have exited."""
+        for spec, proc in list(self.active.items()):
+            if proc.poll() is not None:
+                name, threads, cores = spec
+                exit_code = proc.returncode
+                self.restart_count += 1
+                print(f"  WARNING: {name} (pid={proc.pid}, threads={threads}) exited "
+                      f"with code {exit_code}, restarting ({self.restart_count}/{MAX_RESTARTS})",
+                      file=sys.stderr)
+                self.log_event("restart", name, threads, pid=proc.pid)
+                del self.active[spec]
+                if self.restart_count >= MAX_RESTARTS:
+                    print(f"  ERROR: too many benchmark restarts ({MAX_RESTARTS}), aborting",
+                          file=sys.stderr)
+                    self.stop_all()
+                    sys.exit(1)
+                self.start_benchmark(name, threads, cores=cores)
 
     def log_event(self, event_type: str, benchmark: str, threads: int = 0, pid: int = None):
         entry = {
@@ -285,6 +317,7 @@ def run_deterministic(manager: InterferenceManager, step_duration: int,
 
             wait_until = start + step_duration * (step_i + 1)
             while time.perf_counter() < wait_until:
+                manager.check_and_restart()
                 time.sleep(1)
     except KeyboardInterrupt:
         print("\nInterference interrupted.")
@@ -348,6 +381,7 @@ def run_random(manager: InterferenceManager, step_duration: int,
 
             wait_until = start + step_duration * (run_i + 1)
             while time.perf_counter() < wait_until:
+                manager.check_and_restart()
                 time.sleep(1)
     except KeyboardInterrupt:
         print("\nInterference interrupted.")
