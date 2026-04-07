@@ -186,7 +186,7 @@ def main():
             cmd = [
                 "uv", "run", "python", "-m", "tests.interference.interfere_eval",
                 "--optimizer", "gpipe",
-                "--mode", "random", "--seed", str(interf_seed),
+                "--mode", "deterministic",
                 "--schedule", args.schedule,
                 "--model-set", args.model_set,
                 "--nproc", str(args.nproc),
@@ -205,7 +205,7 @@ def main():
                 "uv", "run", "python", "-m", "tests.interference.interfere_eval",
                 "--optimizer", "exhaustive",
                 "--wait-for-optimum",
-                "--mode", "random", "--seed", str(interf_seed),
+                "--mode", "deterministic",
                 "--schedule", args.schedule,
                 "--model-set", args.model_set,
                 "--nproc", str(args.nproc),
@@ -222,7 +222,7 @@ def main():
             cmd = [
                 "uv", "run", "python", "-m", "tests.interference.interfere_eval",
                 "--optimizer", "reactive",
-                "--mode", "random", "--seed", str(interf_seed),
+                "--mode", "deterministic",
                 "--schedule", args.schedule,
                 "--model-set", args.model_set,
                 "--nproc", str(args.nproc),

@@ -43,22 +43,17 @@ BENCHMARKS = {
 SCHEDULES = {
     "experiment": {
         "all": {
-            "step_duration": 240,
+            "step_duration": 300,
             "steps": [
                 # baseline — no interference
                 [],
-                # level 1 (= gradient's "heavy": 16 CPU + 2 MEM)
-                # [("cpu_stress", 16, "32-47"),
-                #  ("memory_bandwidth", 2, "60-61")],
-                # level 2 — 20 CPU + 4 MEM
-                # [("cpu_stress", 20, "32-51"),
-                #  ("memory_bandwidth", 4, "60-63")],
-                # level 3 — 24 CPU + 4 MEM
-                [("cpu_stress", 24, "32-55"),
-                 ("memory_bandwidth", 4, "60-63")],
-                # level 4 — 28 CPU + 4 MEM (near saturation)
-                [("cpu_stress", 28, "32-59"),
-                 ("memory_bandwidth", 4, "60-63")],
+                # step 1 - just CPU
+                [("cpu_stress", 8, "32-39")],
+                # step 2 - just memory
+                [("memory_bandwidth", 8, "40-48")],
+                # step 3 - both
+                [("cpu_stress", 4, "32-36"),
+                 ("memory_bandwidth", 4, "36-40")],
             ],
         },
     },
