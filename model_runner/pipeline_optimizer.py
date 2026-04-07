@@ -407,7 +407,7 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
                  deep_alpha: int = 5,
                  sibling_alpha: int = 2,
                  assignment_choice: str = "rank_w",
-                 rebalance_interval: int = 3,
+                 rebalance_interval: int = 6,
                  tolerance: float = 0.02,
                  optimum_tolerance: float = 0.08,
                  optimum_escape_duration: float = 5,

@@ -205,16 +205,14 @@ class InterferenceManager:
         print(f"  Stopped {name} (pid={proc.pid}, threads={threads}{cores_str})")
 
     def apply_step(self, step: list[BenchSpec]):
-        """Transition to a new set of benchmarks, keeping unchanged ones running."""
-        desired = set(step)
-        current = set(self.active.keys())
+        """Transition to a new set of benchmarks.
 
-        # Stop benchmarks not in the new step
-        for spec in current - desired:
-            self.stop_benchmark(spec)
+        Stops all running benchmarks and starts the new ones fresh, ensuring
+        each stage begins with clean processes (no long-running carry-over).
+        """
+        self.stop_all()
 
-        # Start benchmarks not yet running
-        for name, threads, cores in desired - current:
+        for name, threads, cores in step:
             self.start_benchmark(name, threads, cores=cores)
 
     def stop_all(self):
