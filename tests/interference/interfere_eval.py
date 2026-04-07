@@ -130,8 +130,8 @@ def main():
                         help="Pipeline optimizer (default: reactive)")
     parser.add_argument("--wait-for-optimum", action="store_true",
                         help="Wait for optimum before starting interference (run D)")
-    parser.add_argument("--optimum-timeout", type=int, default=300,
-                        help="Max seconds to wait for optimum (default: 600)")
+    parser.add_argument("--optimum-timeout", type=int, default=1000,
+                        help="Max seconds to wait for optimum (default: 1000)")
     parser.add_argument("--tolerance", type=float, default=None,
                         help="Optimizer tolerance override")
     parser.add_argument("-v", "--verbose", action="store_true",
@@ -241,24 +241,32 @@ def main():
         if signal_file:
             print(f"  Waiting for optimum (timeout: {args.optimum_timeout}s)...")
             wait_start = time.perf_counter()
+            optimum_reached = False
             while not signal_file.exists():
                 if eval_proc.poll() is not None:
                     print(f"  Warning: eval exited before reaching optimum")
                     break
                 if time.perf_counter() - wait_start > args.optimum_timeout:
-                    print(f"  Timeout waiting for optimum — starting interference anyway")
-                    break
+                    print(f"  ERROR: timeout waiting for optimum after {args.optimum_timeout}s "
+                          f"for model {model}. Aborting run.", file=sys.stderr)
+                    eval_proc.terminate()
+                    eval_proc.wait(timeout=10)
+                    sys.exit(1)
                 time.sleep(1)
             if signal_file.exists():
+                optimum_reached = True
                 elapsed = time.perf_counter() - wait_start
                 print(f"  Optimum reached after {elapsed:.0f}s — starting interference schedule")
                 signal_file.unlink()
 
         if run_interference:
+            # Skip idle steps when we waited for optimum — the pre-optimum
+            # exploration already serves as the no-interference baseline.
+            run_steps = [s for s in steps if s] if args.wait_for_optimum else steps
             if args.mode == "random":
-                run_random(manager, step_dur, schedule=steps, seed=args.seed)
+                run_random(manager, step_dur, schedule=run_steps, seed=args.seed)
             else:
-                run_deterministic(manager, step_dur, schedule=steps)
+                run_deterministic(manager, step_dur, schedule=run_steps)
         else:
             print(f"  No interference — waiting {model_duration}s...")
             time.sleep(model_duration)
