@@ -454,8 +454,8 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
                  sibling_alpha: int = 1,
                  assignment_choice: str = "rank_w",
                  rebalance_interval: int = 3,
-                 tolerance: float = 0.04,
-                 optimum_tolerance: float = 0.08,
+                 tolerance: float = 0.08,
+                 optimum_tolerance: float = 0.10,
                  optimum_escape_duration: float = 5,
                  verbose: bool = False,
                  **kwargs):
