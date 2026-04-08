@@ -195,6 +195,8 @@ def main():
     signal.signal(signal.SIGTERM, lambda *_: (cleanup(), sys.exit(0)))
     signal.signal(signal.SIGINT, lambda *_: (cleanup(), sys.exit(1)))
 
+    failed_models = []
+
     for i, model in enumerate(models):
         ms = model_schedules[model]
         steps = ms["steps"]
@@ -232,12 +234,15 @@ def main():
             eval_cmd.extend(["--save-config", f"{args.save_config}_{model}.json"])
         if args.load_config:
             eval_cmd.extend(["--load-config", f"{args.load_config}_{model}.json"])
+        if args.wait_for_optimum:
+            eval_cmd.extend(["--timeout", str(args.optimum_timeout)])
         eval_proc = run_eval_background(
             eval_cmd, env=eval_env,
             log_file=run_dir / f"eval_{model}.log",
         )
 
         # 2. Wait for optimum if requested, then run interference
+        skip_model = False
         if signal_file:
             print(f"  Waiting for optimum (timeout: {args.optimum_timeout}s)...")
             wait_start = time.perf_counter()
@@ -247,17 +252,23 @@ def main():
                     print(f"  Warning: eval exited before reaching optimum")
                     break
                 if time.perf_counter() - wait_start > args.optimum_timeout:
-                    print(f"  ERROR: timeout waiting for optimum after {args.optimum_timeout}s "
-                          f"for model {model}. Aborting run.", file=sys.stderr)
-                    eval_proc.terminate()
-                    eval_proc.wait(timeout=10)
-                    sys.exit(1)
+                    print(f"  WARNING: timeout waiting for optimum after {args.optimum_timeout}s "
+                          f"for model {model}. Skipping.", file=sys.stderr)
+                    skip_model = True
+                    break
                 time.sleep(1)
             if signal_file.exists():
                 optimum_reached = True
                 elapsed = time.perf_counter() - wait_start
                 print(f"  Optimum reached after {elapsed:.0f}s — starting interference schedule")
                 signal_file.unlink()
+
+        if skip_model:
+            failed_models.append(model)
+            eval_proc.terminate()
+            eval_proc.wait(timeout=10)
+            print(f"  {model} FAILED (optimum timeout). Continuing...")
+            continue
 
         if run_interference:
             # Skip idle steps when we waited for optimum — the pre-optimum
@@ -288,11 +299,24 @@ def main():
     # Merge all results into one JSON
     print()
     print("Merging results...")
-    merge_results(run_dir, output_file, models, model_schedules, args)
+    completed_models = [m for m in models if m not in failed_models]
+    merge_results(run_dir, output_file, completed_models, model_schedules, args)
+
+    # Add failed models to the output
+    if failed_models:
+        with open(output_file) as f:
+            combined = json.load(f)
+        combined["meta"]["failed_models"] = failed_models
+        with open(output_file, "w") as f:
+            json.dump(combined, f, indent=2)
 
     print()
     print("=" * 44)
-    print(f"Experiment complete: {output_file}")
+    if failed_models:
+        print(f"Experiment complete (with failures): {output_file}")
+        print(f"Failed models: {', '.join(failed_models)}")
+    else:
+        print(f"Experiment complete: {output_file}")
     print("=" * 44)
 
 

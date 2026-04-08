@@ -451,7 +451,7 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
                  depth: int = 1,
                  deep_alpha: int = 5,
-                 sibling_alpha: int = 1,
+                 sibling_alpha: int = 2,
                  assignment_choice: str = "rank_w",
                  rebalance_interval: int = 3,
                  tolerance: float = 0.04,
@@ -796,16 +796,12 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
             # should we keep exploring? only if we are not at optimum
             return not self._at_optimum
 
-        # Throughput is within tolerance — not an improvement
+        # Throughput is within tolerance
         elif throughput >= threshold:
             if self._at_optimum:
                 self._optimum_escape_start = None  # things are fine, reset escape timer
-                self._log(f"[DEBUG _should_rebalance] within tolerance at optimum, returning False")
-                return False
-
-            # Count toward exploration exhaustion (same as "worse")
-            self._log(f"[DEBUG _should_rebalance] within tolerance, dg={self._deep_gamma}")
-            return self._tick_gamma()
+            self._log(f"[DEBUG _should_rebalance] within tolerance, returning {not self._at_optimum}")
+            return not self._at_optimum
 
         # Throughput is worse, so we keep trying to find the optimum
         else:
@@ -883,7 +879,9 @@ class ExhaustiveShishaOptimizer(ReactiveShishaOptimiser):
     """
 
     def __init__(self, num_stages, root_uuid, device_manager, depth=1,
-                 deep_alpha=5, sibling_alpha=2, assignment_choice="rank_w",
+                 deep_alpha=5, sibling_alpha=2, total_alpha=50,
+                 timeout=1000,
+                 assignment_choice="rank_w",
                  rebalance_interval=3, verbose=False,
                  save_config_path=None, **kwargs):
         super().__init__(
@@ -897,6 +895,22 @@ class ExhaustiveShishaOptimizer(ReactiveShishaOptimiser):
             verbose=verbose,
         )
         self._save_config_path = save_config_path
+        self.total_alpha = total_alpha
+        self._total_gamma = 0
+        self._truncated = False  # True if optimum reached via total_gamma or timeout
+        self._timeout = timeout
+        self._start_time = None
+
+    def _freeze(self, reason: str, truncated: bool = False):
+        """Freeze at best config found so far."""
+        self._return_best = True
+        self._at_optimum = True
+        self._truncated = truncated
+        self._log(f"[Exhaustive] {reason}, freezing at best tp={self._best_throughput:.4f}"
+                  f"{' (truncated)' if truncated else ''}")
+        if self._save_config_path and self._best_config is not None:
+            self._best_config.save(self._save_config_path)
+            self._log(f"[Exhaustive] saved config to {self._save_config_path}")
 
     def _should_rebalance(self, time_logs, current_config):
         """Explore exhaustively: no tolerance, just track best and count gamma."""
@@ -912,10 +926,11 @@ class ExhaustiveShishaOptimizer(ReactiveShishaOptimiser):
 
         throughput = 1.0 / slowest_stage_time
 
-        # First config becomes best
+        # First config becomes best — also starts the timer
         if self._best_throughput == 0.0:
             self._best_throughput = throughput
             self._best_config = current_config
+            self._start_time = self._now
             self._log(f"[Exhaustive] first config, tp={throughput:.4f}")
             return True
 
@@ -923,35 +938,51 @@ class ExhaustiveShishaOptimizer(ReactiveShishaOptimiser):
         if self._at_optimum:
             return False
 
+        # Check timeout
+        if self._now - self._start_time >= self._timeout:
+            self._freeze(f"timeout after {self._timeout}s", truncated=True)
+            return False
+
+        # Count every non-first step toward total budget
+        self._total_gamma += 1
+
         # Track the best config seen
         if throughput > self._best_throughput:
             self._best_throughput = throughput
             self._best_config = current_config
             self._deep_gamma = 0
             self._sibling_gamma = 0
-            self._log(f"[Exhaustive] new best tp={throughput:.4f}, reset gamma")
+            self._log(f"[Exhaustive] new best tp={throughput:.4f}, reset gamma "
+                      f"(total={self._total_gamma}/{self.total_alpha})")
             return True
 
         # Count non-improving steps
         self._deep_gamma += 1
         self._log(f"[Exhaustive] tp={throughput:.4f} best={self._best_throughput:.4f} "
-                  f"gamma_d={self._deep_gamma} gamma_s={self._sibling_gamma}")
+                  f"gamma_d={self._deep_gamma} gamma_s={self._sibling_gamma} "
+                  f"total={self._total_gamma}/{self.total_alpha}")
 
         if self._deep_gamma >= self.deep_alpha:
             self._deep_gamma = 0
             self._sibling_gamma += 1
 
             if self._sibling_gamma >= self.sibling_alpha:
-                # Exploration complete — freeze at best config
-                self._return_best = True
-                self._at_optimum = True
-                self._log(f"[Exhaustive] exploration complete, freezing at best tp={self._best_throughput:.4f}")
-                if self._save_config_path and self._best_config is not None:
-                    self._best_config.save(self._save_config_path)
-                    self._log(f"[Exhaustive] saved config to {self._save_config_path}")
+                self._freeze("exploration complete")
                 return False
 
+        # Total budget exhausted
+        if self._total_gamma >= self.total_alpha:
+            self._freeze(f"total budget exhausted ({self.total_alpha})", truncated=True)
+            return False
+
         return True
+
+    @property
+    def optimizer_state(self) -> dict:
+        state = super().optimizer_state
+        state["total_gamma"] = self._total_gamma
+        state["truncated"] = self._truncated
+        return state
 
 
 # Backward-compat alias

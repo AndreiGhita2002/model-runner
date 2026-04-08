@@ -74,6 +74,8 @@ def main():
                         help="Save exhaustive optimizer's best config to this path")
     parser.add_argument("--load-config", type=str, default=None,
                         help="Load a pre-computed config and use it as a static optimizer")
+    parser.add_argument("--timeout", type=int, default=None,
+                        help="Optimizer exploration timeout in seconds (exhaustive only)")
     parser.add_argument("-o", "--output", type=str, required=True, help="Output JSON path")
     args = parser.parse_args()
 
@@ -118,6 +120,8 @@ def main():
         optimizer_class = OPTIMIZER_CHOICES[args.optimizer]
     if args.save_config:
         optimizer_kwargs['save_config_path'] = args.save_config
+    if args.timeout is not None:
+        optimizer_kwargs['timeout'] = args.timeout
     server.add_model(model_name, load_model(), rand_inputs(),
                      optimizer_class=optimizer_class,
                      n_microbatches=args.n_microbatches,
