@@ -122,8 +122,8 @@ def main():
                         help="Run evaluation without interference")
     parser.add_argument("--mode", choices=["deterministic", "random"], default="deterministic",
                         help="Interference mode (default: deterministic)")
-    parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="gradient",
-                        help="Interference schedule (default: gradient)")
+    parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="experiment",
+                        help="Interference schedule (default: experiment)")
     parser.add_argument("--seed", type=int, default=None,
                         help="Random seed for random mode (default: random)")
     parser.add_argument("--optimizer", choices=["reactive", "shisha", "exhaustive", "greedy", "gpipe"], default="reactive",

@@ -176,6 +176,7 @@ class InterferenceManager:
                 shell=use_shell,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                start_new_session=True,
             )
             self.active[spec] = proc
             self.log_event("start", name, num_threads, pid=proc.pid)
@@ -195,11 +196,20 @@ class InterferenceManager:
         if proc is None:
             return
         if proc.poll() is None:
-            proc.terminate()
+            # Kill the entire process group (needed for shell=True benchmarks
+            # where terminate() would only kill the shell, not its children)
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
             try:
                 proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                proc.kill()
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                proc.wait()
         name, threads, cores = spec
         self.log_event("stop", name, threads, pid=proc.pid)
         cores_str = f", cores={cores}" if cores else ""
