@@ -174,7 +174,7 @@ def maxvit_t_rand_inputs() -> torch.Tensor:
 
 evaluation_models: list[tuple[str, types.FunctionType, types.FunctionType]] = [
     ("conv_next", load_conv_next, conv_next_rand_inputs),              # modern CNN
-    ("conv_next_base", load_conv_next_base, conv_next_base_rand_inputs),  # modern CNN (larger)
+    ("mobilenet_v3_large", load_mobilenet_v3_large, mobilenet_v3_large_rand_inputs),  # lightweight edge (~5.5M)
     ("efficientnet_b6", load_efficientnet_b6, efficientnet_b6_rand_inputs),  # efficient CNN
     ("regnet_x_16gf", load_regnet_x_16gf, regnet_x_16gf_rand_inputs),  # regular CNN
 ]
