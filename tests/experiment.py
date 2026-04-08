@@ -86,8 +86,8 @@ def main():
                         help="Number of torchrun processes (default: 4)")
     parser.add_argument("--omp-threads", type=int, default=int(os.environ.get("OMP_THREADS", "8")),
                         help="OMP_NUM_THREADS (default: 8)")
-    parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="reduced",
-                        help="Model set to evaluate (default: reduced)")
+    parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small",
+                        help="Model set to evaluate (default: small)")
     parser.add_argument("--num-requests", type=int, default=5000,
                         help="Requests for non-interference runs A, B (default: 5000)")
     parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="gradient",
