@@ -736,6 +736,18 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
                 best_idx = i
         return best_idx
 
+    def _tick_gamma(self) -> bool:
+        """Increment exploration counters. Returns True to keep exploring, False if exhausted."""
+        self._deep_gamma += 1
+        if self._deep_gamma >= self.deep_alpha:
+            self._deep_gamma = 0
+            self._sibling_gamma += 1
+            if self._sibling_gamma >= self.sibling_alpha:
+                self._return_best = True
+                self._at_optimum = True
+                return False
+        return True
+
     def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]],
                           current_config: PipelineConfig) -> bool:
         self._now = time.monotonic()
@@ -784,12 +796,16 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
             # should we keep exploring? only if we are not at optimum
             return not self._at_optimum
 
-        # Throughput is within tolerance
+        # Throughput is within tolerance — not an improvement
         elif throughput >= threshold:
             if self._at_optimum:
                 self._optimum_escape_start = None  # things are fine, reset escape timer
-            self._log(f"[DEBUG _should_rebalance] within tolerance, returning {not self._at_optimum}")
-            return not self._at_optimum
+                self._log(f"[DEBUG _should_rebalance] within tolerance at optimum, returning False")
+                return False
+
+            # Count toward exploration exhaustion (same as "worse")
+            self._log(f"[DEBUG _should_rebalance] within tolerance, dg={self._deep_gamma}")
+            return self._tick_gamma()
 
         # Throughput is worse, so we keep trying to find the optimum
         else:
@@ -810,22 +826,7 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
                 self._sibling_gamma = 0
                 self._deep_gamma = 0
 
-            # First, we look deep
-            self._deep_gamma += 1
-            if self._deep_gamma >= self.deep_alpha:
-                # We reached the end of depth of exploration, time to look sideways
-                self._deep_gamma = 0 # reset deep exploration
-                self._sibling_gamma += 1 # increment sideways
-
-                if self._sibling_gamma >= self.sibling_alpha:
-                    # we explored enough; just return to best
-                    self._return_best = True
-                    self._at_optimum = True
-                    return False
-
-                # keep exploring
-                return True
-            return True
+            return self._tick_gamma()
 
     # ── Public interface ─────────────────────────────────────────────────
 
