@@ -45,7 +45,7 @@ BENCHMARKS = {
 SCHEDULES = {
     "experiment": {
         "all": {
-            "step_duration": 300,
+            "step_duration": 600,
             "steps": [
                 # baseline — no interference
                 [],
