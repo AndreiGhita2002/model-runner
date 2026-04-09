@@ -56,6 +56,8 @@ experiment: install
 	uv run python -m tests.experiment --nproc $(NPROC) --repetitions $(REPETITIONS) \
 		$(if $(MODEL_SET),--model-set $(MODEL_SET)) \
 		$(if $(STEP_DURATION),--duration $(STEP_DURATION)) \
+		$(if $(SKIP),--skip $(SKIP)) \
+		$(if $(KEEP_LOGS),--keep-logs) \
 		--schedule $(SCHEDULE)
 
 eval-extended: install

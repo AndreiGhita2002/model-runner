@@ -104,6 +104,8 @@ def main():
                         help="Output directory (default: ./data/experiments)")
     parser.add_argument("--skip", nargs="*", choices=["A", "B", "C", "D", "E"], default=[],
                         help="Skip specific runs (e.g. --skip A C)")
+    parser.add_argument("--keep-logs", action="store_true",
+                        help="Keep temp log directories for interference runs C, D, E")
     parser.add_argument("--only", nargs="*", choices=["A", "B", "C", "D", "E"], default=None,
                         help="Run only these (e.g. --only A B)")
     args = parser.parse_args()
@@ -202,6 +204,8 @@ def main():
             if args.duration is not None:
                 cmd.extend(["--duration", str(args.duration)])
             cmd.append("--adaptive-targeting")
+            if args.keep_logs:
+                cmd.append("--keep-logs")
             # interfere_eval writes <timestamp>.json, so we rename after
             success = run_experiment(run_dir, "run_C", cmd, env)
             if success:
@@ -244,6 +248,8 @@ def main():
                 ]
             if args.duration is not None:
                 cmd.extend(["--duration", str(args.duration)])
+            if args.keep_logs:
+                cmd.append("--keep-logs")
             success = run_experiment(run_dir, "run_D", cmd, env)
             if success:
                 _rename_latest_json(run_dir, "run_D.json")
@@ -263,6 +269,8 @@ def main():
             ]
             if args.duration is not None:
                 cmd.extend(["--duration", str(args.duration)])
+            if args.keep_logs:
+                cmd.append("--keep-logs")
             success = run_experiment(run_dir, "run_E", cmd, env)
             if success:
                 _rename_latest_json(run_dir, "run_E.json")
