@@ -1153,3 +1153,53 @@ def plot_interf_boxplot(interf_data: dict):
     fig.suptitle("Forward time distribution by interference level", fontsize=14)
     fig.tight_layout()
     plt.show()
+
+
+def plot_interf_stage_times(interf_data: dict,
+                            show_interference_regions: bool = True):
+    """Plot per-stage batch times over time for a single interference run."""
+    models = list(interf_data["results"].keys())
+    n_models = len(models)
+    if n_models == 0:
+        print("No model results to plot")
+        return
+
+    cols = min(n_models, 2)
+    rows = math.ceil(n_models / cols)
+    fig, axes = plt.subplots(rows, cols, figsize=(7 * cols, 4 * rows), squeeze=False)
+
+    for idx, model in enumerate(models):
+        ax = axes[idx // cols][idx % cols]
+        result = interf_data["results"][model]
+        batches = result.get("batches", [])
+        timed = [b for b in batches if "timing" in b and "stage_times" in b]
+
+        if not timed:
+            ax.set_title(f"{model} (no stage_times)")
+            continue
+
+        xs = list(range(len(timed)))
+        n_stages = len(timed[0]["stage_times"])
+
+        for s in range(n_stages):
+            vals = [b["stage_times"][s] for b in timed]
+            color = STAGE_COLORS[s % len(STAGE_COLORS)]
+            ax.plot(xs, vals, color=color, alpha=0.8, label=f"Stage {s}",
+                    linewidth=0.8, marker=".", markersize=1)
+
+        if show_interference_regions:
+            regions = get_interference_regions(interf_data, model)
+            offset = compute_clock_offset(timed, regions)
+            draw_interference_boundaries_by_index(ax, regions, timed, clock_offset=offset)
+
+        ax.set_title(model)
+        ax.set_xlabel("Batch index")
+        ax.set_ylabel("Stage time (s)" if idx % cols == 0 else "")
+        ax.legend(fontsize="x-small", loc="upper right")
+
+    for idx in range(n_models, rows * cols):
+        axes[idx // cols][idx % cols].set_visible(False)
+
+    fig.suptitle("Per-stage batch times under interference", fontsize=14)
+    fig.tight_layout()
+    plt.show()
