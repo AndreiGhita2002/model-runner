@@ -439,13 +439,16 @@ def step_label(step: list[BenchSpec]) -> str:
 
 
 def run_deterministic(manager: InterferenceManager, step_duration: int,
-                      schedule: list[list[BenchSpec]] | None = None):
+                      schedule: list[list[BenchSpec]] | None = None,
+                      eval_proc: subprocess.Popen | None = None):
     """Run a deterministic interference schedule.
 
     Args:
         manager: InterferenceManager instance.
         step_duration: Seconds per schedule step.
         schedule: List of steps, where each step is a list of BenchSpec tuples.
+        eval_proc: Optional eval subprocess to monitor. If it dies, the
+            schedule is aborted early.
     """
     if schedule is None:
         schedule = SCHEDULES["full"]
@@ -468,6 +471,10 @@ def run_deterministic(manager: InterferenceManager, step_duration: int,
             while time.perf_counter() < wait_until:
                 manager.check_and_restart()
                 manager.check_utilization()
+                if eval_proc is not None and eval_proc.poll() is not None:
+                    print(f"  ERROR: eval process died (exit code {eval_proc.returncode}), "
+                          f"aborting interference.", file=sys.stderr)
+                    return
                 time.sleep(1)
     except KeyboardInterrupt:
         print("\nInterference interrupted.")
@@ -477,7 +484,8 @@ def run_deterministic(manager: InterferenceManager, step_duration: int,
 
 def run_random(manager: InterferenceManager, step_duration: int,
                schedule: list[list[BenchSpec]] | None = None,
-               seed: int | None = None, first_step: int | None = 0):
+               seed: int | None = None, first_step: int | None = 0,
+               eval_proc: subprocess.Popen | None = None):
     """Run schedule steps in a random order.
 
     Each step runs exactly once for ``step_duration`` seconds, so total time
@@ -490,6 +498,8 @@ def run_random(manager: InterferenceManager, step_duration: int,
         seed: Random seed for reproducibility. None = random seed.
         first_step: Index of the step to run first (default 0, typically idle).
             None = fully random order (no pinned first step).
+        eval_proc: Optional eval subprocess to monitor. If it dies, the
+            schedule is aborted early.
     """
     if schedule is None:
         schedule = SCHEDULES["full"]["all"]["steps"]
@@ -533,6 +543,10 @@ def run_random(manager: InterferenceManager, step_duration: int,
             while time.perf_counter() < wait_until:
                 manager.check_and_restart()
                 manager.check_utilization()
+                if eval_proc is not None and eval_proc.poll() is not None:
+                    print(f"  ERROR: eval process died (exit code {eval_proc.returncode}), "
+                          f"aborting interference.", file=sys.stderr)
+                    return
                 time.sleep(1)
     except KeyboardInterrupt:
         print("\nInterference interrupted.")

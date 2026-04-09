@@ -916,6 +916,9 @@ def plot_interf_batch_times(interf_data: dict, baseline_data: dict = None,
     """Plot per-batch forward times under interference."""
     models = list(interf_data["results"].keys())
     n_models = len(models)
+    if n_models == 0:
+        print("No model results to plot")
+        return
     cols = min(n_models, 2)
     rows = math.ceil(n_models / cols)
 

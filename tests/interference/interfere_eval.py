@@ -278,9 +278,11 @@ def main():
             # exploration already serves as the no-interference baseline.
             run_steps = [s for s in steps if s] if args.wait_for_optimum else steps
             if args.mode == "random":
-                run_random(manager, step_dur, schedule=run_steps, seed=args.seed)
+                run_random(manager, step_dur, schedule=run_steps, seed=args.seed,
+                           eval_proc=eval_proc)
             else:
-                run_deterministic(manager, step_dur, schedule=run_steps)
+                run_deterministic(manager, step_dur, schedule=run_steps,
+                                  eval_proc=eval_proc)
         else:
             print(f"  No interference — waiting {model_duration}s...")
             time.sleep(model_duration)
@@ -290,12 +292,17 @@ def main():
         manager.save_log()
 
         print(f"  Stopping evaluation...")
-        eval_proc.terminate()
-        try:
-            eval_proc.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            eval_proc.kill()
-            eval_proc.wait()
+        if eval_proc.poll() is not None:
+            print(f"  WARNING: eval already exited (code {eval_proc.returncode}) "
+                  f"— results may be incomplete", file=sys.stderr)
+            failed_models.append(model)
+        else:
+            eval_proc.terminate()
+            try:
+                eval_proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                eval_proc.kill()
+                eval_proc.wait()
 
         print(f"  {model} complete.")
 
