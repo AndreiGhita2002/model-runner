@@ -176,6 +176,8 @@ def main():
                     "best_throughput": reb.get("best_throughput"),
                     "optimum_escape_elapsed": reb.get("optimum_escape_elapsed"),
                 }
+                if "stage_times" in timing:
+                    batch_entry["stage_times"] = timing["stage_times"]
             batches.append(batch_entry)
 
         timed = [b for b in batches if "timing" in b]

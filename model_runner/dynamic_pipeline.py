@@ -363,6 +363,7 @@ class DynamicPipeline:
             timing = {
                 "forward": {"start": forward_start, "end": forward_end},
                 "rebalance": rebalance_timing,
+                "stage_times": self.get_stage_times(),
             }
 
         return {"output": output, "timing": timing}
@@ -701,3 +702,23 @@ class DynamicPipeline:
                     self.time_logs[mod_uuid] = entries[-self.max_log_entries:]
 
         return self.time_logs
+
+    def get_stage_times(self) -> list[float]:
+        """Compute per-stage average times from the latest time_logs.
+
+        Returns a list of floats, one per stage, representing the sum of
+        average child times within each stage.
+        """
+        optimizer = self.pipeline_optimizer
+        stages = optimizer._children_to_stages(self.current_config)
+        stage_times = []
+        for stage in stages:
+            total = 0.0
+            for child_uuid in stage:
+                path = optimizer._uuid_to_path(child_uuid)
+                times = self.time_logs.get(path, [])
+                if times:
+                    # Use only the most recent measurement
+                    total += times[-1]
+            stage_times.append(total)
+        return stage_times
