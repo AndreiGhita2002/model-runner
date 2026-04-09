@@ -768,7 +768,7 @@ def plot_experiment_stage_times(runs: dict, run_info: dict, all_models: list):
             n_stages = len(timed[0]["stage_times"])
 
             for s in range(n_stages):
-                vals = [b["stage_times"][s] for b in timed]
+                vals = [b["stage_times"][s] / 1e9 for b in timed]
                 color = STAGE_COLORS[s % len(STAGE_COLORS)]
                 ax.plot(t_rel, vals, color=color, alpha=0.8, label=f"Stage {s}",
                         linewidth=0.8, marker=".", markersize=0.5)
@@ -1156,8 +1156,13 @@ def plot_interf_boxplot(interf_data: dict):
 
 
 def plot_interf_stage_times(interf_data: dict,
-                            show_interference_regions: bool = True):
-    """Plot per-stage batch times over time for a single interference run."""
+                            show_interference_regions: bool = True,
+                            x_axis: str = "time"):
+    """Plot per-stage batch times over time for a single interference run.
+
+    Args:
+        x_axis: "time" for wall-clock seconds since start, "index" for batch index.
+    """
     models = list(interf_data["results"].keys())
     n_models = len(models)
     if n_models == 0:
@@ -1178,11 +1183,18 @@ def plot_interf_stage_times(interf_data: dict,
             ax.set_title(f"{model} (no stage_times)")
             continue
 
-        xs = list(range(len(timed)))
+        if x_axis == "time":
+            t0 = timed[0]["timing"]["start"]
+            xs = [b["timing"]["start"] - t0 for b in timed]
+            x_label = "Time (s)"
+        else:
+            xs = list(range(len(timed)))
+            x_label = "Batch index"
+
         n_stages = len(timed[0]["stage_times"])
 
         for s in range(n_stages):
-            vals = [b["stage_times"][s] for b in timed]
+            vals = [b["stage_times"][s] / 1e9 for b in timed]
             color = STAGE_COLORS[s % len(STAGE_COLORS)]
             ax.plot(xs, vals, color=color, alpha=0.8, label=f"Stage {s}",
                     linewidth=0.8, marker=".", markersize=1)
@@ -1190,10 +1202,18 @@ def plot_interf_stage_times(interf_data: dict,
         if show_interference_regions:
             regions = get_interference_regions(interf_data, model)
             offset = compute_clock_offset(timed, regions)
-            draw_interference_boundaries_by_index(ax, regions, timed, clock_offset=offset)
+            if x_axis == "time":
+                # Draw boundaries as vertical lines at wall-clock offsets
+                for region_i, (start_t, _) in enumerate(regions):
+                    x_pos = start_t - offset - timed[0]["timing"]["start"]
+                    color = STEP_PALETTE[region_i % len(STEP_PALETTE)]
+                    ax.axvline(x_pos, color=color, linestyle="--", linewidth=1.5,
+                               alpha=0.8, label=f"Step {region_i}")
+            else:
+                draw_interference_boundaries_by_index(ax, regions, timed, clock_offset=offset)
 
         ax.set_title(model)
-        ax.set_xlabel("Batch index")
+        ax.set_xlabel(x_label)
         ax.set_ylabel("Stage time (s)" if idx % cols == 0 else "")
         ax.legend(fontsize="x-small", loc="upper right")
 
