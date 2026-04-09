@@ -208,7 +208,10 @@ def main():
         print(f"[{i + 1}/{len(models)}] {model} ({len(steps)} steps × {step_dur}s = {model_duration}s)")
         print("=" * 44)
 
-        manager = InterferenceManager(log_file=run_dir / f"interference_{model}.json")
+        manager = InterferenceManager(
+            log_file=run_dir / f"interference_{model}.json",
+            bench_log_dir=run_dir / "bench_logs",
+        )
         managers.append(manager)
 
         # 1. Start eval in background (runs until SIGTERM)

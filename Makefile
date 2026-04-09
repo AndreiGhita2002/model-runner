@@ -55,6 +55,7 @@ SCHEDULE ?= experiment
 experiment: install
 	uv run python -m tests.experiment --nproc $(NPROC) --repetitions $(REPETITIONS) \
 		$(if $(MODEL_SET),--model-set $(MODEL_SET)) \
+		$(if $(STEP_DURATION),--duration $(STEP_DURATION)) \
 		--schedule $(SCHEDULE)
 
 eval-extended: install
@@ -102,6 +103,9 @@ interf-eval: install
 
 interf-test: install
 	uv run python -m tests.interference.interfere_eval --no-interference --duration 10 --nproc $(NPROC)
+
+bench-test: install
+	uv run python -m tests.interference.test_benchmarks
 
 clean:
 	rm -rf build/ *.egg-info/ __pycache__/ .pytest_cache/

@@ -147,16 +147,26 @@ def _get_clock_ticks() -> int:
 
 
 class InterferenceManager:
-    def __init__(self, log_file: Path | None = None):
+    def __init__(self, log_file: Path | None = None, bench_log_dir: Path | None = None):
         # Map from BenchSpec -> Popen process
         self.active: dict[BenchSpec, subprocess.Popen] = {}
+        # Map from BenchSpec -> open log file handle
+        self._bench_log_files: dict[BenchSpec, object] = {}
         self.log: list[dict] = []
         self.log_file = log_file
+        self.bench_log_dir = bench_log_dir
         self.restart_count = 0
         # CPU utilization tracking: spec -> (wall_time, cpu_ticks)
         self._last_cpu_sample: dict[BenchSpec, tuple[float, int]] = {}
         self._last_utilization_check = 0.0
         self._clock_ticks = _get_clock_ticks()
+        self._start_time = time.monotonic()
+
+    def _ts(self) -> str:
+        """Timestamp prefix: [HH:MM:SS +Xs]"""
+        elapsed = time.monotonic() - self._start_time
+        clock = datetime.now().strftime("%H:%M:%S")
+        return f"[{clock} +{elapsed:.0f}s]"
 
     def start_benchmark(self, name: str, num_threads: int = 1, cores: str = "") -> bool:
         """Start a benchmark process. Returns True if started successfully."""
@@ -201,13 +211,25 @@ class InterferenceManager:
         cwd = bench.get("cwd")
 
         try:
+            # Log benchmark output to file if bench_log_dir is set
+            if self.bench_log_dir:
+                self.bench_log_dir.mkdir(parents=True, exist_ok=True)
+                log_path = self.bench_log_dir / f"{name}_{num_threads}t_{cores}.log"
+                bench_log = open(log_path, "a")
+                self._bench_log_files[spec] = bench_log
+                stdout_dest = bench_log
+                stderr_dest = bench_log
+            else:
+                stdout_dest = subprocess.DEVNULL
+                stderr_dest = subprocess.DEVNULL
+
             proc = subprocess.Popen(
                 cmd,
                 env=env,
                 cwd=cwd,
                 shell=use_shell,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=stdout_dest,
+                stderr=stderr_dest,
                 start_new_session=True,
             )
             self.active[spec] = proc
@@ -230,6 +252,9 @@ class InterferenceManager:
         """Stop a specific benchmark by spec."""
         proc = self.active.pop(spec, None)
         self._last_cpu_sample.pop(spec, None)
+        bench_log = self._bench_log_files.pop(spec, None)
+        if bench_log is not None:
+            bench_log.close()
         if proc is None:
             return
         if proc.poll() is None:
@@ -334,7 +359,7 @@ class InterferenceManager:
             self.log.append(entry)
 
             if cpu_pct < UTILIZATION_WARN_THRESHOLD:
-                print(f"  WARNING: {name} (pid={pid}, threads={threads}, cores={cores}) "
+                print(f"  {self._ts()} WARNING: {name} (pid={pid}, threads={threads}, cores={cores}) "
                       f"CPU usage {cpu_pct:.1f}% — expected ~{threads * 100}%",
                       file=sys.stderr)
 
@@ -518,7 +543,8 @@ def main():
             print(f"  '{name}' not found at '{path}' (set {env_var})", file=sys.stderr)
         sys.exit(1)
 
-    manager = InterferenceManager(log_file=args.output)
+    bench_log_dir = args.output.parent / "bench_logs" if args.output else None
+    manager = InterferenceManager(log_file=args.output, bench_log_dir=bench_log_dir)
 
     # Clean up on SIGTERM
     signal.signal(signal.SIGTERM, lambda *_: (manager.stop_all(), sys.exit(0)))

@@ -55,17 +55,21 @@ def torchrun_cmd(nproc: int, module: str, args: list[str], taskset_cores: str | 
     return cmd
 
 
+def _now() -> str:
+    return datetime.now().strftime("%H:%M:%S")
+
+
 def run_experiment(run_dir: Path, label: str, cmd: list[str], env: dict) -> bool:
     """Run an experiment, saving output and handling errors. Returns True on success."""
     log_file = run_dir / f"{label}.log"
-    print(f"  [{label}] Starting...")
+    print(f"  [{_now()}] [{label}] Starting...")
     start = time.perf_counter()
 
     exit_code = run_cmd(cmd, env=env, log_file=log_file)
 
     elapsed = time.perf_counter() - start
     if exit_code != 0:
-        print(f"  [{label}] FAILED (exit code {exit_code}, {elapsed:.0f}s)")
+        print(f"  [{_now()}] [{label}] FAILED (exit code {exit_code}, {elapsed:.0f}s)")
         # Save error info
         error_file = run_dir / "errors.txt"
         with open(error_file, "a") as f:
@@ -74,7 +78,7 @@ def run_experiment(run_dir: Path, label: str, cmd: list[str], env: dict) -> bool
             f.write(f"Log: {log_file}\n\n")
         return False
     else:
-        print(f"  [{label}] Done ({elapsed:.0f}s)")
+        print(f"  [{_now()}] [{label}] Done ({elapsed:.0f}s)")
         return True
 
 
@@ -92,6 +96,8 @@ def main():
                         help="Requests for non-interference runs A, B (default: 5000)")
     parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="gradient",
                         help="Interference schedule for C, D, E (default: gradient)")
+    parser.add_argument("--duration", type=int, default=None,
+                        help="Override step duration in seconds for interference runs C, D, E (default: from schedule)")
     parser.add_argument("--interference-seed", type=int, default=None,
                         help="Seed for random interference schedule (default: random)")
     parser.add_argument("-o", "--output", type=str, default="./data/experiments",
@@ -158,7 +164,7 @@ def main():
 
         # ── Run A: GPipe baseline (no interference, no rebalancing) ──
         if "A" not in args.skip:
-            print(f"\n--- Run A: GPipe baseline (no interference) ---")
+            print(f"\n[{_now()}] --- Run A: GPipe baseline (no interference) ---")
             cmd = torchrun_cmd(args.nproc, "tests.evaluation", [
                 "-n", "100",
                 "-b", "1", "-m", "32",
@@ -170,7 +176,7 @@ def main():
 
         # ── Run B: Shisha (no interference, with rebalancing) ──
         if "B" not in args.skip:
-            print(f"\n--- Run B: Reactive Shisha (no interference) ---")
+            print(f"\n[{_now()}] --- Run B: Reactive Shisha (no interference) ---")
             cmd = torchrun_cmd(args.nproc, "tests.evaluation", [
                 "-n", str(args.num_requests),
                 "-b", "1", "-m", "32",
@@ -182,7 +188,7 @@ def main():
 
         # ── Run C: GPipe under interference ──
         if "C" not in args.skip:
-            print(f"\n--- Run C: GPipe under interference ---")
+            print(f"\n[{_now()}] --- Run C: GPipe under interference ---")
             cmd = [
                 "uv", "run", "python", "-m", "tests.interference.interfere_eval",
                 "--optimizer", "gpipe",
@@ -193,6 +199,8 @@ def main():
                 "--omp-threads", str(args.omp_threads),
                 "-o", str(run_dir),
             ]
+            if args.duration is not None:
+                cmd.extend(["--duration", str(args.duration)])
             # interfere_eval writes <timestamp>.json, so we rename after
             success = run_experiment(run_dir, "run_C", cmd, env)
             if success:
@@ -208,7 +216,7 @@ def main():
             )
 
             if cached_configs:
-                print(f"\n--- Run D: Using cached exhaustive config ---")
+                print(f"\n[{_now()}] --- Run D: Using cached exhaustive config ---")
                 cmd = [
                     "uv", "run", "python", "-m", "tests.interference.interfere_eval",
                     "--load-config", str(config_prefix),
@@ -220,7 +228,7 @@ def main():
                     "-o", str(run_dir),
                 ]
             else:
-                print(f"\n--- Run D: Exhaustive Shisha (explore then freeze) under interference ---")
+                print(f"\n[{_now()}] --- Run D: Exhaustive Shisha (explore then freeze) under interference ---")
                 cmd = [
                     "uv", "run", "python", "-m", "tests.interference.interfere_eval",
                     "--optimizer", "exhaustive",
@@ -233,13 +241,15 @@ def main():
                     "--omp-threads", str(args.omp_threads),
                     "-o", str(run_dir),
                 ]
+            if args.duration is not None:
+                cmd.extend(["--duration", str(args.duration)])
             success = run_experiment(run_dir, "run_D", cmd, env)
             if success:
                 _rename_latest_json(run_dir, "run_D.json")
 
         # ── Run E: Shisha with full rebalancing under interference ──
         if "E" not in args.skip:
-            print(f"\n--- Run E: Reactive Shisha (full rebalancing) under interference ---")
+            print(f"\n[{_now()}] --- Run E: Reactive Shisha (full rebalancing) under interference ---")
             cmd = [
                 "uv", "run", "python", "-m", "tests.interference.interfere_eval",
                 "--optimizer", "reactive",
@@ -250,6 +260,8 @@ def main():
                 "--omp-threads", str(args.omp_threads),
                 "-o", str(run_dir),
             ]
+            if args.duration is not None:
+                cmd.extend(["--duration", str(args.duration)])
             success = run_experiment(run_dir, "run_E", cmd, env)
             if success:
                 _rename_latest_json(run_dir, "run_E.json")
