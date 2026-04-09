@@ -298,6 +298,11 @@ class InterferenceManager:
         for name, threads, cores in step:
             self.start_benchmark(name, threads, cores=cores)
 
+        # Take a fresh /proc/stat baseline so the first utilization poll
+        # doesn't compare against the previous (idle) step's samples.
+        self._last_core_sample = _read_per_cpu_ticks()
+        self._last_utilization_check = time.monotonic()
+
     def stop_all(self):
         """Stop all running benchmark processes."""
         for spec in list(self.active.keys()):
