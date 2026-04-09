@@ -48,7 +48,8 @@ def run_eval_background(cmd: list[str], env: dict | None = None,
 
 
 def merge_results(run_dir: Path, output_file: Path, models: list[str],
-                   model_schedules: dict[str, dict], args):
+                   model_schedules: dict[str, dict], args,
+                   keep_logs: bool = False):
     """Merge per-model eval JSONs and interference logs into one combined JSON."""
     # Store per-model schedule info
     per_model_meta = {}
@@ -106,8 +107,11 @@ def merge_results(run_dir: Path, output_file: Path, models: list[str],
     with open(output_file, "w") as f:
         json.dump(combined, f, indent=2)
 
-    # Clean up temp directory
-    shutil.rmtree(run_dir)
+    # Clean up temp directory unless asked to keep it
+    if not keep_logs:
+        shutil.rmtree(run_dir)
+    else:
+        print(f"Keeping temp logs: {run_dir}")
 
 
 def main():
@@ -144,6 +148,8 @@ def main():
                         help="Which model set to evaluate (default: small)")
     parser.add_argument("-o", "--output", type=str, default="./data/interference",
                         help="Output directory (default: ./data/interference)")
+    parser.add_argument("--keep-logs", action="store_true",
+                        help="Keep temp log directory after merging results")
     args = parser.parse_args()
 
     models = [name for name, _, _ in MODEL_SETS[args.model_set]]
@@ -160,7 +166,8 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     output_file = output_dir / f"{timestamp}.json"
-    run_dir = output_dir / f".tmp_{timestamp}"
+    prefix = "logs_" if args.keep_logs else ".tmp_"
+    run_dir = output_dir / f"{prefix}{timestamp}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
     print("=" * 44)
@@ -310,7 +317,8 @@ def main():
     print()
     print("Merging results...")
     completed_models = [m for m in models if m not in failed_models]
-    merge_results(run_dir, output_file, completed_models, model_schedules, args)
+    merge_results(run_dir, output_file, completed_models, model_schedules, args,
+                  keep_logs=args.keep_logs)
 
     # Add failed models to the output
     if failed_models:
