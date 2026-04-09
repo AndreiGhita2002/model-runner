@@ -121,29 +121,45 @@ UTILIZATION_POLL_INTERVAL = 10  # seconds between CPU utilization checks
 UTILIZATION_WARN_THRESHOLD = 10.0  # warn if CPU% below this
 
 
-def _read_proc_cpu_ticks(pid: int) -> int | None:
-    """Read total CPU ticks (utime + stime + cutime + cstime) from /proc/<pid>/stat.
+def _parse_core_range(cores: str) -> list[int]:
+    """Parse a core range string like '32-39' or '32,34,36' into a list of core IDs."""
+    result = []
+    for part in cores.split(","):
+        if "-" in part:
+            lo, hi = part.split("-", 1)
+            result.extend(range(int(lo), int(hi) + 1))
+        else:
+            result.append(int(part))
+    return result
 
-    Includes children (cutime/cstime) so that shell=True benchmarks
-    (where the actual workload runs as a child of the shell) are counted.
+
+def _read_per_cpu_ticks() -> dict[int, tuple[int, int]]:
+    """Read (busy_ticks, total_ticks) per CPU from /proc/stat.
+
+    Returns dict mapping cpu_id -> (busy, total).
+    busy = user + nice + system + irq + softirq + steal
+    total = busy + idle + iowait
     """
+    result = {}
     try:
-        with open(f"/proc/{pid}/stat") as f:
-            fields = f.read().split(")")[-1].split()
-            # After the closing ')' of comm:
-            #   index 11 = utime, 12 = stime, 13 = cutime, 14 = cstime
-            utime = int(fields[11])
-            stime = int(fields[12])
-            cutime = int(fields[13])
-            cstime = int(fields[14])
-            return utime + stime + cutime + cstime
-    except (FileNotFoundError, ProcessLookupError, IndexError, ValueError):
-        return None
-
-
-def _get_clock_ticks() -> int:
-    """Get system clock ticks per second (SC_CLK_TCK)."""
-    return os.sysconf("SC_CLK_TCK")
+        with open("/proc/stat") as f:
+            for line in f:
+                if not line.startswith("cpu"):
+                    continue
+                parts = line.split()
+                if parts[0] == "cpu":
+                    continue  # skip aggregate line
+                cpu_id = int(parts[0][3:])
+                # user, nice, system, idle, iowait, irq, softirq, steal
+                user, nice, system, idle, iowait, irq, softirq, steal = (
+                    int(x) for x in parts[1:9]
+                )
+                busy = user + nice + system + irq + softirq + steal
+                total = busy + idle + iowait
+                result[cpu_id] = (busy, total)
+    except (FileNotFoundError, ValueError, IndexError):
+        pass
+    return result
 
 
 class InterferenceManager:
@@ -156,10 +172,9 @@ class InterferenceManager:
         self.log_file = log_file
         self.bench_log_dir = bench_log_dir
         self.restart_count = 0
-        # CPU utilization tracking: spec -> (wall_time, cpu_ticks)
-        self._last_cpu_sample: dict[BenchSpec, tuple[float, int]] = {}
+        # CPU utilization tracking: per-core ticks from /proc/stat
+        self._last_core_sample: dict[int, tuple[int, int]] = {}  # cpu_id -> (busy, total)
         self._last_utilization_check = 0.0
-        self._clock_ticks = _get_clock_ticks()
         self._start_time = time.monotonic()
 
     def _ts(self) -> str:
@@ -233,10 +248,6 @@ class InterferenceManager:
                 start_new_session=True,
             )
             self.active[spec] = proc
-            # Take initial CPU sample for utilization tracking
-            ticks = _read_proc_cpu_ticks(proc.pid)
-            if ticks is not None:
-                self._last_cpu_sample[spec] = (time.monotonic(), ticks)
             self.log_event("start", name, num_threads, pid=proc.pid)
             cores_str = f", cores={cores}" if cores else ""
             print(f"  Started {name} (pid={proc.pid}, threads={num_threads}{cores_str})")
@@ -251,7 +262,6 @@ class InterferenceManager:
     def stop_benchmark(self, spec: BenchSpec):
         """Stop a specific benchmark by spec."""
         proc = self.active.pop(spec, None)
-        self._last_cpu_sample.pop(spec, None)
         bench_log = self._bench_log_files.pop(spec, None)
         if bench_log is not None:
             bench_log.close()
@@ -313,55 +323,66 @@ class InterferenceManager:
                 self.start_benchmark(name, threads, cores=cores)
 
     def check_utilization(self):
-        """Sample CPU utilization of all active benchmarks and log it.
+        """Sample CPU utilization of interference cores and log it.
 
-        Reads /proc/<pid>/stat to compute CPU% since the last sample.
-        Prints a warning if any benchmark is below UTILIZATION_WARN_THRESHOLD.
+        Reads /proc/stat to compute per-core CPU% since the last sample.
+        Checks cores for each active benchmark and warns if usage is low.
         """
         now = time.monotonic()
         if now - self._last_utilization_check < UTILIZATION_POLL_INTERVAL:
             return
         self._last_utilization_check = now
 
+        current = _read_per_cpu_ticks()
+        if not current:
+            return
+
         for spec, proc in list(self.active.items()):
             if proc.poll() is not None:
                 continue
-            name, threads, cores = spec
-            pid = proc.pid
-
-            ticks = _read_proc_cpu_ticks(pid)
-            if ticks is None:
+            name, threads, cores_str = spec
+            if not cores_str:
                 continue
 
-            prev = self._last_cpu_sample.get(spec)
-            self._last_cpu_sample[spec] = (now, ticks)
-            if prev is None:
-                continue  # need two samples to compute %
+            core_ids = _parse_core_range(cores_str)
+            core_pcts = []
 
-            prev_time, prev_ticks = prev
-            dt = now - prev_time
-            if dt <= 0:
-                continue
+            for cid in core_ids:
+                if cid not in current:
+                    continue
+                prev = self._last_core_sample.get(cid)
+                cur = current[cid]
+                if prev is None:
+                    continue
+                d_busy = cur[0] - prev[0]
+                d_total = cur[1] - prev[1]
+                if d_total > 0:
+                    core_pcts.append(d_busy / d_total * 100.0)
 
-            cpu_seconds = (ticks - prev_ticks) / self._clock_ticks
-            cpu_pct = (cpu_seconds / dt) * 100.0
+            if not core_pcts:
+                continue  # need two samples
 
-            # Log every sample
+            avg_pct = sum(core_pcts) / len(core_pcts)
+
             entry = {
                 "time": time.perf_counter(),
                 "event": "utilization",
                 "benchmark": name,
                 "threads": threads,
-                "pid": pid,
-                "cpu_pct": round(cpu_pct, 1),
-                "cores": cores,
+                "pid": proc.pid,
+                "cores": cores_str,
+                "avg_core_pct": round(avg_pct, 1),
+                "per_core_pct": [round(p, 1) for p in core_pcts],
             }
             self.log.append(entry)
 
-            if cpu_pct < UTILIZATION_WARN_THRESHOLD:
-                print(f"  {self._ts()} WARNING: {name} (pid={pid}, threads={threads}, cores={cores}) "
-                      f"CPU usage {cpu_pct:.1f}% — expected ~{threads * 100}%",
+            if avg_pct < UTILIZATION_WARN_THRESHOLD:
+                print(f"  {self._ts()} WARNING: {name} (pid={proc.pid}, threads={threads}, "
+                      f"cores={cores_str}) avg core usage {avg_pct:.1f}% — expected ~100%",
                       file=sys.stderr)
+
+        # Update stored samples for all cores
+        self._last_core_sample = current
 
     def log_event(self, event_type: str, benchmark: str, threads: int = 0, pid: int = None):
         entry = {

@@ -83,18 +83,17 @@ def main():
                 print(f"  No utilization samples collected!")
                 all_ok = False
             else:
-                pcts = [s["cpu_pct"] for s in samples]
+                pcts = [s["avg_core_pct"] for s in samples]
                 avg_cpu = sum(pcts) / len(pcts)
                 min_cpu = min(pcts)
                 max_cpu = max(pcts)
-                expected = args.threads * 100
-                status = "OK" if avg_cpu > expected * 0.5 else "FAIL"
+                status = "OK" if avg_cpu > 50.0 else "FAIL"
                 if status == "FAIL":
                     all_ok = False
 
                 print(f"  Samples: {len(pcts)}")
-                print(f"  CPU%: avg={avg_cpu:.1f}, min={min_cpu:.1f}, max={max_cpu:.1f} "
-                      f"(expected ~{expected}%)")
+                print(f"  Avg core usage: avg={avg_cpu:.1f}%, min={min_cpu:.1f}%, "
+                      f"max={max_cpu:.1f}% (expected ~100%)")
                 print(f"  Status: {status}")
 
             # Show benchmark output
