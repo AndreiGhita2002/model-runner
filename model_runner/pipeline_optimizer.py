@@ -456,7 +456,7 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
                  rebalance_interval: int = 3,
                  tolerance: float = 0.04,
                  optimum_tolerance: float = 0.12,
-                 optimum_escape_duration: float = 5,
+                 optimum_escape_duration: float = 20,
                  verbose: bool = False,
                  **kwargs):
         """
