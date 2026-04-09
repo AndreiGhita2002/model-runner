@@ -451,7 +451,7 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
                  depth: int = 1,
                  deep_alpha: int = 5,
-                 sibling_alpha: int = 2,
+                 sibling_alpha: int = 1,
                  assignment_choice: str = "rank_w",
                  rebalance_interval: int = 3,
                  tolerance: float = 0.04,
