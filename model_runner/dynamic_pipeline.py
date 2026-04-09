@@ -358,12 +358,24 @@ class DynamicPipeline:
         else:
             rebalance_timing = self._forward_sync_optimization()
 
+        # Compute stage times on rank 0 (where the optimizer registry lives)
+        # and broadcast to last rank for inclusion in timing dict.
+        if world_size == 1:
+            stage_times = self.get_stage_times()
+        else:
+            if rank == 0:
+                stage_times_list = [self.get_stage_times()]
+            else:
+                stage_times_list = [None]
+            dist.broadcast_object_list(stage_times_list, src=0)
+            stage_times = stage_times_list[0]
+
         timing = None
         if rank == last_rank:
             timing = {
                 "forward": {"start": forward_start, "end": forward_end},
                 "rebalance": rebalance_timing,
-                "stage_times": self.get_stage_times(),
+                "stage_times": stage_times,
             }
 
         return {"output": output, "timing": timing}
