@@ -716,21 +716,30 @@ class DynamicPipeline:
         return self.time_logs
 
     def get_stage_times(self) -> list[float]:
-        """Compute per-stage average times from the latest time_logs.
+        """Compute per-stage times from the latest time_logs.
 
         Returns a list of floats, one per stage, representing the sum of
-        average child times within each stage.
+        the most recent child time within each stage. Works with any
+        optimizer (reconstructs stages from split_spec and children).
         """
         optimizer = self.pipeline_optimizer
-        stages = optimizer._children_to_stages(self.current_config)
+        config = self.current_config
+        split_spec = config.split_spec if config else {}
+
+        # Reconstruct stages from children + split_spec
+        stages: list[list] = [[]]
+        for child_uuid in optimizer.children:
+            path = optimizer._uuid_to_path(child_uuid)
+            if path in split_spec and split_spec[path] == SplitPoint.BEGINNING:
+                stages.append([])
+            stages[-1].append(path)
+
         stage_times = []
-        for stage in stages:
+        for stage_paths in stages:
             total = 0.0
-            for child_uuid in stage:
-                path = optimizer._uuid_to_path(child_uuid)
+            for path in stage_paths:
                 times = self.time_logs.get(path, [])
                 if times:
-                    # Use only the most recent measurement
                     total += times[-1]
             stage_times.append(total)
         return stage_times
