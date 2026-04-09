@@ -45,7 +45,7 @@ _signal_written = False
 _stage_info_file: str | None = None
 _stage_info_written = False
 _batch_count = 0
-_WARMUP_BATCHES = 10  # batches before writing stage info
+_WARMUP_BATCHES = 3  # batches before writing stage info (enough to identify slowest stage)
 
 
 def handle_output(request_id: uuid.UUID, model_name: str, output: Any, timing: dict | None):
