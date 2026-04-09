@@ -117,6 +117,33 @@ BenchSpec = tuple[str, int, str]
 
 
 MAX_RESTARTS = 10
+UTILIZATION_POLL_INTERVAL = 10  # seconds between CPU utilization checks
+UTILIZATION_WARN_THRESHOLD = 10.0  # warn if CPU% below this
+
+
+def _read_proc_cpu_ticks(pid: int) -> int | None:
+    """Read total CPU ticks (utime + stime + cutime + cstime) from /proc/<pid>/stat.
+
+    Includes children (cutime/cstime) so that shell=True benchmarks
+    (where the actual workload runs as a child of the shell) are counted.
+    """
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            fields = f.read().split(")")[-1].split()
+            # After the closing ')' of comm:
+            #   index 11 = utime, 12 = stime, 13 = cutime, 14 = cstime
+            utime = int(fields[11])
+            stime = int(fields[12])
+            cutime = int(fields[13])
+            cstime = int(fields[14])
+            return utime + stime + cutime + cstime
+    except (FileNotFoundError, ProcessLookupError, IndexError, ValueError):
+        return None
+
+
+def _get_clock_ticks() -> int:
+    """Get system clock ticks per second (SC_CLK_TCK)."""
+    return os.sysconf("SC_CLK_TCK")
 
 
 class InterferenceManager:
@@ -126,6 +153,10 @@ class InterferenceManager:
         self.log: list[dict] = []
         self.log_file = log_file
         self.restart_count = 0
+        # CPU utilization tracking: spec -> (wall_time, cpu_ticks)
+        self._last_cpu_sample: dict[BenchSpec, tuple[float, int]] = {}
+        self._last_utilization_check = 0.0
+        self._clock_ticks = _get_clock_ticks()
 
     def start_benchmark(self, name: str, num_threads: int = 1, cores: str = "") -> bool:
         """Start a benchmark process. Returns True if started successfully."""
@@ -133,6 +164,7 @@ class InterferenceManager:
 
         # Already running with same spec — skip
         if spec in self.active and self.active[spec].poll() is None:
+            # Take an initial CPU sample so the first utilization check has a baseline
             return True
 
         bench = BENCHMARKS.get(name)
@@ -179,6 +211,10 @@ class InterferenceManager:
                 start_new_session=True,
             )
             self.active[spec] = proc
+            # Take initial CPU sample for utilization tracking
+            ticks = _read_proc_cpu_ticks(proc.pid)
+            if ticks is not None:
+                self._last_cpu_sample[spec] = (time.monotonic(), ticks)
             self.log_event("start", name, num_threads, pid=proc.pid)
             cores_str = f", cores={cores}" if cores else ""
             print(f"  Started {name} (pid={proc.pid}, threads={num_threads}{cores_str})")
@@ -193,6 +229,7 @@ class InterferenceManager:
     def stop_benchmark(self, spec: BenchSpec):
         """Stop a specific benchmark by spec."""
         proc = self.active.pop(spec, None)
+        self._last_cpu_sample.pop(spec, None)
         if proc is None:
             return
         if proc.poll() is None:
@@ -249,6 +286,57 @@ class InterferenceManager:
                     self.stop_all()
                     sys.exit(1)
                 self.start_benchmark(name, threads, cores=cores)
+
+    def check_utilization(self):
+        """Sample CPU utilization of all active benchmarks and log it.
+
+        Reads /proc/<pid>/stat to compute CPU% since the last sample.
+        Prints a warning if any benchmark is below UTILIZATION_WARN_THRESHOLD.
+        """
+        now = time.monotonic()
+        if now - self._last_utilization_check < UTILIZATION_POLL_INTERVAL:
+            return
+        self._last_utilization_check = now
+
+        for spec, proc in list(self.active.items()):
+            if proc.poll() is not None:
+                continue
+            name, threads, cores = spec
+            pid = proc.pid
+
+            ticks = _read_proc_cpu_ticks(pid)
+            if ticks is None:
+                continue
+
+            prev = self._last_cpu_sample.get(spec)
+            self._last_cpu_sample[spec] = (now, ticks)
+            if prev is None:
+                continue  # need two samples to compute %
+
+            prev_time, prev_ticks = prev
+            dt = now - prev_time
+            if dt <= 0:
+                continue
+
+            cpu_seconds = (ticks - prev_ticks) / self._clock_ticks
+            cpu_pct = (cpu_seconds / dt) * 100.0
+
+            # Log every sample
+            entry = {
+                "time": time.perf_counter(),
+                "event": "utilization",
+                "benchmark": name,
+                "threads": threads,
+                "pid": pid,
+                "cpu_pct": round(cpu_pct, 1),
+                "cores": cores,
+            }
+            self.log.append(entry)
+
+            if cpu_pct < UTILIZATION_WARN_THRESHOLD:
+                print(f"  WARNING: {name} (pid={pid}, threads={threads}, cores={cores}) "
+                      f"CPU usage {cpu_pct:.1f}% — expected ~{threads * 100}%",
+                      file=sys.stderr)
 
     def log_event(self, event_type: str, benchmark: str, threads: int = 0, pid: int = None):
         entry = {
@@ -328,6 +416,7 @@ def run_deterministic(manager: InterferenceManager, step_duration: int,
             wait_until = start + step_duration * (step_i + 1)
             while time.perf_counter() < wait_until:
                 manager.check_and_restart()
+                manager.check_utilization()
                 time.sleep(1)
     except KeyboardInterrupt:
         print("\nInterference interrupted.")
@@ -392,6 +481,7 @@ def run_random(manager: InterferenceManager, step_duration: int,
             wait_until = start + step_duration * (run_i + 1)
             while time.perf_counter() < wait_until:
                 manager.check_and_restart()
+                manager.check_utilization()
                 time.sleep(1)
     except KeyboardInterrupt:
         print("\nInterference interrupted.")
