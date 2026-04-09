@@ -42,10 +42,14 @@ result_timings: list[dict | None] = []
 result_req_ids: list[uuid.UUID] = []
 _signal_file: str | None = None
 _signal_written = False
+_stage_info_file: str | None = None
+_stage_info_written = False
+_batch_count = 0
+_WARMUP_BATCHES = 10  # batches before writing stage info
 
 
 def handle_output(request_id: uuid.UUID, model_name: str, output: Any, timing: dict | None):
-    global _signal_written
+    global _signal_written, _stage_info_written, _batch_count
     result_req_ids.append(request_id)
     result_timings.append(timing)
 
@@ -55,6 +59,25 @@ def handle_output(request_id: uuid.UUID, model_name: str, output: Any, timing: d
         if reb.get("at_optimum", False):
             Path(_signal_file).touch()
             _signal_written = True
+
+    # Write stage info after warmup (for adaptive interference targeting)
+    if _stage_info_file and not _stage_info_written and timing is not None:
+        _batch_count += 1
+        if _batch_count >= _WARMUP_BATCHES:
+            stage_times = timing.get("stage_times", [])
+            if stage_times:
+                cores_per_rank = int(os.environ.get("OMP_NUM_THREADS", "8"))
+                info = {
+                    "stage_times": stage_times,
+                    "rank_cores": {
+                        str(r): f"{r * cores_per_rank}-{r * cores_per_rank + cores_per_rank - 1}"
+                        for r in range(len(stage_times))
+                    },
+                    "cores_per_rank": cores_per_rank,
+                    "ht_offset": 32,
+                }
+                Path(_stage_info_file).write_text(json.dumps(info, indent=2))
+                _stage_info_written = True
 
 
 def main():
@@ -76,6 +99,8 @@ def main():
                         help="Load a pre-computed config and use it as a static optimizer")
     parser.add_argument("--timeout", type=int, default=None,
                         help="Optimizer exploration timeout in seconds (exhaustive only)")
+    parser.add_argument("--stage-info-file", type=str, default=None,
+                        help="Write stage timing + core mapping JSON here after warmup")
     parser.add_argument("-o", "--output", type=str, required=True, help="Output JSON path")
     args = parser.parse_args()
 
@@ -102,9 +127,25 @@ def main():
     last_rank = dist.get_world_size() - 1
     is_print_rank = rank == 0
 
+    # Pin each rank to a deterministic set of cores
+    local_rank = int(os.environ.get("LOCAL_RANK", rank))
+    cores_per_rank = int(os.environ.get("OMP_NUM_THREADS", "8"))
+    core_start = local_rank * cores_per_rank
+    core_end = core_start + cores_per_rank - 1
+    try:
+        os.sched_setaffinity(0, set(range(core_start, core_start + cores_per_rank)))
+        if is_print_rank:
+            print(f"Per-rank CPU pinning: {cores_per_rank} cores/rank "
+                  f"(rank 0: {0}-{cores_per_rank - 1}, ..., "
+                  f"rank {last_rank}: {last_rank * cores_per_rank}-"
+                  f"{last_rank * cores_per_rank + cores_per_rank - 1})")
+    except AttributeError:
+        pass  # sched_setaffinity not available (macOS)
+
     # Set up signal file for external coordination
-    global _signal_file
+    global _signal_file, _stage_info_file
     _signal_file = args.signal_file
+    _stage_info_file = args.stage_info_file
 
     # Set up server with one model
     server = PipelineServer(handle_output, verbose=False)

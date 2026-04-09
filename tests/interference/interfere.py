@@ -407,6 +407,33 @@ class InterferenceManager:
             print(f"Interference log saved to {self.log_file}")
 
 
+def resolve_bottleneck_cores(stage_info_path: Path, use_ht_siblings: bool = True) -> tuple[str, int]:
+    """Read stage info JSON and return (core_range, slowest_rank) for the bottleneck stage.
+
+    Args:
+        stage_info_path: Path to JSON written by continuous_eval.
+        use_ht_siblings: If True, return hyper-thread siblings (core + ht_offset)
+            instead of physical cores, to cause contention without direct competition.
+
+    Returns:
+        (core_range_string, slowest_rank_index)
+    """
+    with open(stage_info_path) as f:
+        info = json.load(f)
+
+    stage_times = info["stage_times"]
+    slowest_rank = max(range(len(stage_times)), key=lambda i: stage_times[i])
+    physical_cores = info["rank_cores"][str(slowest_rank)]
+
+    if use_ht_siblings:
+        ht_offset = info.get("ht_offset", 32)
+        core_ids = _parse_core_range(physical_cores)
+        ht_cores = [c + ht_offset for c in core_ids]
+        return f"{min(ht_cores)}-{max(ht_cores)}", slowest_rank
+
+    return physical_cores, slowest_rank
+
+
 def resolve_model_schedule(schedule_name: str, model_name: str,
                            duration_override: int | None = None) -> dict:
     """Resolve schedule settings for a specific model.

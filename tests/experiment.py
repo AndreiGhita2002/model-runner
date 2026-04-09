@@ -201,6 +201,7 @@ def main():
             ]
             if args.duration is not None:
                 cmd.extend(["--duration", str(args.duration)])
+            cmd.append("--adaptive-targeting")
             # interfere_eval writes <timestamp>.json, so we rename after
             success = run_experiment(run_dir, "run_C", cmd, env)
             if success:

@@ -26,7 +26,7 @@ from pathlib import Path
 from tests.testing_models import MODEL_SETS
 from tests.interference.interfere import (
     SCHEDULES, InterferenceManager, run_deterministic, run_random,
-    step_label, resolve_model_schedule,
+    step_label, resolve_model_schedule, resolve_bottleneck_cores,
 )
 
 
@@ -150,6 +150,8 @@ def main():
                         help="Output directory (default: ./data/interference)")
     parser.add_argument("--keep-logs", action="store_true",
                         help="Keep temp log directory after merging results")
+    parser.add_argument("--adaptive-targeting", action="store_true",
+                        help="Target interference at the slowest pipeline stage's cores")
     args = parser.parse_args()
 
     models = [name for name, _, _ in MODEL_SETS[args.model_set]]
@@ -223,6 +225,7 @@ def main():
 
         # 1. Start eval in background (runs until SIGTERM)
         signal_file = run_dir / f".optimum_{model}" if args.wait_for_optimum else None
+        stage_info_file = run_dir / f".stage_info_{model}" if args.adaptive_targeting else None
         print(f"  Starting evaluation...")
         eval_cmd = [
             "taskset", "-c", "0-31",
@@ -240,6 +243,8 @@ def main():
             eval_cmd.append("-v")
         if signal_file:
             eval_cmd.extend(["--signal-file", str(signal_file)])
+        if stage_info_file:
+            eval_cmd.extend(["--stage-info-file", str(stage_info_file)])
         if args.save_config:
             eval_cmd.extend(["--save-config", f"{args.save_config}_{model}.json"])
         if args.load_config:
@@ -284,7 +289,36 @@ def main():
             # Skip idle steps when we waited for optimum — the pre-optimum
             # exploration already serves as the no-interference baseline.
             run_steps = [s for s in steps if s] if args.wait_for_optimum else steps
-            if args.mode == "random":
+
+            if args.adaptive_targeting:
+                # Run idle step first to collect stage timing data
+                print(f"  Running idle phase for stage timing collection...")
+                run_deterministic(manager, step_dur, schedule=[[]],
+                                  eval_proc=eval_proc)
+
+                # Wait for stage info file (should appear within idle phase)
+                if stage_info_file and stage_info_file.exists():
+                    cores, slowest_rank = resolve_bottleneck_cores(stage_info_file)
+                    print(f"  Adaptive targeting: slowest stage = rank {slowest_rank}, "
+                          f"targeting cores {cores}")
+
+                    # Build interference steps targeting the bottleneck's HT siblings
+                    n_cores = int(os.environ.get("OMP_NUM_THREADS", "8"))
+                    adaptive_steps = [
+                        [("cpu_stress", n_cores, cores)],
+                        [("memory_bandwidth", n_cores, cores)],
+                        [("cpu_stress", n_cores // 2, cores),
+                         ("memory_bandwidth", n_cores // 2, cores)],
+                    ]
+                    run_deterministic(manager, step_dur, schedule=adaptive_steps,
+                                      eval_proc=eval_proc)
+                else:
+                    print(f"  WARNING: stage info not available, falling back to static schedule",
+                          file=sys.stderr)
+                    non_idle = [s for s in steps if s]
+                    run_deterministic(manager, step_dur, schedule=non_idle,
+                                      eval_proc=eval_proc)
+            elif args.mode == "random":
                 run_random(manager, step_dur, schedule=run_steps, seed=args.seed,
                            eval_proc=eval_proc)
             else:
