@@ -199,8 +199,14 @@ evaluation_models_reduced: list[tuple[str, types.FunctionType, types.FunctionTyp
     ("efficientnet_b6", load_efficientnet_b6, efficientnet_b6_rand_inputs),
 ]
 
+other_models: list[tuple[str, types.FunctionType, types.FunctionType]] = [
+    ("mobilenet_v3_large", load_mobilenet_v3_large, mobilenet_v3_large_rand_inputs),  # lightweight edge (~5.5M)
+    ("regnet_x_16gf", load_regnet_x_16gf, regnet_x_16gf_rand_inputs),  # regular CNN
+]
+
 MODEL_SETS = {
     "small": evaluation_models,
     "extended": evaluation_models_extended,
     "reduced": evaluation_models_reduced,
+    "other": other_models,
 }
