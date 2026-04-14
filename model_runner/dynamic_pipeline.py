@@ -6,16 +6,15 @@ import uuid
 from typing import Optional, Any
 
 import torch
-import torch.fx as fx
-
-from torch.distributed.pipelining import pipeline, PipelineStage, ScheduleGPipe, SplitPoint, Pipe
-from torch.distributed.pipelining._IR import annotate_split_points
 import torch.distributed as dist
+import torch.fx as fx
+from torch.distributed.pipelining import PipelineStage, ScheduleGPipe, SplitPoint, Pipe
+from torch.distributed.pipelining._IR import annotate_split_points
 from torch.distributed.pipelining.schedules import PipelineScheduleSingle, PipelineScheduleMulti
 
-from .timed_module import TimedModule, timed_module_registry, timed_module_hierarchy
 from .device_manager import DeviceManager
 from .pipeline_optimizer import PipelineOptimizer, PipelineConfig, ReactiveShishaOptimiser
+from .timed_module import TimedModule, timed_module_registry
 
 # The ATen op that pipe_split() compiles to in the FX graph
 _aten_pipe_split = torch.ops.pippy._pipe_split.default
