@@ -7,7 +7,7 @@ import torch
 import torch.distributed as dist
 from torch.distributed.pipelining import pipeline, PipelineStage, ScheduleGPipe
 
-from tests.testing_models import evaluation_models
+from tests.testing_models import DEFAULT_MODEL_SET as evaluation_models
 from tests.util import generate_batch, gpipe_split_spec
 
 DEFAULT_BASELINE_FILE = "baseline_outputs.json"

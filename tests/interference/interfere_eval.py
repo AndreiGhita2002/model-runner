@@ -23,7 +23,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from tests.testing_models import MODEL_SETS
+from tests.testing_models import DEFAULT_MODEL_SET_NAME, MODEL_SETS
 from tests.interference.interfere import (
     SCHEDULES, InterferenceManager, run_deterministic, run_random,
     step_label, resolve_model_schedule, resolve_bottleneck_cores,
@@ -144,8 +144,8 @@ def main():
                         help="Save exhaustive optimizer's best config to this path (prefix, model name appended)")
     parser.add_argument("--load-config", type=str, default=None,
                         help="Load pre-computed config from this path (prefix, model name appended)")
-    parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small",
-                        help="Which model set to evaluate (default: small)")
+    parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default=DEFAULT_MODEL_SET_NAME,
+                        help=f"Which model set to evaluate (default: {DEFAULT_MODEL_SET_NAME})")
     parser.add_argument("-o", "--output", type=str, default="./data/interference",
                         help="Output directory (default: ./data/interference)")
     parser.add_argument("--keep-logs", action="store_true",

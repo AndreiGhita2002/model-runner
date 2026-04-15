@@ -210,3 +210,5 @@ MODEL_SETS = {
     "reduced": evaluation_models_reduced,
     "other": other_models,
 }
+DEFAULT_MODEL_SET_NAME = "small"
+DEFAULT_MODEL_SET = evaluation_models

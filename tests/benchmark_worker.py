@@ -17,7 +17,7 @@ import torch.distributed as dist
 
 from model_runner import PipelineServer, uuids_to_tensor, tensor_to_uuids
 from model_runner.pipeline_optimizer import ReactiveShishaOptimiser
-from tests.testing_models import evaluation_models
+from tests.testing_models import DEFAULT_MODEL_SET as evaluation_models
 
 
 # ── Output collection ────────────────────────────────────────────────────

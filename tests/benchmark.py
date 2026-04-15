@@ -28,7 +28,7 @@ import time
 import torch
 import torch.nn as nn
 
-from tests.testing_models import evaluation_models
+from tests.testing_models import DEFAULT_MODEL_SET as evaluation_models
 
 
 # ── Phase 1: OMP_NUM_THREADS sweep ──────────────────────────────────────

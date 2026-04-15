@@ -19,7 +19,7 @@ from model_runner.pipeline_optimizer import (
     ReactiveShishaOptimiser, ExhaustiveShishaOptimizer,
 )
 
-from tests.testing_models import evaluation_models, MODEL_SETS
+from tests.testing_models import DEFAULT_MODEL_SET, DEFAULT_MODEL_SET_NAME, MODEL_SETS
 from tests.util import generate_batch
 
 # Module-level verbosity and progress state (set by evaluation_main)
@@ -120,7 +120,7 @@ def evaluation_main(
         optimizer_kwargs: Extra keyword arguments forwarded to the optimizer constructor.
     """
     if models is None:
-        models = evaluation_models
+        models = DEFAULT_MODEL_SET
     if optimizer_kwargs is None:
         optimizer_kwargs = {}
     if store_hashes:
@@ -410,8 +410,8 @@ if __name__ == '__main__':
                         help='Shisha throughput tolerance fraction when at optimum (default: 0.1)')
     parser.add_argument('--optimum-escape', type=float, default=None,
                         help='Seconds at optimum before restarting exploration (default: 5)')
-    parser.add_argument('--model-set', choices=list(MODEL_SETS.keys()), default='small',
-                        help='Which set of models to evaluate (default: small)')
+    parser.add_argument('--model-set', choices=list(MODEL_SETS.keys()), default=DEFAULT_MODEL_SET_NAME,
+                        help=f'Which set of models to evaluate (default: {DEFAULT_MODEL_SET_NAME})')
     parser.add_argument('--model', type=str, default=None,
                         help='Run only this model (by name). Must exist in the chosen model set.')
     parser.add_argument('--duration', type=int, default=None,

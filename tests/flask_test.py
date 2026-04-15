@@ -9,7 +9,7 @@ import torch.distributed as dist
 from model_runner.pipeline_server import PipelineServer
 from model_runner.flask_app import create_flask_app
 from model_runner.timed_module import timed_module_registry, timed_module_hierarchy
-from tests.testing_models import evaluation_models
+from tests.testing_models import DEFAULT_MODEL_SET as evaluation_models
 
 
 def test_flask_endpoints():

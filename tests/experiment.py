@@ -4,7 +4,7 @@ A. No interference, no rebalancing (GPipe baseline)
 B. No interference, with rebalancing (Shisha)
 C. Interference, no rebalancing (GPipe under interference)
 D. Interference, first optimum only (Shisha, stop at first optimum)
-E. Interference, full rebalancing (Shisha)
+E. Interference, full rebalancing (Shisha, adaptive targeting)
 
 Runs C, D, E use the same random interference seed for a fair comparison.
 
@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 
 from tests.interference.interfere import SCHEDULES
-from tests.testing_models import MODEL_SETS
+from tests.testing_models import DEFAULT_MODEL_SET_NAME, MODEL_SETS
 
 
 def run_cmd(cmd: list[str], env: dict | None = None, log_file: Path | None = None) -> int:
@@ -90,8 +90,8 @@ def main():
                         help="Number of torchrun processes (default: 4)")
     parser.add_argument("--omp-threads", type=int, default=int(os.environ.get("OMP_THREADS", "8")),
                         help="OMP_NUM_THREADS (default: 8)")
-    parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small",
-                        help="Model set to evaluate (default: small)")
+    parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default=DEFAULT_MODEL_SET_NAME,
+                        help=f"Model set to evaluate (default: {DEFAULT_MODEL_SET_NAME})")
     parser.add_argument("--num-requests", type=int, default=5000,
                         help="Requests for non-interference runs A, B (default: 5000)")
     parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="gradient",
@@ -266,6 +266,7 @@ def main():
                 "--nproc", str(args.nproc),
                 "--omp-threads", str(args.omp_threads),
                 "-o", str(run_dir),
+                "--adaptive-targeting",
             ]
             if args.duration is not None:
                 cmd.extend(["--duration", str(args.duration)])

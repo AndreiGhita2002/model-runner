@@ -25,7 +25,7 @@ from model_runner.pipeline_optimizer import (
     ReactiveShishaOptimiser, ExhaustiveShishaOptimizer,
     StaticConfigOptimizer,
 )
-from tests.testing_models import MODEL_SETS
+from tests.testing_models import DEFAULT_MODEL_SET_NAME, MODEL_SETS
 from tests.util import generate_batch
 
 OPTIMIZER_CHOICES = {
@@ -82,7 +82,7 @@ def handle_output(request_id: uuid.UUID, model_name: str, output: Any, timing: d
 
 def main():
     parser = argparse.ArgumentParser(description="Continuous eval for interference experiments")
-    parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default="small")
+    parser.add_argument("--model-set", choices=list(MODEL_SETS.keys()), default=DEFAULT_MODEL_SET_NAME)
     parser.add_argument("--model", type=str, required=True, help="Model name to evaluate")
     parser.add_argument("-b", "--batch-size", type=int, default=1)
     parser.add_argument("-m", "--n-microbatches", type=int, default=32)
