@@ -94,7 +94,7 @@ def main():
                         help=f"Model set to evaluate (default: {DEFAULT_MODEL_SET_NAME})")
     parser.add_argument("--num-requests", type=int, default=5000,
                         help="Requests for non-interference runs A, B (default: 5000)")
-    parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="gradient",
+    parser.add_argument("--schedule", choices=list(SCHEDULES.keys()), default="experiment",
                         help="Interference schedule for C, D, E (default: gradient)")
     parser.add_argument("--duration", type=int, default=None,
                         help="Override step duration in seconds for interference runs C, D, E (default: from schedule)")
