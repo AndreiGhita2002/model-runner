@@ -14,30 +14,6 @@ from .timed_module import timed_module_hierarchy, timed_module_registry
 from .device_manager import DeviceManager
 from .util import gpipe_split_spec
 
-def nth_largest_index(arr: list, n: int):
-    """
-    Returns the index of the nth largest element in arr (0-indexed).
-    n=0 returns the index of the largest element, n=1 the second largest, etc.
-    Uses the Quickselect algorithm — O(n) average time.
-    """
-    if not 0 <= n < len(arr):
-        raise ValueError(f"n={n} is out of range for list of length {len(arr)}")
-
-    def select(pairs, k):
-        pivot_val = pairs[0][1]
-        low  = [(i, v) for i, v in pairs if v <  pivot_val]
-        mid  = [(i, v) for i, v in pairs if v == pivot_val]
-        high = [(i, v) for i, v in pairs if v >  pivot_val]
-        if k <= len(low):
-            return select(low, k)
-        elif k <= len(low) + len(mid):
-            return mid[0][0]
-        else:
-            return select(high, k - len(low) - len(mid))
-
-    return select(list(enumerate(arr)), len(arr) - n)
-
-
 @dataclass
 class PipelineConfig:
     split_spec: dict[str, SplitPoint]  # module path → SplitPoint
@@ -437,9 +413,9 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
     """
     Reactive pipeline optimiser based on the Shisha paper (Soomro et al., PPAM 2022).
 
-    Extends Shisha with two-level exploration (deep_alpha × sibling_alpha),
-    explicit optimum detection with revert-to-best, and time-based optimum
-    escape that restarts exploration when the environment changes.
+    Extends Shisha with explicit optimum detection with revert-to-best, and
+    time-based optimum escape that restarts exploration when the environment
+    changes.
 
     Uses a two-phase approach:
     1. Seed Generation (Algorithm 1): merges children into balanced groups using
@@ -450,8 +426,7 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
 
     def __init__(self, num_stages: int, root_uuid: uuid.UUID, device_manager: DeviceManager,
                  depth: int = 1,
-                 deep_alpha: int = 5,
-                 sibling_alpha: int = 1,
+                 alpha: int = 5,
                  assignment_choice: str = "rank_w",
                  rebalance_interval: int = 3,
                  tolerance: float = 0.04,
@@ -465,13 +440,9 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
             root_uuid: UUID of the root TimedModule.
             device_manager: DeviceManager instance for device enumeration.
             depth: Depth in the TimedModule hierarchy to collect leaf children at.
-            deep_alpha: Non-improving iteration limit for a single stage direction.
-                When deep_alpha consecutive iterations fail to improve throughput,
-                the optimiser stops exploring the current stage and moves on to the
-                next slowest stage (increments sibling_gamma).
-            sibling_alpha: Number of different stages to try before giving up.
-                After exhausting deep_alpha attempts on sibling_alpha different
-                stages, the optimiser declares an optimum and reverts to the best config.
+            alpha: Non-improving iteration limit. When alpha consecutive moves
+                from the slowest stage fail to improve throughput, the optimiser
+                declares an optimum and reverts to the best config.
             assignment_choice: Strategy for assigning stages to devices.
                 - ``"rank_w"``: Heaviest stage (by parameter count) goes to the fastest device.
                 - ``"rank_l"``: Stage with the most children goes to the fastest device.
@@ -490,19 +461,17 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
         self.verbose = verbose
         self.tolerance = tolerance
         self.optimum_tolerance = optimum_tolerance
-        self.deep_alpha = deep_alpha
-        self.sibling_alpha = min(sibling_alpha, num_stages)
+        self.alpha = alpha
         self.assignment_choice = assignment_choice
         self.rebalance_interval = rebalance_interval
         self._call_count = 0
 
         # Persistent state for online tuning across optimize() calls
-        self._deep_gamma = 0                    # non-improving iteration counter
+        self._gamma = 0                    # non-improving iteration counter
         self._best_throughput = 0.0        # best 1/max_stage_time seen
         self._best_config: PipelineConfig = None
         self._at_optimum = False
         self._return_best = False
-        self._sibling_gamma = 0
         self.optimum_escape = optimum_escape_duration
         self._optimum_escape_start: float | None = None
         self._now: float = 0.0
@@ -519,8 +488,7 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
     def optimizer_state(self) -> dict:
         """Return current internal state for logging."""
         return {
-            "deep_gamma": self._deep_gamma,
-            "sibling_gamma": self._sibling_gamma,
+            "gamma": self._gamma,
             "best_throughput": self._best_throughput,
             "optimum_escape_elapsed": self._now - self._optimum_escape_start if self._optimum_escape_start is not None else 0.0,
         }
@@ -669,16 +637,14 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
         stages = self._children_to_stages(old_config)
         stage_sizes = [len(s) for s in stages]
         self._log(f"[DEBUG _online_tuning] stage_times={[f'{t:.4f}' for t in stage_times]} "
-              f"stage_sizes={stage_sizes} sibling_gamma={self._sibling_gamma}")
+              f"stage_sizes={stage_sizes}")
 
-        # Selecting the nth slowest stage, depending on the current value of sibling gamma
-        selected_idx = nth_largest_index(stage_times, self._sibling_gamma)
+        # Always move a child from the slowest stage
+        selected_idx = max(range(len(stage_times)), key=lambda i: stage_times[i])
 
         # Can't move if slowest stage has only 1 child
         if len(stages[selected_idx]) <= 1:
             self._log(f"[DEBUG _online_tuning] stage {selected_idx} has 1 child, skipping")
-            self._sibling_gamma += 1 # move to the next stage
-            self._deep_gamma = 0
             return None
 
         # Find target stage
@@ -737,15 +703,12 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
         return best_idx
 
     def _tick_gamma(self) -> bool:
-        """Increment exploration counters. Returns True to keep exploring, False if exhausted."""
-        self._deep_gamma += 1
-        if self._deep_gamma >= self.deep_alpha:
-            self._deep_gamma = 0
-            self._sibling_gamma += 1
-            if self._sibling_gamma >= self.sibling_alpha:
-                self._return_best = True
-                self._at_optimum = True
-                return False
+        """Increment exploration counter. Returns True to keep exploring, False if exhausted."""
+        self._gamma += 1
+        if self._gamma >= self.alpha:
+            self._return_best = True
+            self._at_optimum = True
+            return False
         return True
 
     def _should_rebalance(self, time_logs: dict[uuid.UUID, list[float]],
@@ -784,14 +747,13 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
         tol = self.optimum_tolerance if self._at_optimum else self.tolerance
         threshold = self._best_throughput - self._best_throughput * tol
         self._log(f"[DEBUG _should_rebalance] tp={throughput:.4f} best={self._best_throughput:.4f} "
-              f"threshold={threshold:.4f} tol={tol} gamma_d={self._deep_gamma} gamma_s={self._sibling_gamma}")
+              f"threshold={threshold:.4f} tol={tol} gamma={self._gamma}")
 
         # Better config found; reset gamma
         if throughput > self._best_throughput:
             self._best_throughput = throughput
             self._best_config = current_config
-            self._deep_gamma = 0
-            self._sibling_gamma = 0
+            self._gamma = 0
             self._log(f"[DEBUG _should_rebalance] better config, returning {not self._at_optimum}")
             # should we keep exploring? only if we are not at optimum
             return not self._at_optimum
@@ -819,8 +781,7 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
                 self._at_optimum = False
                 self._best_throughput = 0.0
                 self._best_config = None
-                self._sibling_gamma = 0
-                self._deep_gamma = 0
+                self._gamma = 0
 
             return self._tick_gamma()
 
@@ -867,26 +828,26 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
 
 
 class ExhaustiveShishaOptimizer(ReactiveShishaOptimiser):
-    """Shisha variant that explores exhaustively then freezes at the best config.
+    """Shisha variant that explores without tolerance then freezes at the best config.
 
-    Explores all configurations (deep_alpha × sibling_alpha attempts) without
-    any tolerance — every config is evaluated and the best throughput is tracked.
-    Once exploration is complete (gamma reaches alpha), reverts to the best
-    config found and stays there permanently. No optimum escape.
+    Every config is evaluated (no tolerance band) and the best throughput is
+    tracked. Once exploration is complete (gamma reaches alpha, total budget
+    exhausted, or timeout), reverts to the best config found and stays there
+    permanently. No optimum escape.
 
     Used for experiment run D: find the single best config, then measure how
     it holds up under interference without further adaptation.
     """
 
     def __init__(self, num_stages, root_uuid, device_manager, depth=1,
-                 deep_alpha=5, sibling_alpha=2, total_alpha=50,
+                 alpha=5, total_alpha=50,
                  timeout=1000,
                  assignment_choice="rank_w",
                  rebalance_interval=3, verbose=False,
                  save_config_path=None, **kwargs):
         super().__init__(
             num_stages, root_uuid, device_manager, depth=depth,
-            deep_alpha=deep_alpha, sibling_alpha=sibling_alpha,
+            alpha=alpha,
             assignment_choice=assignment_choice,
             rebalance_interval=rebalance_interval,
             tolerance=0.0, optimum_tolerance=0.0,
@@ -950,25 +911,20 @@ class ExhaustiveShishaOptimizer(ReactiveShishaOptimiser):
         if throughput > self._best_throughput:
             self._best_throughput = throughput
             self._best_config = current_config
-            self._deep_gamma = 0
-            self._sibling_gamma = 0
+            self._gamma = 0
             self._log(f"[Exhaustive] new best tp={throughput:.4f}, reset gamma "
                       f"(total={self._total_gamma}/{self.total_alpha})")
             return True
 
         # Count non-improving steps
-        self._deep_gamma += 1
+        self._gamma += 1
         self._log(f"[Exhaustive] tp={throughput:.4f} best={self._best_throughput:.4f} "
-                  f"gamma_d={self._deep_gamma} gamma_s={self._sibling_gamma} "
+                  f"gamma={self._gamma} "
                   f"total={self._total_gamma}/{self.total_alpha}")
 
-        if self._deep_gamma >= self.deep_alpha:
-            self._deep_gamma = 0
-            self._sibling_gamma += 1
-
-            if self._sibling_gamma >= self.sibling_alpha:
-                self._freeze("exploration complete")
-                return False
+        if self._gamma >= self.alpha:
+            self._freeze("exploration complete")
+            return False
 
         # Total budget exhausted
         if self._total_gamma >= self.total_alpha:

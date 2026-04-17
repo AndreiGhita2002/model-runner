@@ -29,17 +29,14 @@ trap 'echo; echo "Sweep interrupted at $(date)." | tee -a "$SWEEP_LOG"; exit 0' 
 
 # Parameter grid
 TOLERANCES=(0.01 0.05 0.1 0.15 0.25 0.5 0.75)
-DEEP_ALPHAS=(3 5 7 10)
+ALPHAS=(3 5 7 10)
 REBALANCE_INTERVALS=(2 3 4 5)
-SIBLING_ALPHAS=(1 2 3)
 
 TOTAL=0
 for _ in "${TOLERANCES[@]}"; do
-    for _ in "${DEEP_ALPHAS[@]}"; do
+    for _ in "${ALPHAS[@]}"; do
         for _ in "${REBALANCE_INTERVALS[@]}"; do
-            for _ in "${SIBLING_ALPHAS[@]}"; do
-                TOTAL=$((TOTAL + 1))
-            done
+            TOTAL=$((TOTAL + 1))
         done
     done
 done
@@ -49,39 +46,37 @@ echo ""
 
 COUNT=0
 for TOL in "${TOLERANCES[@]}"; do
-    for DA in "${DEEP_ALPHAS[@]}"; do
+    for A in "${ALPHAS[@]}"; do
         for RI in "${REBALANCE_INTERVALS[@]}"; do
-            for SA in "${SIBLING_ALPHAS[@]}"; do
-                COUNT=$((COUNT + 1))
-                LABEL="tol=$TOL da=$DA ri=$RI sa=$SA"
-                echo "[$COUNT/$TOTAL] Running: $LABEL"
+            COUNT=$((COUNT + 1))
+            LABEL="tol=$TOL a=$A ri=$RI"
+            echo "[$COUNT/$TOTAL] Running: $LABEL"
 
-                # Find the latest file before this run
-                BEFORE=$(ls -t "$RUNS_DIR"/*.json 2>/dev/null | head -1)
+            # Find the latest file before this run
+            BEFORE=$(ls -t "$RUNS_DIR"/*.json 2>/dev/null | head -1)
 
-                # Run eval
-                if ! make eval \
-                    REQUEST_NUM="$REQUEST_NUM" \
-                    TOLERANCE="$TOL" \
-                    DEEP_ALPHA="$DA" \
-                    REBALANCE_INTERVAL="$RI" \
-                    SIBLING_ALPHA="$SA" \
-                    2>&1 | tail -5; then
-                    echo "  FAILED" | tee -a "$SWEEP_LOG"
-                    echo "" >> "$SWEEP_LOG"
-                    continue
-                fi
+            # Run eval
+            if ! make eval \
+                REQUEST_NUM="$REQUEST_NUM" \
+                TOLERANCE="$TOL" \
+                ALPHA="$A" \
+                REBALANCE_INTERVAL="$RI" \
+                2>&1 | tail -5; then
+                echo "  FAILED" | tee -a "$SWEEP_LOG"
+                echo "" >> "$SWEEP_LOG"
+                continue
+            fi
 
-                # Find the new file
-                AFTER=$(ls -t "$RUNS_DIR"/*.json 2>/dev/null | head -1)
-                if [ "$BEFORE" = "$AFTER" ]; then
-                    echo "  No new output file found" | tee -a "$SWEEP_LOG"
-                    echo "" >> "$SWEEP_LOG"
-                    continue
-                fi
+            # Find the new file
+            AFTER=$(ls -t "$RUNS_DIR"/*.json 2>/dev/null | head -1)
+            if [ "$BEFORE" = "$AFTER" ]; then
+                echo "  No new output file found" | tee -a "$SWEEP_LOG"
+                echo "" >> "$SWEEP_LOG"
+                continue
+            fi
 
-                # Analyse the run
-                SUMMARY=$(python3 -c "
+            # Analyse the run
+            SUMMARY=$(python3 -c "
 import json, sys
 with open('$AFTER') as f:
     data = json.load(f)
@@ -104,17 +99,16 @@ for m in models:
     print(m)
 " 2>&1)
 
-                # Log to sweep file
-                {
-                    echo "$LABEL | $(echo "$SUMMARY" | head -1) | file=$(basename "$AFTER")"
-                    echo "$SUMMARY" | tail -n +2
-                    echo ""
-                } >> "$SWEEP_LOG"
-
-                # Print summary
-                echo "  $(echo "$SUMMARY" | head -1)"
+            # Log to sweep file
+            {
+                echo "$LABEL | $(echo "$SUMMARY" | head -1) | file=$(basename "$AFTER")"
+                echo "$SUMMARY" | tail -n +2
                 echo ""
-            done
+            } >> "$SWEEP_LOG"
+
+            # Print summary
+            echo "  $(echo "$SUMMARY" | head -1)"
+            echo ""
         done
     done
 done

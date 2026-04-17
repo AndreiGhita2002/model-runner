@@ -11,8 +11,7 @@ N_MICROBATCHES ?= 32  # requests grouped per forward pass
 OPTIMIZER ?= reactive
 REBALANCE_INTERVAL ?=
 ASSIGNMENT_CHOICE ?=
-DEEP_ALPHA ?=
-SIBLING_ALPHA ?=
+ALPHA ?=
 TOLERANCE ?=
 OPTIMUM_TOLERANCE ?=
 OPTIMUM_ESCAPE ?=
@@ -21,8 +20,7 @@ COMMON_ARGS ?= -n $(REQUEST_NUM) -b $(BATCH_COUNT) -m $(N_MICROBATCHES) --optimi
 	$(if $(MODEL_SET),--model-set $(MODEL_SET)) \
 	$(if $(REBALANCE_INTERVAL),--rebalance-interval $(REBALANCE_INTERVAL)) \
 	$(if $(ASSIGNMENT_CHOICE),--assignment-choice $(ASSIGNMENT_CHOICE)) \
-	$(if $(DEEP_ALPHA),--alpha $(DEEP_ALPHA)) \
-	$(if $(SIBLING_ALPHA),--sibling-alpha $(SIBLING_ALPHA)) \
+	$(if $(ALPHA),--alpha $(ALPHA)) \
 	$(if $(TOLERANCE),--tolerance $(TOLERANCE)) \
 	$(if $(OPTIMUM_TOLERANCE),--optimum-tolerance $(OPTIMUM_TOLERANCE)) \
 	$(if $(OPTIMUM_ESCAPE),--optimum-escape $(OPTIMUM_ESCAPE))

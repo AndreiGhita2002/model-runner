@@ -23,13 +23,16 @@ def analyse_run(path: Path) -> dict | None:
     meta = data.get("meta", {})
     opt_kwargs = meta.get("optimizer_kwargs", {})
 
+    # Backward-compat: old runs used `deep_alpha` + `sibling_alpha`; new runs use `alpha`.
+    alpha = opt_kwargs.get("alpha", opt_kwargs.get("deep_alpha", ""))
+
     row = {
         "run": path.stem,
         "commit": (meta.get("git_commit") or "?")[:8],
         "num_requests": meta.get("num_requests", ""),
         "optimizer": meta.get("optimizer", ""),
         "rebalance_interval": opt_kwargs.get("rebalance_interval") or meta.get("rebalance_interval", 3),
-        "deep_alpha": opt_kwargs.get("deep_alpha", ""),
+        "alpha": alpha,
         "sibling_alpha": opt_kwargs.get("sibling_alpha", ""),
         "tolerance": opt_kwargs.get("tolerance", ""),
         "optimum_tolerance": opt_kwargs.get("optimum_tolerance") or opt_kwargs.get("tolerance", 0.02) * 2,
@@ -110,7 +113,7 @@ def main():
     # Build columns: params first, then per-model columns
     param_cols = [
         "run", "commit", "num_requests", "optimizer",
-        "rebalance_interval", "deep_alpha", "sibling_alpha", "tolerance", "optimum_tolerance", "optimum_escape_duration",
+        "rebalance_interval", "alpha", "sibling_alpha", "tolerance", "optimum_tolerance", "optimum_escape_duration",
     ]
     model_cols = []
     for model in MODELS:

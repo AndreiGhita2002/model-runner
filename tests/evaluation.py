@@ -274,8 +274,7 @@ def evaluation_main(
                         "end": reb["end"],
                         "did_rebalance": reb["did_rebalance"],
                         "at_optimum": reb.get("at_optimum", False),
-                        "deep_gamma": reb.get("deep_gamma"),
-                        "sibling_gamma": reb.get("sibling_gamma"),
+                        "gamma": reb.get("gamma"),
                         "best_throughput": reb.get("best_throughput"),
                         "optimum_escape_elapsed": reb.get("optimum_escape_elapsed"),
                     }
@@ -401,9 +400,7 @@ if __name__ == '__main__':
     parser.add_argument('--assignment-choice', choices=['rank_w', 'rank_l'], default=None,
                         help='Shisha device assignment strategy (default: rank_w)')
     parser.add_argument('--alpha', type=int, default=None,
-                        help='Shisha deep patience parameter (default: 5)')
-    parser.add_argument('--sibling-alpha', type=int, default=None,
-                        help='Shisha sibling patience — stages to try before stopping (default: 2)')
+                        help='Shisha patience parameter — non-improving moves before optimum (default: 5)')
     parser.add_argument('--tolerance', type=float, default=None,
                         help='Shisha throughput tolerance fraction during exploration (default: 0.02)')
     parser.add_argument('--optimum-tolerance', type=float, default=None,
@@ -443,9 +440,7 @@ if __name__ == '__main__':
     if args.assignment_choice is not None:
         optimizer_kwargs['assignment_choice'] = args.assignment_choice
     if args.alpha is not None:
-        optimizer_kwargs['deep_alpha'] = args.alpha
-    if args.sibling_alpha is not None:
-        optimizer_kwargs['sibling_alpha'] = args.sibling_alpha
+        optimizer_kwargs['alpha'] = args.alpha
     if args.tolerance is not None:
         optimizer_kwargs['tolerance'] = args.tolerance
     if args.optimum_tolerance is not None:

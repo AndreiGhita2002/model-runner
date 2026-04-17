@@ -212,8 +212,7 @@ def main():
                     "end": reb["end"],
                     "did_rebalance": reb["did_rebalance"],
                     "at_optimum": reb.get("at_optimum", False),
-                    "deep_gamma": reb.get("deep_gamma"),
-                    "sibling_gamma": reb.get("sibling_gamma"),
+                    "gamma": reb.get("gamma"),
                     "best_throughput": reb.get("best_throughput"),
                     "optimum_escape_elapsed": reb.get("optimum_escape_elapsed"),
                 }

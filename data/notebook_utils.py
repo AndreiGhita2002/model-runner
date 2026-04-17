@@ -325,7 +325,12 @@ def plot_optimizer_state(runs: dict, baselines: dict = None,
                          show_deep_gamma: bool = False,
                          show_sibling_gamma: bool = False,
                          show_optimum_escape: bool = True):
-    """Plot optimizer gamma and escape state per model."""
+    """Plot optimizer gamma and escape state per model.
+
+    Backward-compat: old logs store ``deep_gamma`` + ``sibling_gamma`` plus
+    ``deep_alpha``; new logs store just ``gamma`` and ``alpha``. The
+    "combined" / "sibling" plots only have data for old logs.
+    """
     if baselines is None:
         baselines = {}
     model_names = collect_model_names(baselines, runs)
@@ -333,9 +338,9 @@ def plot_optimizer_state(runs: dict, baselines: dict = None,
 
     gamma_plots = []
     if show_combined_gamma:
-        gamma_plots.append(("combined gamma\n(deep + sibling * deep_alpha)", "combined"))
+        gamma_plots.append(("combined gamma\n(deep + sibling * alpha)", "combined"))
     if show_deep_gamma:
-        gamma_plots.append(("deep_gamma", "deep"))
+        gamma_plots.append(("gamma", "gamma"))
     if show_sibling_gamma:
         gamma_plots.append(("sibling_gamma", "sibling"))
     if show_optimum_escape:
@@ -355,7 +360,10 @@ def plot_optimizer_state(runs: dict, baselines: dict = None,
             if model not in run_data.get("results", {}):
                 continue
             batches = run_data["results"][model].get("batches", [])
-            deep_gamma = [b.get("rebalance", {}).get("deep_gamma") for b in batches]
+            # New logs write "gamma"; old logs wrote "deep_gamma".
+            gamma = [b.get("rebalance", {}).get("gamma",
+                      b.get("rebalance", {}).get("deep_gamma")) for b in batches]
+            # Old-log-only; new logs will yield all-None.
             sibling_gamma = [b.get("rebalance", {}).get("sibling_gamma") for b in batches]
 
             escape_elapsed = []
@@ -368,19 +376,26 @@ def plot_optimizer_state(runs: dict, baselines: dict = None,
                 else:
                     escape_elapsed.append(None)
 
-            if not any(v is not None for v in deep_gamma):
+            if not any(v is not None for v in gamma):
                 continue
 
             opt_kwargs = run_data.get("meta", {}).get("optimizer_kwargs", {})
-            deep_alpha = opt_kwargs.get("deep_alpha", 5)
+            # Backward-compat: old logs used deep_alpha.
+            alpha = opt_kwargs.get("alpha", opt_kwargs.get("deep_alpha", 5))
+
+            # "combined" only has meaning when sibling_gamma is present (old logs).
+            if any(v is not None for v in sibling_gamma):
+                combined = [
+                    (d or 0) + (s or 0) * alpha
+                    if d is not None and s is not None else None
+                    for d, s in zip(gamma, sibling_gamma)
+                ]
+            else:
+                combined = gamma
 
             series = {
-                "combined": [
-                    (d or 0) + (s or 0) * deep_alpha
-                    if d is not None and s is not None else None
-                    for d, s in zip(deep_gamma, sibling_gamma)
-                ],
-                "deep": deep_gamma,
+                "combined": combined,
+                "gamma": gamma,
                 "sibling": sibling_gamma,
                 "escape_elapsed": escape_elapsed,
             }
@@ -425,8 +440,9 @@ def print_run_summary(runs: dict):
         optimizer = meta.get("optimizer", "?")
         opt_kwargs = meta.get("optimizer_kwargs", {})
         interval = opt_kwargs.get("rebalance_interval") or meta.get("rebalance_interval", "?")
-        deep_alpha = opt_kwargs.get("deep_alpha", "?")
-        sibling_alpha = opt_kwargs.get("sibling_alpha", "?")
+        # Backward-compat: old runs used deep_alpha + sibling_alpha.
+        alpha = opt_kwargs.get("alpha", opt_kwargs.get("deep_alpha", "?"))
+        sibling_alpha = opt_kwargs.get("sibling_alpha")
         tolerance = opt_kwargs.get("tolerance", "?")
         optimum_tolerance = opt_kwargs.get("optimum_tolerance", "?")
         optimum_escape = opt_kwargs.get("optimum_escape_duration",
@@ -434,7 +450,8 @@ def print_run_summary(runs: dict):
 
         print(f"=== {run_name} === commit: {commit}")
         print(f"  optimizer: {optimizer}, interval: {interval}, requests: {n_requests}")
-        print(f"  deep_alpha: {deep_alpha}, sibling_alpha: {sibling_alpha}, "
+        sibling_part = f", sibling_alpha: {sibling_alpha}" if sibling_alpha is not None else ""
+        print(f"  alpha: {alpha}{sibling_part}, "
               f"tolerance: {tolerance}, optimum_tolerance: {optimum_tolerance}, "
               f"optimum_escape: {optimum_escape}")
 
@@ -1070,21 +1087,26 @@ def plot_interf_optimizer_state(interf_data: dict,
     for model in models:
         result = interf_data["results"][model]
         batches = result.get("batches", [])
-        deep_gamma = [b.get("rebalance", {}).get("deep_gamma") for b in batches]
+        # Backward-compat: old logs → deep_gamma + sibling_gamma; new → gamma only.
+        gamma = [b.get("rebalance", {}).get("gamma",
+                  b.get("rebalance", {}).get("deep_gamma")) for b in batches]
         sibling_gamma = [b.get("rebalance", {}).get("sibling_gamma") for b in batches]
         best_throughput = [b.get("rebalance", {}).get("best_throughput") for b in batches]
 
-        if not any(v is not None for v in deep_gamma):
+        if not any(v is not None for v in gamma):
             continue
 
         opt_kwargs = interf_data.get("meta", {}).get("optimizer_kwargs", {})
-        deep_alpha = opt_kwargs.get("deep_alpha", 5)
+        alpha = opt_kwargs.get("alpha", opt_kwargs.get("deep_alpha", 5))
 
-        combined = [
-            (d or 0) + (s or 0) * deep_alpha
-            if d is not None and s is not None else None
-            for d, s in zip(deep_gamma, sibling_gamma)
-        ]
+        if any(v is not None for v in sibling_gamma):
+            combined = [
+                (d or 0) + (s or 0) * alpha
+                if d is not None and s is not None else None
+                for d, s in zip(gamma, sibling_gamma)
+            ]
+        else:
+            combined = gamma
 
         fig, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
         fig.suptitle(f"{model} — Optimizer State", fontsize=14)
