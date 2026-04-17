@@ -1,4 +1,5 @@
 import multiprocessing as mp
+import multiprocessing.synchronize
 import queue
 import threading
 import time
@@ -75,7 +76,7 @@ def _optimizer_process_worker(
     optimizer: PipelineOptimizer,
     request_queue: mp.Queue,
     result_queue: mp.Queue,
-    shutdown_event: mp.Event,
+    shutdown_event: multiprocessing.synchronize.Event,
 ):
     """Background worker that runs the pipeline optimiser in a separate process.
 
@@ -101,7 +102,7 @@ def _optimizer_process_worker(
         result_queue.put(new_config)
 
 
-class DynamicPipeline:
+class ReactivePipeline:
     """Manages a PyTorch pipeline with automatic stage rebalancing.
 
     Wraps a ``TimedModule`` in a ``ScheduleGPipe`` pipeline and periodically
@@ -198,7 +199,7 @@ class DynamicPipeline:
         self._optimizer_process: Optional[mp.Process] = None
         self._request_queue: Optional[mp.Queue] = None
         self._result_queue: Optional[mp.Queue] = None
-        self._shutdown_event: Optional[mp.Event] = None
+        self._shutdown_event: Optional[multiprocessing.synchronize.Event] = None
         self._pending_optimization: bool = False
 
         if self.async_optimization and dist.get_rank() == 0:
@@ -255,7 +256,7 @@ class DynamicPipeline:
 
     def _stop_optimizer_process(self):
         """Signal the background optimiser to exit and wait for it to terminate."""
-        if self._optimizer_process is not None:
+        if self._optimizer_process is not None and self._shutdown_event is not None:
             self._shutdown_event.set()
             self._optimizer_process.join(timeout=1.0)
             if self._optimizer_process.is_alive():

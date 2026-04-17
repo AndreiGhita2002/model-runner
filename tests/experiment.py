@@ -3,7 +3,7 @@
 A. No interference, no rebalancing (GPipe baseline)
 B. No interference, with rebalancing (Shisha)
 C. Interference, no rebalancing (GPipe under interference)
-D. Interference, first optimum only (Shisha, stop at first optimum)
+D. Interference, first optimum only (Shisha, stop at first optimum, adaptive targeting)
 E. Interference, full rebalancing (Shisha, adaptive targeting)
 
 Runs C, D, E use the same random interference seed for a fair comparison.
@@ -246,6 +246,7 @@ def main():
                     "--omp-threads", str(args.omp_threads),
                     "-o", str(run_dir),
                 ]
+            cmd.append("--adaptive-targeting")
             if args.duration is not None:
                 cmd.extend(["--duration", str(args.duration)])
             if args.keep_logs:
