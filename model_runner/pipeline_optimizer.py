@@ -43,7 +43,7 @@ class PipelineConfig:
 class PipelineOptimizer(ABC):
     """Abstract base class for pipeline optimisers.
 
-    Subclasses implement ``optimize`` which receives timing data and the current
+    Subclasses implement ``optimise_pipeline`` which receives timing data and the current
     config, and returns a new ``PipelineConfig`` if rebalancing is warranted or
     ``None`` otherwise. The ``force_rebalance`` flag lets callers bypass the
     subclass's internal rebalance criteria.
@@ -102,13 +102,13 @@ class PipelineOptimizer(ABC):
 
         Reconfigures the optimizer to use only top-level children (which are
         always on the model's sequential path) and returns a fresh initial
-        split. Subsequent ``optimize`` calls will also use depth-1 children.
+        split. Subsequent ``optimise_pipeline`` calls will also use depth-1 children.
 
         Returns:
             A ``PipelineConfig`` using top-level module boundaries.
         """
         self.reconfigure_depth(1)
-        return self.initial_setup()
+        return self.initial_configuration()
 
     @property
     def at_optimum(self) -> bool:
@@ -124,7 +124,7 @@ class PipelineOptimizer(ABC):
         return module.get_path()
 
     @abstractmethod
-    def optimize(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig,
+    def optimise_pipeline(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig,
                  force_rebalance: bool = False) -> PipelineConfig | None:
         """
         Optimise pipeline configuration based on timing data.
@@ -142,7 +142,7 @@ class PipelineOptimizer(ABC):
         """
         pass
 
-    def initial_setup(self) -> PipelineConfig:
+    def initial_configuration(self) -> PipelineConfig:
         """Generate a uniform initial split across all ranks.
 
         Divides the model's top-level children evenly into ``world_size`` stages
@@ -180,7 +180,7 @@ class StaticGPipeOptimizer(PipelineOptimizer):
     """Static GPipe optimizer — cost-balanced initial split, never rebalances.
 
     Uses parameter-count-based DP partitioning (GPipe paper Section 2.2) for
-    the initial split and returns ``None`` from ``optimize()`` so the pipeline
+    the initial split and returns ``None`` from ``optimise_pipeline()`` so the pipeline
     config never changes. Useful as a baseline to measure the impact of
     dynamic rebalancing.
     """
@@ -189,11 +189,11 @@ class StaticGPipeOptimizer(PipelineOptimizer):
         # Accept and ignore extra kwargs (e.g. rebalance_interval) for compatibility
         super().__init__(num_stages, root_uuid, device_manager, depth=depth)
 
-    def initial_setup(self) -> PipelineConfig:
+    def initial_configuration(self) -> PipelineConfig:
         root = timed_module_registry.get(self.root_uuid)
         if root is None:
             # Fallback to base class uniform split
-            return super().initial_setup()
+            return super().initial_configuration()
 
         model = root._inner
         split_spec = gpipe_split_spec(model, self.num_stages, depth=self.depth)
@@ -204,7 +204,7 @@ class StaticGPipeOptimizer(PipelineOptimizer):
 
         return PipelineConfig(split_spec=split_spec, device_mapping=device_mapping)
 
-    def optimize(self, time_logs, old_config, force_rebalance=False):
+    def optimise_pipeline(self, time_logs, old_config, force_rebalance=False):
         return None
 
 
@@ -223,10 +223,10 @@ class StaticConfigOptimizer(PipelineOptimizer):
             raise ValueError("StaticConfigOptimizer requires config_path")
         self._config = PipelineConfig.load(config_path)
 
-    def initial_setup(self) -> PipelineConfig:
+    def initial_configuration(self) -> PipelineConfig:
         return self._config
 
-    def optimize(self, time_logs, old_config, force_rebalance=False):
+    def optimise_pipeline(self, time_logs, old_config, force_rebalance=False):
         return None
 
     @property
@@ -286,7 +286,7 @@ class GreedyPipelineOptimizer(PipelineOptimizer):
 
         return max_change > self.rebalance_threshold
 
-    def optimize(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig,
+    def optimise_pipeline(self, time_logs: dict[uuid.UUID, list[float]], old_config: PipelineConfig,
                  force_rebalance: bool = False) -> PipelineConfig | None:
         """
         Optimise pipeline configuration based on timing data.
@@ -466,7 +466,7 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
         self.rebalance_interval = rebalance_interval
         self._call_count = 0
 
-        # Persistent state for online tuning across optimize() calls
+        # Persistent state for online tuning across optimise_pipeline() calls
         self._gamma = 0                    # non-improving iteration counter
         self._best_throughput = 0.0        # best 1/max_stage_time seen
         self._best_config: PipelineConfig = None
@@ -787,10 +787,10 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
 
     # ── Public interface ─────────────────────────────────────────────────
 
-    def initial_setup(self) -> PipelineConfig:
+    def initial_configuration(self) -> PipelineConfig:
         return self._seed_generation()
 
-    def optimize(self, time_logs: dict[uuid.UUID, list[float]],
+    def optimise_pipeline(self, time_logs: dict[uuid.UUID, list[float]],
                  old_config: PipelineConfig,
                  force_rebalance: bool = False) -> PipelineConfig | None:
         # Check rebalance interval
@@ -799,7 +799,7 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
             if self._call_count < self.rebalance_interval:
                 return None
             self._call_count = 0
-        self._log(f"[DEBUG optimize] passed rebalance interval gate (call_count reset)")
+        self._log(f"[DEBUG optimise_pipeline] passed rebalance interval gate (call_count reset)")
 
         # Clear stale cached stage times so _should_rebalance sees fresh data
         self._reset_stage_caches()
@@ -812,18 +812,18 @@ class ReactiveShishaOptimiser(PipelineOptimizer):
             # If at optimum, no further exploration
             if self._at_optimum and self._return_best:
                 self._return_best = False
-                self._log("[DEBUG optimize] at optimum, returning best config")
+                self._log("[DEBUG optimise_pipeline] at optimum, returning best config")
                 return self._best_config
 
             # Exit if we don't need to rebalance
             elif not should_rebalance:
-                self._log("[DEBUG optimize] should_rebalance=False, returning None")
+                self._log("[DEBUG optimise_pipeline] should_rebalance=False, returning None")
                 return None
 
         # We need to rebalance
-        self._log("[DEBUG optimize] calling _online_tuning")
+        self._log("[DEBUG optimise_pipeline] calling _online_tuning")
         result = self._online_tuning(time_logs, old_config)
-        self._log(f"[DEBUG optimize] _online_tuning returned {'new config' if result is not None else 'None'}")
+        self._log(f"[DEBUG optimise_pipeline] _online_tuning returned {'new config' if result is not None else 'None'}")
         return result
 
 

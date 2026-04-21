@@ -80,7 +80,7 @@ def _optimizer_process_worker(
 ):
     """Background worker that runs the pipeline optimiser in a separate process.
 
-    Blocks on ``request_queue``, runs ``optimizer.optimize`` when a request arrives,
+    Blocks on ``request_queue``, runs ``optimizer.optimise_pipeline`` when a request arrives,
     and puts the result (a ``PipelineConfig`` or ``None``) on ``result_queue``.
     Exits when ``shutdown_event`` is set.
 
@@ -98,7 +98,7 @@ def _optimizer_process_worker(
             continue
 
         time_logs, current_config = request
-        new_config = optimizer.optimize(time_logs, current_config)
+        new_config = optimizer.optimise_pipeline(time_logs, current_config)
         result_queue.put(new_config)
 
 
@@ -208,7 +208,7 @@ class ReactivePipeline:
         # Initial pipeline setup — rank 0 computes, broadcasts to all
         if initial_pipeline_config is None:
             if dist.get_rank() == 0:
-                initial_pipeline_config = self.pipeline_optimizer.initial_setup()
+                initial_pipeline_config = self.pipeline_optimizer.initial_configuration()
             config_list = [initial_pipeline_config]
             dist.broadcast_object_list(config_list, src=0)
             initial_pipeline_config = config_list[0]
@@ -399,7 +399,7 @@ class ReactivePipeline:
                 force = self._force_rebalance
                 self._force_rebalance = False
             # computing the new config
-            new_config = self.pipeline_optimizer.optimize(
+            new_config = self.pipeline_optimizer.optimise_pipeline(
                 self.time_logs, self.current_config, force_rebalance=force
             )
             config_list = [new_config]
@@ -421,7 +421,7 @@ class ReactivePipeline:
         # Optimizer state lives on rank 0; broadcast to last rank for timing dict
         if hasattr(self.pipeline_optimizer, 'optimizer_state'):
             if dist.get_rank() == 0:
-                state = [self.pipeline_optimizer.at_optimum, self.pipeline_optimizer.optimizer_state]
+                state = [self.pipeline_optimizer.at_optimum, self.pipeline_optimizer.optimise_pipeliner_state]
             else:
                 state = [None, None]
             dist.broadcast_object_list(state, src=0)
@@ -452,7 +452,7 @@ class ReactivePipeline:
             if force:
                 # Bypass background process — optimise directly so it takes
                 # effect on the very next forward pass.
-                new_config = self.pipeline_optimizer.optimize(
+                new_config = self.pipeline_optimizer.optimise_pipeline(
                     self.time_logs, self.current_config, force_rebalance=True
                 )
             else:
@@ -478,7 +478,7 @@ class ReactivePipeline:
         # Optimizer state lives on rank 0; broadcast to last rank for timing dict
         if hasattr(self.pipeline_optimizer, 'optimizer_state'):
             if dist.get_rank() == 0:
-                state = [self.pipeline_optimizer.at_optimum, self.pipeline_optimizer.optimizer_state]
+                state = [self.pipeline_optimizer.at_optimum, self.pipeline_optimizer.optimise_pipeliner_state]
             else:
                 state = [None, None]
             dist.broadcast_object_list(state, src=0)
