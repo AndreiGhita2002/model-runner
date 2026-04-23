@@ -227,13 +227,23 @@ def interf_color(label: str, all_periods: list) -> str:
     return _INTERF_CMAP(0.15 + norm * 0.4)
 
 
-def draw_interference_bg(ax, periods: list, alpha: float = 0.4):
-    """Draw shaded interference regions and labels on an axis."""
+def draw_interference_bg(ax, periods: list, alpha: float = 0.4,
+                          shade: bool = True):
+    """Draw shaded interference regions and labels on an axis.
+
+    ``shade=False`` skips the grayscale ``axvspan`` backgrounds and draws only
+    the step labels — useful for paper-style figures where the plot should
+    stay on a transparent background.
+    """
+    from matplotlib.transforms import offset_copy
+    label_trans = offset_copy(ax.get_xaxis_transform(),
+                               fig=ax.figure, y=-3, units="points")
     for t_start, t_end, label in periods:
-        color = interf_color(label, periods)
-        ax.axvspan(t_start, t_end, color=color, alpha=alpha, zorder=0)
+        if shade:
+            color = interf_color(label, periods)
+            ax.axvspan(t_start, t_end, color=color, alpha=alpha, zorder=0)
         ax.text((t_start + t_end) / 2, 1.0, label,
-                transform=ax.get_xaxis_transform(),
+                transform=label_trans,
                 ha="center", va="top", fontsize=5, color="gray")
 
 
@@ -258,7 +268,8 @@ def draw_interference_boundaries_by_index(ax, regions, timed_batches, clock_offs
 def plot_batch_times(baselines: dict, runs: dict,
                      include_rebalance: bool = False,
                      show_rebalance: bool = False,
-                     show_optimum: bool = True):
+                     show_optimum: bool = True,
+                     show_caption: bool = True):
     """Plot per-batch elapsed time for baselines and runs."""
     model_names = collect_model_names(baselines, runs)
     colors = build_color_map(baselines, runs)
@@ -315,7 +326,8 @@ def plot_batch_times(baselines: dict, runs: dict,
     for idx in range(n_models, rows * cols):
         axes[idx // cols][idx % cols].set_visible(False)
 
-    fig.suptitle("Per-batch elapsed time", fontsize=14)
+    if show_caption:
+        fig.suptitle("Per-batch elapsed time", fontsize=14)
     fig.tight_layout()
     plt.show()
 
@@ -324,7 +336,8 @@ def plot_optimizer_state(runs: dict, baselines: dict = None,
                          show_combined_gamma: bool = True,
                          show_deep_gamma: bool = False,
                          show_sibling_gamma: bool = False,
-                         show_optimum_escape: bool = True):
+                         show_optimum_escape: bool = True,
+                         show_caption: bool = True):
     """Plot optimizer gamma and escape state per model.
 
     Backward-compat: old logs store ``deep_gamma`` + ``sibling_gamma`` plus
@@ -354,7 +367,8 @@ def plot_optimizer_state(runs: dict, baselines: dict = None,
         n_plots = len(gamma_plots)
         fig, axes = plt.subplots(n_plots, 1, figsize=(12, 3 * n_plots + 1),
                                  sharex=True, squeeze=False)
-        fig.suptitle(f"{model} — Optimizer State", fontsize=14)
+        if show_caption:
+            fig.suptitle(f"{model} — Optimizer State", fontsize=14)
 
         for run_name, run_data in runs.items():
             if model not in run_data.get("results", {}):
@@ -484,9 +498,32 @@ def print_run_summary(runs: dict):
 # Plotting: experiment_graphs.ipynb
 # ──────────────────────────────────────────────
 
-def plot_experiment_throughput(runs: dict, run_info: dict, all_models: list):
-    """Bar chart of overall throughput by run, with interference faded bars."""
-    run_ids = sorted(runs.keys())
+def _display_id(run_info: dict, run_id: str) -> str:
+    """Short display id for a run (e.g. C → "A" for the paper).
+
+    ``run_info[run_id]["display"]`` lets callers relabel runs without
+    renaming the files on disk. Falls back to the internal id when no
+    override is set. For full legend strings, use ``run_info[run_id]["label"]``.
+    """
+    return run_info.get(run_id, {}).get("display", run_id)
+
+
+def _full_label(run_info: dict, run_id: str) -> str:
+    """Full legend/header string for a run — falls back to the id."""
+    return run_info.get(run_id, {}).get("label", run_id)
+
+
+def plot_experiment_throughput(runs: dict, run_info: dict, all_models: list,
+                                run_ids: list = None,
+                                show_caption: bool = True):
+    """Bar chart of overall throughput by run, with interference faded bars.
+
+    ``run_ids`` selects which run letters to show (default: all present).
+    """
+    if run_ids is None:
+        run_ids = sorted(runs.keys())
+    else:
+        run_ids = [r for r in run_ids if r in runs]
     n_runs = len(run_ids)
     n_models = len(all_models)
 
@@ -497,6 +534,7 @@ def plot_experiment_throughput(runs: dict, run_info: dict, all_models: list):
     for i, run_id in enumerate(run_ids):
         info = run_info.get(run_id, {})
         color = info.get("color", "gray")
+        label = _full_label(run_info, run_id)
         offset = (i - n_runs / 2 + 0.5) * bar_width
         has_interference = run_id in ("C", "D", "E")
 
@@ -504,7 +542,7 @@ def plot_experiment_throughput(runs: dict, run_info: dict, all_models: list):
             if has_interference:
                 idle_rps, interf_rps = _compute_step_rps(runs[run_id], model)
                 ax.bar(x[j] + offset, interf_rps, bar_width, color=color, alpha=1.0,
-                       label=f"{run_id}: {info.get('label', '?')}" if j == 0 else None)
+                       label=label if j == 0 else None)
                 if idle_rps > interf_rps:
                     ax.bar(x[j] + offset, idle_rps - interf_rps, bar_width,
                            bottom=interf_rps, color=color, alpha=0.3)
@@ -512,12 +550,86 @@ def plot_experiment_throughput(runs: dict, run_info: dict, all_models: list):
                 result = runs.get(run_id, {}).get("results", {}).get(model)
                 rps = result["requests_per_second"] if result else 0
                 ax.bar(x[j] + offset, rps, bar_width, color=color, alpha=1.0,
-                       label=f"{run_id}: {info.get('label', '?')}" if j == 0 else None)
+                       label=label if j == 0 else None)
 
     ax.set_xticks(x)
     ax.set_xticklabels(all_models, rotation=15, ha="right")
     ax.set_ylabel("Requests per second")
-    ax.set_title("Overall throughput by run (faded = pre-interference RPS)")
+    if show_caption:
+        ax.set_title("Overall throughput by run (faded = pre-interference RPS)")
+    ax.legend(fontsize="small")
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_experiment_throughput_avg(runs_list: list, run_info: dict, all_models: list,
+                                    run_ids: list = None,
+                                    show_caption: bool = True):
+    """Bar chart of throughput averaged across experiment repetitions.
+
+    Same layout as :func:`plot_experiment_throughput` but each bar is the mean
+    across the dicts in ``runs_list``, with standard deviation as error bars.
+    """
+    if not runs_list:
+        print("No runs to plot")
+        return
+    all_keys: set = set()
+    for runs in runs_list:
+        all_keys.update(runs.keys())
+    if run_ids is None:
+        run_ids = sorted(all_keys)
+    else:
+        run_ids = [r for r in run_ids if r in all_keys]
+    n_runs = len(run_ids)
+    n_models = len(all_models)
+
+    fig, ax = plt.subplots(figsize=(max(10, n_models * 2.5), 5))
+    x = np.arange(n_models)
+    bar_width = 0.8 / n_runs
+
+    for i, run_id in enumerate(run_ids):
+        info = run_info.get(run_id, {})
+        color = info.get("color", "gray")
+        label = _full_label(run_info, run_id)
+        offset = (i - n_runs / 2 + 0.5) * bar_width
+        has_interference = run_id in ("C", "D", "E")
+
+        for j, model in enumerate(all_models):
+            if has_interference:
+                idles, interfs = [], []
+                for runs in runs_list:
+                    if run_id not in runs:
+                        continue
+                    idle_rps, interf_rps = _compute_step_rps(runs[run_id], model)
+                    idles.append(idle_rps)
+                    interfs.append(interf_rps)
+                idle_mean = float(np.mean(idles)) if idles else 0.0
+                interf_mean = float(np.mean(interfs)) if interfs else 0.0
+                interf_std = float(np.std(interfs)) if len(interfs) > 1 else 0.0
+                ax.bar(x[j] + offset, interf_mean, bar_width, color=color, alpha=1.0,
+                       yerr=interf_std, capsize=3,
+                       label=label if j == 0 else None)
+                if idle_mean > interf_mean:
+                    ax.bar(x[j] + offset, idle_mean - interf_mean, bar_width,
+                           bottom=interf_mean, color=color, alpha=0.3)
+            else:
+                rpss = []
+                for runs in runs_list:
+                    result = runs.get(run_id, {}).get("results", {}).get(model)
+                    if result:
+                        rpss.append(result["requests_per_second"])
+                mean_rps = float(np.mean(rpss)) if rpss else 0.0
+                std_rps = float(np.std(rpss)) if len(rpss) > 1 else 0.0
+                ax.bar(x[j] + offset, mean_rps, bar_width, color=color, alpha=1.0,
+                       yerr=std_rps, capsize=3,
+                       label=label if j == 0 else None)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(all_models, rotation=15, ha="right")
+    ax.set_ylabel("Requests per second")
+    if show_caption:
+        ax.set_title(f"Average throughput across {len(runs_list)} runs "
+                     "(faded = pre-interference RPS, error bars = ±std)")
     ax.legend(fontsize="small")
     fig.tight_layout()
     plt.show()
@@ -560,11 +672,18 @@ def _compute_step_rps(data: dict, model: str) -> tuple[float, float]:
     return idle_rps, interf_rps
 
 
-def plot_experiment_rps_per_stage(runs: dict, run_info: dict, all_models: list):
-    """Bar chart of RPS per interference stage for runs C/D/E."""
-    interf_run_ids = [k for k in ("C", "D", "E") if k in runs]
+def plot_experiment_rps_per_stage(runs: dict, run_info: dict, all_models: list,
+                                   run_ids: list = None,
+                                   show_caption: bool = True):
+    """Bar chart of RPS per interference stage.
+
+    ``run_ids`` selects which run letters to plot (default: C/D/E).
+    """
+    if run_ids is None:
+        run_ids = ["C", "D", "E"]
+    interf_run_ids = [k for k in run_ids if k in runs]
     if not interf_run_ids:
-        print("No interference runs (C/D/E) available")
+        print(f"No runs {run_ids} available")
         return
 
     n_models = len(all_models)
@@ -592,19 +711,20 @@ def plot_experiment_rps_per_stage(runs: dict, run_info: dict, all_models: list):
             stage_rps = _compute_rps_per_stage(runs[run_id], model)
             rps_vals = [s[1] for s in stage_rps] if stage_rps else [0] * n_stages
             bars = ax.bar(x + offset, rps_vals, bar_width, color=color, alpha=0.85,
-                          label=f"{run_id}: {info.get('label', '?')}")
+                          label=_full_label(run_info, run_id))
             for bar, val in zip(bars, rps_vals):
                 if val > 0:
                     ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
                             f"{val:.1f}", ha="center", va="bottom", fontsize=6)
 
-        for bl_id, bl_label in [("A", "GPipe baseline"), ("B", "Shisha baseline")]:
-            if bl_id in runs:
+        for bl_id in ("A", "B"):
+            if bl_id in run_ids and bl_id in runs:
                 bl_result = runs[bl_id].get("results", {}).get(model)
                 if bl_result:
                     bl_rps = bl_result.get("requests_per_second", 0)
                     ax.axhline(bl_rps, color=run_info[bl_id]["color"], linestyle="--",
-                               alpha=0.6, label=f"{bl_id}: {bl_label} ({bl_rps:.1f})")
+                               alpha=0.6,
+                               label=f"{_full_label(run_info, bl_id)} ({bl_rps:.1f})")
 
         ax.set_xticks(x)
         ax.set_xticklabels(stage_labels, rotation=30, ha="right", fontsize=7)
@@ -612,7 +732,103 @@ def plot_experiment_rps_per_stage(runs: dict, run_info: dict, all_models: list):
         ax.set_title(model)
         ax.legend(fontsize="x-small", loc="lower right")
 
-    fig.suptitle("RPS per interference stage (C / D / E)", fontsize=14)
+    if show_caption:
+        fig.suptitle("RPS per interference stage (C / D / E)", fontsize=14)
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_experiment_rps_per_stage_avg(runs_list: list, run_info: dict, all_models: list,
+                                       run_ids: list = None,
+                                       show_caption: bool = True):
+    """Bar chart of RPS per interference stage averaged across repetitions.
+
+    Same layout as :func:`plot_experiment_rps_per_stage` but each bar is the
+    mean across ``runs_list`` with ±std error bars. A/B baselines (if
+    included in ``run_ids``) are drawn as horizontal lines at their mean RPS.
+    """
+    if not runs_list:
+        print("No runs to plot")
+        return
+    all_keys: set = set()
+    for runs in runs_list:
+        all_keys.update(runs.keys())
+    if run_ids is None:
+        run_ids = ["C", "D", "E"]
+    interf_run_ids = [k for k in run_ids if k in all_keys]
+    if not interf_run_ids:
+        print(f"No runs {run_ids} available")
+        return
+
+    n_models = len(all_models)
+    fig, axes = plt.subplots(1, n_models, figsize=(7 * n_models, 5), squeeze=False)
+
+    for idx, model in enumerate(all_models):
+        ax = axes[0][idx]
+
+        # Use the first run dict that has the reference id to derive stage labels
+        ref_stages: list = []
+        ref_id = interf_run_ids[0]
+        for runs in runs_list:
+            if ref_id in runs:
+                ref_stages = _compute_rps_per_stage(runs[ref_id], model)
+                if ref_stages:
+                    break
+        stage_labels = [s[0] for s in ref_stages]
+        n_stages = len(stage_labels)
+        if n_stages == 0:
+            ax.set_title(f"{model}\n(no interference data)")
+            continue
+
+        x = np.arange(n_stages)
+        n_runs_i = len(interf_run_ids)
+        bar_width = 0.8 / n_runs_i
+
+        for i, run_id in enumerate(interf_run_ids):
+            info = run_info.get(run_id, {})
+            color = info.get("color", "gray")
+            offset = (i - n_runs_i / 2 + 0.5) * bar_width
+
+            stage_values: list[list[float]] = [[] for _ in range(n_stages)]
+            for runs in runs_list:
+                if run_id not in runs:
+                    continue
+                stage_rps = _compute_rps_per_stage(runs[run_id], model)
+                for s_idx, (_, rps) in enumerate(stage_rps):
+                    if s_idx < n_stages:
+                        stage_values[s_idx].append(rps)
+            means = [float(np.mean(v)) if v else 0.0 for v in stage_values]
+            stds = [float(np.std(v)) if len(v) > 1 else 0.0 for v in stage_values]
+            bars = ax.bar(x + offset, means, bar_width, color=color, alpha=0.85,
+                          yerr=stds, capsize=3,
+                          label=_full_label(run_info, run_id))
+            for bar, val in zip(bars, means):
+                if val > 0:
+                    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
+                            f"{val:.1f}", ha="center", va="top", fontsize=6,
+                            color="white")
+
+        for bl_id in ("A", "B"):
+            if bl_id in run_ids and bl_id in all_keys:
+                bl_rpss = []
+                for runs in runs_list:
+                    bl_result = runs.get(bl_id, {}).get("results", {}).get(model)
+                    if bl_result:
+                        bl_rpss.append(bl_result.get("requests_per_second", 0))
+                if bl_rpss:
+                    bl_mean = float(np.mean(bl_rpss))
+                    ax.axhline(bl_mean, color=run_info[bl_id]["color"], linestyle="--",
+                               alpha=0.6,
+                               label=f"{_full_label(run_info, bl_id)} ({bl_mean:.1f})")
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(stage_labels, rotation=30, ha="right", fontsize=7)
+        ax.set_ylabel("Requests per second" if idx == 0 else "")
+        ax.set_title(model)
+        ax.legend(fontsize="x-small", loc="lower right")
+
+    if show_caption:
+        fig.suptitle(f"Average RPS per interference stage (n={len(runs_list)}, error bars = ±std)", fontsize=14)
     fig.tight_layout()
     plt.show()
 
@@ -666,13 +882,24 @@ def _compute_rps_per_stage(data: dict, model: str) -> list[tuple[str, float]]:
 
 def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
                                 y_limits: dict = None,
-                                show_optimum: bool = True):
-    """Time series of batch times for interference runs C/D/E with shaded regions."""
+                                show_optimum: bool = True,
+                                run_ids: list = None,
+                                show_caption: bool = True,
+                                shade_interference: bool = True):
+    """Time series of batch times vs wall-clock, with interference shading.
+
+    ``run_ids`` selects which run letters to plot (default: C/D/E). Runs
+    without interference data will be skipped inside the loop.
+    ``shade_interference=False`` drops the grayscale step backgrounds (for
+    cleaner paper exports) but keeps the per-step labels.
+    """
     if y_limits is None:
         y_limits = {}
-    interf_runs = {k: v for k, v in runs.items() if k in ("C", "D", "E")}
+    if run_ids is None:
+        run_ids = ["C", "D", "E"]
+    interf_runs = {k: v for k, v in runs.items() if k in run_ids}
     if not interf_runs:
-        print("Runs C, D, E not available")
+        print(f"Runs {run_ids} not available")
         return
 
     fig, axes = plt.subplots(1, len(all_models), figsize=(7 * len(all_models), 4), squeeze=False)
@@ -682,7 +909,12 @@ def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
 
         ref_data = next(iter(interf_runs.values()))
         periods = get_interference_periods(ref_data, model)
-        draw_interference_bg(ax, periods, alpha=0.6)
+        draw_interference_bg(ax, periods, alpha=0.6, shade=shade_interference)
+        if periods:
+            # Tick at every interference boundary — step durations are
+            # multiples of 60 s, so the labels land on whole-minute marks.
+            boundaries = [periods[0][0]] + [p[1] for p in periods]
+            ax.set_xticks(boundaries)
 
         for run_id, data in sorted(interf_runs.items()):
             result = data.get("results", {}).get(model)
@@ -699,7 +931,7 @@ def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
             elapsed = [b["timing"]["end"] - b["timing"]["start"] for b in timed]
             info = run_info.get(run_id, {})
             ax.plot(t_rel, elapsed, color=info.get("color", "gray"), alpha=0.8,
-                    label=f"{run_id}: {info.get('label', '?')}",
+                    label=_full_label(run_info, run_id),
                     marker=".", markersize=1, linewidth=0.8)
 
         if show_optimum:
@@ -725,14 +957,15 @@ def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
                     ax.scatter(lxs, lys, marker="v", color=color, s=30, zorder=5,
                                edgecolors="black", linewidths=0.3)
 
-        if "A" in runs:
+        if "A" in run_ids and "A" in runs:
             a_result = runs["A"].get("results", {}).get(model)
             if a_result:
                 a_timed = [b for b in a_result.get("batches", []) if "timing" in b]
                 a_times = [b["timing"]["end"] - b["timing"]["start"] for b in a_timed]
                 if a_times:
                     ax.axhline(np.mean(a_times), color=run_info["A"]["color"],
-                               linestyle="--", alpha=0.5, label="A: GPipe avg")
+                               linestyle="--", alpha=0.5,
+                               label=f"{_full_label(run_info, 'A')} avg")
 
         ax.axvline(0, color="black", linestyle=":", alpha=0.4, label="Interference start")
         ax.set_title(model)
@@ -742,16 +975,100 @@ def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
             ax.set_ylim(y_limits[model])
         ax.legend(fontsize="x-small")
 
-    fig.suptitle("Under interference: GPipe vs Exhaustive vs Shisha", fontsize=14)
+    if show_caption:
+        fig.suptitle("Under interference: GPipe vs Exhaustive vs Shisha", fontsize=14)
     fig.tight_layout()
     plt.show()
 
 
-def plot_experiment_stage_times(runs: dict, run_info: dict, all_models: list):
-    """Per-stage batch times over time for interference runs."""
-    stage_runs = {k: v for k, v in runs.items() if k in ("C", "D", "E")}
+def plot_experiment_batch_times_by_index(runs: dict, run_info: dict, all_models: list,
+                                          run_ids: list = None,
+                                          y_limits: dict = None,
+                                          show_rebalance: bool = False,
+                                          show_optimum: bool = True,
+                                          show_caption: bool = True):
+    """Per-batch forward time vs batch index for selected runs.
+
+    Intended for non-interference runs (default: A/B) where the wall-clock
+    axis provides no useful alignment across runs.
+    """
+    if y_limits is None:
+        y_limits = {}
+    if run_ids is None:
+        run_ids = ["A", "B"]
+    selected = {k: v for k, v in runs.items() if k in run_ids}
+    if not selected:
+        print(f"Runs {run_ids} not available")
+        return
+
+    fig, axes = plt.subplots(1, len(all_models), figsize=(7 * len(all_models), 4),
+                              squeeze=False)
+
+    for idx, model in enumerate(all_models):
+        ax = axes[0][idx]
+
+        for run_id, data in sorted(selected.items()):
+            result = data.get("results", {}).get(model)
+            if result is None:
+                continue
+            timed = [b for b in result.get("batches", []) if "timing" in b]
+            if not timed:
+                continue
+            elapsed = [b["timing"]["end"] - b["timing"]["start"] for b in timed]
+            info = run_info.get(run_id, {})
+            color = info.get("color", "gray")
+            display = _display_id(run_info, run_id)
+            ax.plot(range(len(elapsed)), elapsed, color=color, alpha=0.8,
+                    label=_full_label(run_info, run_id),
+                    marker=".", markersize=1, linewidth=0.8)
+
+            if show_rebalance:
+                for j, ev in enumerate(get_rebalance_events(timed)):
+                    ax.axvline(ev, color=color, linestyle=":", alpha=0.3,
+                               label=f"{display} rebalance" if j == 0 else None)
+
+            if show_optimum:
+                enters, leaves = get_optimum_transitions(timed)
+                exs = [i for i in enters if i < len(elapsed)]
+                lxs = [i for i in leaves if i < len(elapsed)]
+                if exs:
+                    ax.scatter(exs, [elapsed[i] for i in exs], marker="^",
+                               color=color, s=30, zorder=5,
+                               edgecolors="black", linewidths=0.3)
+                if lxs:
+                    ax.scatter(lxs, [elapsed[i] for i in lxs], marker="v",
+                               color=color, s=30, zorder=5,
+                               edgecolors="black", linewidths=0.3)
+
+        ax.set_title(model)
+        ax.set_xlabel("Batch index")
+        ax.set_ylabel("Forward time (s)" if idx == 0 else "")
+        if model in y_limits:
+            ax.set_ylim(y_limits[model])
+        ax.legend(fontsize="x-small")
+
+    if show_caption:
+        fig.suptitle(
+            f"Per-batch forward time: "
+            f"{' vs '.join(_display_id(run_info, k) for k in sorted(selected.keys()))}",
+            fontsize=14,
+        )
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_experiment_stage_times(runs: dict, run_info: dict, all_models: list,
+                                 run_ids: list = None,
+                                 show_caption: bool = True):
+    """Per-stage batch times over time.
+
+    ``run_ids`` selects which run letters to plot (default: C/D/E).
+    """
+    if run_ids is None:
+        run_ids = ["C", "D", "E"]
+    stage_runs = {k: v for k, v in runs.items() if k in run_ids}
     if not stage_runs:
-        print("No interference runs (C/D/E) available")
+        print(f"Runs {run_ids} not available")
         return
 
     run_ids_s = sorted(stage_runs.keys())
@@ -762,19 +1079,19 @@ def plot_experiment_stage_times(runs: dict, run_info: dict, all_models: list):
 
     for row, run_id in enumerate(run_ids_s):
         data = stage_runs[run_id]
-        info = run_info.get(run_id, {})
+        label = _full_label(run_info, run_id)
 
         for col, model in enumerate(all_models):
             ax = axes[row][col]
             result = data.get("results", {}).get(model)
             if result is None:
-                ax.set_title(f"{model} — Run {run_id}: no data")
+                ax.set_title(f"{model} — {label}: no data")
                 continue
 
             timed = [b for b in result.get("batches", [])
                      if "timing" in b and "stage_times" in b]
             if not timed:
-                ax.set_title(f"{model} — Run {run_id}: no stage_times")
+                ax.set_title(f"{model} — {label}: no stage_times")
                 continue
 
             first_interf = find_first_interference_time(data, model)
@@ -794,26 +1111,33 @@ def plot_experiment_stage_times(runs: dict, run_info: dict, all_models: list):
             draw_interference_bg(ax, periods)
             ax.axvline(0, color="black", linestyle=":", alpha=0.4)
 
-            ax.set_title(f"{model} — {run_id}: {info.get('label', '?')}", fontsize=10)
+            ax.set_title(f"{model} — {label}", fontsize=10)
             ax.set_xlabel("Time since first interference (s)" if row == n_rows - 1 else "")
             ax.set_ylabel("Stage time (s)" if col == 0 else "")
             ax.legend(fontsize="x-small", loc="upper right")
 
-    fig.suptitle("Per-stage batch times under interference", fontsize=14)
+    if show_caption:
+        fig.suptitle("Per-stage batch times under interference", fontsize=14)
     fig.tight_layout()
     plt.show()
 
 
-def print_experiment_rebalance_activity(runs: dict, run_info: dict, all_models: list):
-    """Print rebalance activity table."""
-    run_ids = sorted(runs.keys())
+def print_experiment_rebalance_activity(runs: dict, run_info: dict, all_models: list,
+                                          run_ids: list = None):
+    """Print rebalance activity table.
+
+    ``run_ids`` selects which run letters to include (default: all present
+    except C, which has a static optimizer and no rebalances).
+    """
+    if run_ids is None:
+        run_ids = [r for r in sorted(runs.keys()) if r != "C"]
+    else:
+        run_ids = [r for r in run_ids if r in runs]
     print(f"{'Model':<20} {'Run':<8} {'Batches':>10} {'Rebalances':>12} "
           f"{'At Optimum':>12} {'Rebal %':>10} {'Optimum %':>10}")
     print("-" * 82)
     for model in all_models:
         for run_id in run_ids:
-            if run_id == "C":
-                continue
             result = runs[run_id].get("results", {}).get(model)
             if result is None:
                 continue
@@ -826,18 +1150,27 @@ def print_experiment_rebalance_activity(runs: dict, run_info: dict, all_models: 
                              if b.get("rebalance", {}).get("at_optimum", False))
             rebal_pct = (rebalances / n * 100) if n > 0 else 0
             opt_pct = (at_optimum / n * 100) if n > 0 else 0
-            print(f"{model:<20} {run_id:<8} {n:>10} {rebalances:>12} "
+            display = _display_id(run_info, run_id)
+            print(f"{model:<20} {display:<8} {n:>10} {rebalances:>12} "
                   f"{at_optimum:>12} {rebal_pct:>9.1f}% {opt_pct:>9.1f}%")
 
 
 def print_experiment_throughput_table(runs: dict, run_info: dict, all_models: list,
-                                      baseline_id: str = "A"):
-    """Print throughput comparison table relative to a baseline run."""
-    run_ids = sorted(runs.keys())
+                                      baseline_id: str = "A",
+                                      run_ids: list = None):
+    """Print throughput comparison table relative to a baseline run.
+
+    ``run_ids`` selects which run letters to include (default: all present).
+    Baseline is always used for the percentage reference regardless of
+    whether it appears in ``run_ids``.
+    """
+    if run_ids is None:
+        run_ids = sorted(runs.keys())
+    else:
+        run_ids = [r for r in run_ids if r in runs]
     header = f"{'Model':<20}"
     for run_id in run_ids:
-        info = run_info.get(run_id, {})
-        header += f"{run_id + ': ' + info.get('label', '?'):>25}"
+        header += f"{_full_label(run_info, run_id):>25}"
     print(header)
     print("-" * len(header))
 
@@ -858,6 +1191,68 @@ def print_experiment_throughput_table(runs: dict, run_info: dict, all_models: li
             else:
                 row += f"{'N/A':>25}"
         print(row)
+
+
+def print_experiment_rps_latex_table(runs_list: list, run_info: dict,
+                                       all_models: list,
+                                       model_labels: dict = None,
+                                       run_ids: list = None):
+    """Emit a booktabs LaTeX table of average RPS per (model, benchmark).
+
+    Columns: pre-interference RPS (idle first step), under-interference RPS
+    (remaining steps), and the ratio under/pre as a percentage. Values are
+    means across ``runs_list`` — same aggregation as the paired graph.
+    """
+    if not runs_list:
+        print("% No runs to tabulate")
+        return
+    if run_ids is None:
+        run_ids = ["C", "D", "E"]
+    all_keys: set = set()
+    for runs in runs_list:
+        all_keys.update(runs.keys())
+    run_ids = [r for r in run_ids if r in all_keys]
+    if not run_ids:
+        print(f"% No runs {run_ids} available")
+        return
+
+    model_labels = model_labels or {}
+
+    def _tex_escape(s: str) -> str:
+        return s.replace("_", r"\_").replace("%", r"\%").replace("&", r"\&")
+
+    means = {}
+    for model in all_models:
+        for run_id in run_ids:
+            idles, interfs = [], []
+            for runs in runs_list:
+                if run_id not in runs:
+                    continue
+                idle, interf = _compute_step_rps(runs[run_id], model)
+                idles.append(idle)
+                interfs.append(interf)
+            idle_m = float(np.mean(idles)) if idles else 0.0
+            interf_m = float(np.mean(interfs)) if interfs else 0.0
+            ratio = (interf_m / idle_m * 100) if idle_m > 0 else 0.0
+            means[(model, run_id)] = (idle_m, interf_m, ratio)
+
+    print(r"\begin{tabular}{llrrr}")
+    print(r"\toprule")
+    print(r"Model & Benchmark & Pre-Interf.\ RPS & Under Interf.\ RPS "
+          r"& Ratio (\%) \\")
+    print(r"\midrule")
+    for m_idx, model in enumerate(all_models):
+        m_label = _tex_escape(model_labels.get(model, model))
+        for r_idx, run_id in enumerate(run_ids):
+            bench_label = _tex_escape(_full_label(run_info, run_id))
+            idle_m, interf_m, ratio = means[(model, run_id)]
+            model_cell = m_label if r_idx == 0 else ""
+            print(f"{model_cell} & {bench_label} & "
+                  f"{idle_m:.2f} & {interf_m:.2f} & {ratio:.1f} \\\\")
+        if m_idx < len(all_models) - 1:
+            print(r"\midrule")
+    print(r"\bottomrule")
+    print(r"\end{tabular}")
 
 
 def print_experiment_schedule(runs: dict, all_models: list):
@@ -929,7 +1324,8 @@ def print_experiment_schedule(runs: dict, all_models: list):
 def plot_interf_batch_times(interf_data: dict, baseline_data: dict = None,
                             baseline_name: str = "baseline",
                             show_interference_regions: bool = True,
-                            show_optimum: bool = True):
+                            show_optimum: bool = True,
+                            show_caption: bool = True):
     """Plot per-batch forward times under interference."""
     models = list(interf_data["results"].keys())
     n_models = len(models)
@@ -984,13 +1380,15 @@ def plot_interf_batch_times(interf_data: dict, baseline_data: dict = None,
     for idx in range(n_models, rows * cols):
         axes[idx // cols][idx % cols].set_visible(False)
 
-    fig.suptitle("Per-batch forward time under interference", fontsize=14)
+    if show_caption:
+        fig.suptitle("Per-batch forward time under interference", fontsize=14)
     fig.tight_layout()
     plt.show()
 
 
 def plot_interf_throughput(interf_data: dict, baseline_data: dict = None,
-                           baseline_name: str = "baseline"):
+                           baseline_name: str = "baseline",
+                           show_caption: bool = True):
     """Bar chart of per-step throughput under interference."""
     models = list(interf_data["results"].keys())
     first_steps, _ = get_model_schedule(interf_data, models[0])
@@ -1035,7 +1433,8 @@ def plot_interf_throughput(interf_data: dict, baseline_data: dict = None,
     ax.set_xticks(x)
     ax.set_xticklabels(models, rotation=15, ha="right")
     ax.set_ylabel("Requests per second")
-    ax.set_title("Throughput by interference level")
+    if show_caption:
+        ax.set_title("Throughput by interference level")
     ax.legend(fontsize="small")
     fig.tight_layout()
     plt.show()
@@ -1081,7 +1480,8 @@ def print_interf_throughput_impact(interf_data: dict, baseline_data: dict = None
 
 def plot_interf_optimizer_state(interf_data: dict,
                                 show_interference_regions: bool = True,
-                                show_optimum: bool = True):
+                                show_optimum: bool = True,
+                                show_caption: bool = True):
     """Plot optimizer gamma and best throughput under interference."""
     models = list(interf_data["results"].keys())
     for model in models:
@@ -1109,7 +1509,8 @@ def plot_interf_optimizer_state(interf_data: dict,
             combined = gamma
 
         fig, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
-        fig.suptitle(f"{model} — Optimizer State", fontsize=14)
+        if show_caption:
+            fig.suptitle(f"{model} — Optimizer State", fontsize=14)
         xs = range(len(batches))
 
         axes[0].plot(xs, combined, color="steelblue", alpha=0.8)
@@ -1138,7 +1539,7 @@ def plot_interf_optimizer_state(interf_data: dict,
         plt.show()
 
 
-def plot_interf_boxplot(interf_data: dict):
+def plot_interf_boxplot(interf_data: dict, show_caption: bool = True):
     """Boxplot of forward time distribution per interference step."""
     models = list(interf_data["results"].keys())
     fig, axes = plt.subplots(1, len(models), figsize=(5 * len(models), 5), squeeze=False)
@@ -1172,14 +1573,16 @@ def plot_interf_boxplot(interf_data: dict):
         ax.set_ylabel("Forward time (s)" if idx == 0 else "")
         ax.set_xlabel("Interference step")
 
-    fig.suptitle("Forward time distribution by interference level", fontsize=14)
+    if show_caption:
+        fig.suptitle("Forward time distribution by interference level", fontsize=14)
     fig.tight_layout()
     plt.show()
 
 
 def plot_interf_stage_times(interf_data: dict,
                             show_interference_regions: bool = True,
-                            x_axis: str = "time"):
+                            x_axis: str = "time",
+                            show_caption: bool = True):
     """Plot per-stage batch times over time for a single interference run.
 
     Args:
@@ -1242,6 +1645,7 @@ def plot_interf_stage_times(interf_data: dict,
     for idx in range(n_models, rows * cols):
         axes[idx // cols][idx % cols].set_visible(False)
 
-    fig.suptitle("Per-stage batch times under interference", fontsize=14)
+    if show_caption:
+        fig.suptitle("Per-stage batch times under interference", fontsize=14)
     fig.tight_layout()
     plt.show()
