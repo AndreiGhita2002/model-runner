@@ -234,17 +234,23 @@ def draw_interference_bg(ax, periods: list, alpha: float = 0.4,
     ``shade=False`` skips the grayscale ``axvspan`` backgrounds and draws only
     the step labels — useful for paper-style figures where the plot should
     stay on a transparent background.
+
+    Labels sit just below the x-axis line at the same vertical level as the
+    tick labels, centred between the surrounding boundaries — i.e. interleaved
+    between the numeric tick labels on the x-axis.
     """
     from matplotlib.transforms import offset_copy
+    # Same pad as default xtick labels (~4pt) so the interference labels line
+    # up vertically with the numeric ticks and read as part of the axis.
     label_trans = offset_copy(ax.get_xaxis_transform(),
-                               fig=ax.figure, y=-3, units="points")
+                               fig=ax.figure, y=-4, units="points")
     for t_start, t_end, label in periods:
         if shade:
             color = interf_color(label, periods)
             ax.axvspan(t_start, t_end, color=color, alpha=alpha, zorder=0)
-        ax.text((t_start + t_end) / 2, 1.0, label,
+        ax.text((t_start + t_end) / 2, 0.0, label,
                 transform=label_trans,
-                ha="center", va="top", fontsize=5, color="gray")
+                ha="center", va="top", fontsize=8, color="black")
 
 
 def draw_interference_boundaries_by_index(ax, regions, timed_batches, clock_offset=0.0):
@@ -674,10 +680,12 @@ def _compute_step_rps(data: dict, model: str) -> tuple[float, float]:
 
 def plot_experiment_rps_per_stage(runs: dict, run_info: dict, all_models: list,
                                    run_ids: list = None,
-                                   show_caption: bool = True):
-    """Bar chart of RPS per interference stage.
+                                   show_caption: bool = True,
+                                   ncols: int = None):
+    """Bar chart of RPS per interference step.
 
     ``run_ids`` selects which run letters to plot (default: C/D/E).
+    ``ncols`` reshapes the per-model subplot grid (default: one row).
     """
     if run_ids is None:
         run_ids = ["C", "D", "E"]
@@ -687,10 +695,14 @@ def plot_experiment_rps_per_stage(runs: dict, run_info: dict, all_models: list,
         return
 
     n_models = len(all_models)
-    fig, axes = plt.subplots(1, n_models, figsize=(7 * n_models, 5), squeeze=False)
+    ncols_eff = ncols if ncols else n_models
+    nrows_eff = math.ceil(n_models / ncols_eff)
+    fig, axes = plt.subplots(nrows_eff, ncols_eff,
+                              figsize=(7 * ncols_eff, 5 * nrows_eff),
+                              squeeze=False)
 
     for idx, model in enumerate(all_models):
-        ax = axes[0][idx]
+        ax = axes[idx // ncols_eff][idx % ncols_eff]
         ref_data = runs[interf_run_ids[0]]
         ref_stages = _compute_rps_per_stage(ref_data, model)
         stage_labels = [s[0] for s in ref_stages]
@@ -728,12 +740,15 @@ def plot_experiment_rps_per_stage(runs: dict, run_info: dict, all_models: list,
 
         ax.set_xticks(x)
         ax.set_xticklabels(stage_labels, rotation=30, ha="right", fontsize=7)
-        ax.set_ylabel("Requests per second" if idx == 0 else "")
+        ax.set_ylabel("Requests per second" if idx % ncols_eff == 0 else "")
         ax.set_title(model)
         ax.legend(fontsize="x-small", loc="lower right")
 
+    for k in range(n_models, nrows_eff * ncols_eff):
+        axes[k // ncols_eff][k % ncols_eff].set_visible(False)
+
     if show_caption:
-        fig.suptitle("RPS per interference stage (C / D / E)", fontsize=14)
+        fig.suptitle("RPS per interference step (C / D / E)", fontsize=14)
     fig.tight_layout()
     plt.show()
 
@@ -804,8 +819,9 @@ def plot_experiment_rps_per_stage_avg(runs_list: list, run_info: dict, all_model
                           label=_full_label(run_info, run_id))
             for bar, val in zip(bars, means):
                 if val > 0:
-                    ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
-                            f"{val:.1f}", ha="center", va="top", fontsize=6,
+                    ax.text(bar.get_x() + bar.get_width() / 2,
+                            bar.get_height() / 2,
+                            f"{val:.1f}", ha="center", va="center", fontsize=6,
                             color="white")
 
         for bl_id in ("A", "B"):
@@ -885,13 +901,15 @@ def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
                                 show_optimum: bool = True,
                                 run_ids: list = None,
                                 show_caption: bool = True,
-                                shade_interference: bool = True):
+                                shade_interference: bool = True,
+                                ncols: int = None):
     """Time series of batch times vs wall-clock, with interference shading.
 
     ``run_ids`` selects which run letters to plot (default: C/D/E). Runs
     without interference data will be skipped inside the loop.
     ``shade_interference=False`` drops the grayscale step backgrounds (for
     cleaner paper exports) but keeps the per-step labels.
+    ``ncols`` reshapes the per-model subplot grid (default: one row).
     """
     if y_limits is None:
         y_limits = {}
@@ -902,19 +920,39 @@ def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
         print(f"Runs {run_ids} not available")
         return
 
-    fig, axes = plt.subplots(1, len(all_models), figsize=(7 * len(all_models), 4), squeeze=False)
+    n_models = len(all_models)
+    ncols_eff = ncols if ncols else n_models
+    nrows_eff = math.ceil(n_models / ncols_eff)
+    fig, axes = plt.subplots(nrows_eff, ncols_eff,
+                              figsize=(7 * ncols_eff, 4 * nrows_eff),
+                              squeeze=False)
 
     for idx, model in enumerate(all_models):
-        ax = axes[0][idx]
+        ax = axes[idx // ncols_eff][idx % ncols_eff]
 
         ref_data = next(iter(interf_runs.values()))
+        _, step_dur = get_model_schedule(ref_data, model)
+        # Shift period x-coords so experiment start (idle begin) is at 0.
+        # Each run's offset is derived from its own first-interference time so
+        # that the idle plateau and interference windows line up even when one
+        # run (e.g. Exhaustive Shisha) kicks off at a different wall-clock.
         periods = get_interference_periods(ref_data, model)
-        draw_interference_bg(ax, periods, alpha=0.6, shade=shade_interference)
-        if periods:
-            # Tick at every interference boundary — step durations are
-            # multiples of 60 s, so the labels land on whole-minute marks.
-            boundaries = [periods[0][0]] + [p[1] for p in periods]
+        shifted_periods = [(ts + step_dur, te + step_dur, lbl)
+                           for ts, te, lbl in periods]
+        draw_interference_bg(ax, shifted_periods, alpha=0.6,
+                             shade=shade_interference)
+        if shifted_periods:
+            # Tick at experiment start (0) + every interference step boundary.
+            boundaries = [0, shifted_periods[0][0]] + [p[1] for p in shifted_periods]
             ax.set_xticks(boundaries)
+
+        def _t_offset(run_data):
+            """Experiment-start reference for a single run."""
+            fi = find_first_interference_time(run_data, model)
+            if fi is None:
+                return None
+            _, sd = get_model_schedule(run_data, model)
+            return fi - sd  # idle began `sd` seconds before first interference
 
         for run_id, data in sorted(interf_runs.items()):
             result = data.get("results", {}).get(model)
@@ -923,11 +961,11 @@ def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
             timed = [b for b in result.get("batches", []) if "timing" in b]
             if not timed:
                 continue
-            first_interf = find_first_interference_time(data, model)
-            if first_interf is None:
+            offset = _t_offset(data)
+            if offset is None:
                 continue
 
-            t_rel = [b["timing"]["start"] - first_interf for b in timed]
+            t_rel = [b["timing"]["start"] - offset for b in timed]
             elapsed = [b["timing"]["end"] - b["timing"]["start"] for b in timed]
             info = run_info.get(run_id, {})
             ax.plot(t_rel, elapsed, color=info.get("color", "gray"), alpha=0.8,
@@ -940,19 +978,19 @@ def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
                 if result is None:
                     continue
                 timed = [b for b in result.get("batches", []) if "timing" in b]
-                first_interf = find_first_interference_time(data, model)
-                if not timed or first_interf is None:
+                offset = _t_offset(data)
+                if not timed or offset is None:
                     continue
                 info = run_info.get(run_id, {})
                 color = info.get("color", "gray")
                 enters, leaves = get_optimum_transitions(timed)
                 if enters:
-                    exs = [timed[i]["timing"]["start"] - first_interf for i in enters]
+                    exs = [timed[i]["timing"]["start"] - offset for i in enters]
                     eys = [timed[i]["timing"]["end"] - timed[i]["timing"]["start"] for i in enters]
                     ax.scatter(exs, eys, marker="^", color=color, s=30, zorder=5,
                                edgecolors="black", linewidths=0.3)
                 if leaves:
-                    lxs = [timed[i]["timing"]["start"] - first_interf for i in leaves]
+                    lxs = [timed[i]["timing"]["start"] - offset for i in leaves]
                     lys = [timed[i]["timing"]["end"] - timed[i]["timing"]["start"] for i in leaves]
                     ax.scatter(lxs, lys, marker="v", color=color, s=30, zorder=5,
                                edgecolors="black", linewidths=0.3)
@@ -967,13 +1005,17 @@ def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
                                linestyle="--", alpha=0.5,
                                label=f"{_full_label(run_info, 'A')} avg")
 
-        ax.axvline(0, color="black", linestyle=":", alpha=0.4, label="Interference start")
+        ax.axvline(step_dur, color="black", linestyle=":", alpha=0.4,
+                   label="Interference start")
         ax.set_title(model)
-        ax.set_xlabel("Time since first interference (s)")
-        ax.set_ylabel("Forward time (s)" if idx == 0 else "")
+        ax.set_xlabel("Time since experiment start (s)")
+        ax.set_ylabel("Forward time (s)" if idx % ncols_eff == 0 else "")
         if model in y_limits:
             ax.set_ylim(y_limits[model])
         ax.legend(fontsize="x-small")
+
+    for k in range(n_models, nrows_eff * ncols_eff):
+        axes[k // ncols_eff][k % ncols_eff].set_visible(False)
 
     if show_caption:
         fig.suptitle("Under interference: GPipe vs Exhaustive vs Shisha", fontsize=14)
