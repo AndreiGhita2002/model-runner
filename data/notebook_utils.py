@@ -137,6 +137,33 @@ def get_interference_regions(data: dict, model: str) -> list[tuple[float, float]
             for i in range(len(schedule_steps))]
 
 
+def get_interference_region_labels(data: dict, model: str) -> list[str]:
+    """Per-region interference-type labels (``idle``, ``CPU×8``…).
+
+    Matches the order of :func:`get_interference_regions`. Each label comes
+    from the step definition referenced by ``step_order[i]`` in the
+    interference event log for this run/model.
+    """
+    ms = data.get("meta", {}).get("model_schedules", {})
+    sched = ms.get(model, ms.get("all", {}))
+    steps = sched.get("schedule_steps", [])
+
+    interf_log = data.get("interference", {}).get(model, {})
+    step_order = None
+    for e in interf_log.get("events", []):
+        if "step_order" in e:
+            step_order = e["step_order"]
+            break
+    if step_order is None:
+        step_order = list(range(len(steps)))
+
+    labels = []
+    for step_idx in step_order:
+        step_def = steps[step_idx] if step_idx < len(steps) else []
+        labels.append(stage_label(step_def))
+    return labels
+
+
 def find_first_interference_time(data: dict, model: str) -> float | None:
     """Find the timestamp of the first non-idle interference event."""
     interf_log = data.get("interference", {}).get(model, {})
@@ -253,9 +280,17 @@ def draw_interference_bg(ax, periods: list, alpha: float = 0.4,
                 ha="center", va="top", fontsize=8, color="black")
 
 
-def draw_interference_boundaries_by_index(ax, regions, timed_batches, clock_offset=0.0):
-    """Draw vertical lines at interference step boundaries (batch index x-axis)."""
-    for region_i, (start_t, _) in enumerate(regions):
+def draw_interference_boundaries_by_index(ax, regions, timed_batches,
+                                           clock_offset=0.0, labels=None):
+    """Draw vertical lines at interference step boundaries (batch index x-axis).
+
+    ``regions`` is a list of ``(start, end)`` tuples. If ``labels`` is provided
+    (same length as ``regions``) it is used for the legend entries instead of
+    the default ``Step <i>`` text — useful for showing the actual interference
+    type (e.g. ``idle``, ``CPU×8``).
+    """
+    for region_i, region in enumerate(regions):
+        start_t = region[0]
         color = STEP_PALETTE[region_i % len(STEP_PALETTE)]
         start_adj = start_t - clock_offset
         x = 0
@@ -263,8 +298,12 @@ def draw_interference_boundaries_by_index(ax, regions, timed_batches, clock_offs
             if "timing" in b and b["timing"]["start"] >= start_adj:
                 x = i
                 break
+        if labels is not None and region_i < len(labels):
+            label = labels[region_i]
+        else:
+            label = f"Step {region_i}"
         ax.axvline(x, color=color, linestyle="--", linewidth=1.5, alpha=0.8,
-                   label=f"Step {region_i}")
+                   label=label)
 
 
 # ──────────────────────────────────────────────
@@ -1524,16 +1563,37 @@ def plot_interf_optimizer_state(interf_data: dict,
                                 show_interference_regions: bool = True,
                                 show_optimum: bool = True,
                                 show_caption: bool = True):
-    """Plot optimizer gamma and best throughput under interference."""
+    """Plot optimizer gamma and best throughput under interference.
+
+    X-axis is **time since experiment start** (idle step begins at 0) to match
+    the batch-times plot. Offset per model is derived from that model's first
+    interference time, so runs with off-clock starts still line up.
+    """
     models = list(interf_data["results"].keys())
     for model in models:
         result = interf_data["results"][model]
         batches = result.get("batches", [])
+
+        first_interf = find_first_interference_time(interf_data, model)
+        if first_interf is None:
+            continue
+        _, step_dur = get_model_schedule(interf_data, model)
+        experiment_start = first_interf - step_dur
+
+        # Only batches with timing produce an x-coord; drop the rest together
+        # with their gamma/best-throughput entries so the arrays stay aligned.
+        timed_batches = [b for b in batches if "timing" in b]
+        if not timed_batches:
+            continue
+
         # Backward-compat: old logs → deep_gamma + sibling_gamma; new → gamma only.
-        gamma = [b.get("rebalance", {}).get("gamma",
-                  b.get("rebalance", {}).get("deep_gamma")) for b in batches]
-        sibling_gamma = [b.get("rebalance", {}).get("sibling_gamma") for b in batches]
-        best_throughput = [b.get("rebalance", {}).get("best_throughput") for b in batches]
+        gamma = [b.get("rebalance", {}).get(
+                    "gamma", b.get("rebalance", {}).get("deep_gamma"))
+                 for b in timed_batches]
+        sibling_gamma = [b.get("rebalance", {}).get("sibling_gamma")
+                         for b in timed_batches]
+        best_throughput = [b.get("rebalance", {}).get("best_throughput")
+                           for b in timed_batches]
 
         if not any(v is not None for v in gamma):
             continue
@@ -1550,31 +1610,44 @@ def plot_interf_optimizer_state(interf_data: dict,
         else:
             combined = gamma
 
+        xs = [b["timing"]["start"] - experiment_start for b in timed_batches]
+
         fig, axes = plt.subplots(2, 1, figsize=(12, 6), sharex=True)
         if show_caption:
             fig.suptitle(f"{model} — Optimizer State", fontsize=14)
-        xs = range(len(batches))
 
         axes[0].plot(xs, combined, color="steelblue", alpha=0.8)
-        axes[0].set_ylabel("Combined gamma\n(deep + sibling * alpha)")
+        axes[0].set_ylabel("Gamma")
         axes[1].plot(xs, best_throughput, color="darkorange", alpha=0.8)
         axes[1].set_ylabel("Best throughput")
-        axes[1].set_xlabel("Batch index")
+        axes[1].set_xlabel("Time since experiment start (s)")
 
         if show_interference_regions:
-            regions = get_interference_regions(interf_data, model)
-            timed = [b for b in batches if "timing" in b]
-            offset = compute_clock_offset(timed, regions)
-            for ax_i in axes:
-                draw_interference_boundaries_by_index(ax_i, regions, timed, clock_offset=offset)
+            # One vertical line per interference step, placed at
+            # i * step_dur — matches the boundary ticks in plot_experiment_batch_times.
+            region_labels = get_interference_region_labels(interf_data, model)
+            for ax_idx, ax_i in enumerate(axes):
+                for i, lbl in enumerate(region_labels):
+                    color = STEP_PALETTE[i % len(STEP_PALETTE)]
+                    ax_i.axvline(i * step_dur, color=color, linestyle="--",
+                                 linewidth=1.5, alpha=0.8,
+                                 label=lbl if ax_idx == 0 else None)
 
         if show_optimum:
-            enters, leaves = get_optimum_transitions(batches)
+            enters, leaves = get_optimum_transitions(timed_batches)
             for ax_i in axes:
-                for e in enters:
-                    ax_i.axvline(e, color="green", linestyle="-", alpha=0.3, linewidth=0.8)
-                for lv in leaves:
-                    ax_i.axvline(lv, color="red", linestyle="-", alpha=0.3, linewidth=0.8)
+                # Label only the first line of each kind so the legend has a
+                # single entry per transition type, not one per occurrence.
+                for j, e in enumerate(enters):
+                    if e < len(xs):
+                        ax_i.axvline(xs[e], color="green", linestyle="-",
+                                     alpha=0.3, linewidth=0.8,
+                                     label="Optimum found" if j == 0 else None)
+                for j, lv in enumerate(leaves):
+                    if lv < len(xs):
+                        ax_i.axvline(xs[lv], color="red", linestyle="-",
+                                     alpha=0.3, linewidth=0.8,
+                                     label="Optimum left" if j == 0 else None)
 
         axes[0].legend(fontsize="small", loc="upper left")
         fig.tight_layout()

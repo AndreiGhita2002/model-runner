@@ -147,8 +147,9 @@ def main() -> None:
     # Featured per-run detail figures: batch-time series under interference and
     # the matching optimiser state (from ReactiveShisha, run E) for the same
     # (rep, model) pairing shown in the notebook.
+    # PNG — thousands of line-plot points would bloat this as a PDF.
     featured_run = runs[FEATURED_REP_IDX]
-    _export(out / f"batch_times_{FEATURED_MODEL}.pdf",
+    _export(out / f"batch_times_{FEATURED_MODEL}.png",
             plot_experiment_batch_times, featured_run, RUN_INFO,
             [FEATURED_MODEL], show_optimum=False, show_caption=False,
             shade_interference=False)
