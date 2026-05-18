@@ -1,6 +1,6 @@
 .PHONY: install test-flask test-pipeline eval eval-extended-set quick-eval simple-baseline gpipe-baseline benchmark clean \
        eval-sequential eval-tensor-parallel eval-gpipe eval-gpipe-sweep eval-all-baselines sweep csv \
-       interf-eval interf-eval-clean experiment
+       interf-eval interf-eval-clean experiment timed-overhead
 
 MAX_CORES ?= 32  # should be 32 on fisherman
 MAX_NPROC ?= $(MAX_CORES)
@@ -106,6 +106,13 @@ interf-test: install
 
 bench-test: install
 	uv run python -m tests.interference.test_benchmarks
+
+# Measure TimedModule wrapping overhead vs raw forward passes
+TIMED_OVERHEAD_OUTPUT ?=
+TIMED_OVERHEAD_DEPTH ?= 3
+timed-overhead: install
+	uv run python -m tests.timed_module_overhead --depth $(TIMED_OVERHEAD_DEPTH) \
+		$(if $(TIMED_OVERHEAD_OUTPUT),-o $(TIMED_OVERHEAD_OUTPUT))
 
 clean:
 	rm -rf build/ *.egg-info/ __pycache__/ .pytest_cache/
