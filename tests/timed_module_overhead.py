@@ -1,17 +1,21 @@
 """Measure the overhead of wrapping a model in TimedModule.
 
-Runs each evaluation model twice: once raw, once wrapped in TimedModule at the
-default profiling depth (3, matching PipelineRunner.default_timing_depth). Times
-the whole forward-pass loop with time.perf_counter from outside the model.
+For each model we keep both the raw and TimedModule-wrapped copies resident at
+the same time and run them as back-to-back **pairs**: raw measurement
+immediately followed by timed measurement. The pair order is fixed (always raw
+then timed) so the cache-state cost of switching between the two model objects
+is constant across pairs and cancels out in the overhead comparison.
 
-Per model and condition, we run NUM_BATCHES * REQUESTS_PER_BATCH forward calls,
-each with a batch_size=32 input. This mirrors the unit of work in evaluation
-(one "batch" = 32 requests, each request = one forward pass of batched input).
+Each pair runs NUM_BATCHES * REQUESTS_PER_BATCH forward calls at batch_size=32.
+This mirrors evaluation's unit of work (one "batch" = 32 requests, each = one
+forward of a batched input). Each model can be paired `--repetitions` times
+(default 5) to estimate variance, all written to the same output JSON.
 """
 
 import argparse
 import gc
 import json
+import statistics
 import time
 from typing import Callable
 
@@ -28,6 +32,7 @@ REQUESTS_PER_BATCH = 32
 BATCH_SIZE = 32
 SEED = 37
 DEFAULT_DEPTH = 3  # matches PipelineRunner.default_timing_depth
+DEFAULT_REPETITIONS = 5
 
 
 def time_forwards(model: nn.Module, inputs: list[torch.Tensor]) -> float:
@@ -44,8 +49,17 @@ def time_forwards(model: nn.Module, inputs: list[torch.Tensor]) -> float:
     return end - start
 
 
+def _summarise(values: list[float]) -> dict:
+    return {
+        "mean": statistics.mean(values),
+        "stdev": statistics.stdev(values) if len(values) > 1 else 0.0,
+        "min": min(values),
+        "max": max(values),
+    }
+
+
 def run_model(model_name: str, load_model: Callable, rand_inputs: Callable,
-              device: str, depth: int) -> dict:
+              device: str, depth: int, repetitions: int) -> dict:
     total_requests = NUM_BATCHES * REQUESTS_PER_BATCH
 
     inputs = [
@@ -53,50 +67,71 @@ def run_model(model_name: str, load_model: Callable, rand_inputs: Callable,
         for i in range(total_requests)
     ]
 
-    # ---- Raw model ----
+    # Load both raw and wrapped copies. They are separate nn.Module instances
+    # with their own weight buffers — switching between them costs cache, but
+    # because we always run raw-then-timed in each pair, that cost is the same
+    # in every pair and does not bias the comparison.
     raw_model = load_model(device=device)
-    # Warmup
+    wrapped_model = make_module_timed(load_model(device=device), device=device, depth=depth)
+
+    # One warmup forward per model to pull weights into cache before the first
+    # measurement and trigger any lazy CUDA / torch.compile init.
     with torch.no_grad():
         raw_model(inputs[0])
-    raw_elapsed = time_forwards(raw_model, inputs)
-    del raw_model
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-
-    # ---- TimedModule-wrapped ----
-    wrapped_model = make_module_timed(load_model(device=device), device=device, depth=depth)
-    with torch.no_grad():
         wrapped_model(inputs[0])
-    timed_elapsed = time_forwards(wrapped_model, inputs)
-    del wrapped_model
+
+    pairs = []
+    for rep in range(repetitions):
+        raw_elapsed = time_forwards(raw_model, inputs)
+        timed_elapsed = time_forwards(wrapped_model, inputs)
+
+        overhead_abs = timed_elapsed - raw_elapsed
+        overhead_pct = (overhead_abs / raw_elapsed) * 100 if raw_elapsed > 0 else float("nan")
+
+        pairs.append({
+            "repetition": rep,
+            "raw_seconds": raw_elapsed,
+            "timed_seconds": timed_elapsed,
+            "overhead_seconds": overhead_abs,
+            "overhead_percent": overhead_pct,
+            "raw_per_forward_ms": (raw_elapsed / total_requests) * 1000,
+            "timed_per_forward_ms": (timed_elapsed / total_requests) * 1000,
+        })
+
+    del raw_model, wrapped_model
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    overhead_abs = timed_elapsed - raw_elapsed
-    overhead_pct = (overhead_abs / raw_elapsed) * 100 if raw_elapsed > 0 else float("nan")
+    summary = {
+        "raw_seconds": _summarise([p["raw_seconds"] for p in pairs]),
+        "timed_seconds": _summarise([p["timed_seconds"] for p in pairs]),
+        "overhead_seconds": _summarise([p["overhead_seconds"] for p in pairs]),
+        "overhead_percent": _summarise([p["overhead_percent"] for p in pairs]),
+    }
 
     return {
         "model": model_name,
-        "num_forwards": total_requests,
-        "raw_seconds": raw_elapsed,
-        "timed_seconds": timed_elapsed,
-        "overhead_seconds": overhead_abs,
-        "overhead_percent": overhead_pct,
-        "raw_per_forward_ms": (raw_elapsed / total_requests) * 1000,
-        "timed_per_forward_ms": (timed_elapsed / total_requests) * 1000,
+        "num_forwards_per_rep": total_requests,
+        "repetitions": repetitions,
+        "pairs": pairs,
+        "summary": summary,
     }
 
 
 def print_table(results: list[dict]) -> None:
-    header = f"{'model':<22}{'raw (s)':>12}{'timed (s)':>12}{'overhead (s)':>15}{'overhead %':>14}"
+    header = (f"{'model':<22}{'raw mean (s)':>14}{'timed mean (s)':>16}"
+              f"{'ovh mean %':>13}{'ovh stdev %':>14}")
     print()
     print(header)
     print("-" * len(header))
     for r in results:
-        print(f"{r['model']:<22}{r['raw_seconds']:>12.4f}{r['timed_seconds']:>12.4f}"
-              f"{r['overhead_seconds']:>15.4f}{r['overhead_percent']:>13.2f}%")
+        s = r["summary"]
+        print(f"{r['model']:<22}"
+              f"{s['raw_seconds']['mean']:>14.4f}"
+              f"{s['timed_seconds']['mean']:>16.4f}"
+              f"{s['overhead_percent']['mean']:>12.2f}%"
+              f"{s['overhead_percent']['stdev']:>13.2f}%")
     print()
 
 
@@ -106,29 +141,43 @@ def main():
                         help=f"TimedModule depth (default: {DEFAULT_DEPTH})")
     parser.add_argument("--device", type=str, default=None,
                         help="Device to run on (default: auto-detect cuda/cpu)")
+    parser.add_argument("--repetitions", type=int, default=DEFAULT_REPETITIONS,
+                        help=f"Number of paired raw/timed runs per model "
+                             f"(default: {DEFAULT_REPETITIONS})")
     parser.add_argument("-o", "--output", type=str, default=None,
-                        help="Optional JSON output path")
+                        help="Optional JSON output path (all repetitions go here)")
     args = parser.parse_args()
 
     if args.device is None:
         args.device = "cuda" if torch.cuda.is_available() else "cpu"
 
+    if args.repetitions < 1:
+        parser.error("--repetitions must be >= 1")
+
     print(f"Device: {args.device}")
     print(f"TimedModule depth: {args.depth}")
-    print(f"Forwards per condition: {NUM_BATCHES} batches x {REQUESTS_PER_BATCH} requests "
-          f"= {NUM_BATCHES * REQUESTS_PER_BATCH}")
+    print(f"Repetitions per model: {args.repetitions}")
+    print(f"Forwards per condition per rep: {NUM_BATCHES} batches x "
+          f"{REQUESTS_PER_BATCH} requests = {NUM_BATCHES * REQUESTS_PER_BATCH}")
     print(f"Batch size per forward: {BATCH_SIZE}")
 
     results = []
     for model_name, load_model, rand_inputs in DEFAULT_MODEL_SET:
         print(f"\n>>> {model_name}")
-        result = run_model(model_name, load_model, rand_inputs, args.device, args.depth)
-        print(f"    raw:   {result['raw_seconds']:.4f}s "
-              f"({result['raw_per_forward_ms']:.2f} ms/forward)")
-        print(f"    timed: {result['timed_seconds']:.4f}s "
-              f"({result['timed_per_forward_ms']:.2f} ms/forward)")
-        print(f"    overhead: {result['overhead_seconds']:.4f}s "
-              f"({result['overhead_percent']:.2f}%)")
+        result = run_model(model_name, load_model, rand_inputs,
+                           args.device, args.depth, args.repetitions)
+        for p in result["pairs"]:
+            print(f"    rep {p['repetition']}: "
+                  f"raw {p['raw_seconds']:.4f}s "
+                  f"({p['raw_per_forward_ms']:.2f} ms/fwd)  "
+                  f"timed {p['timed_seconds']:.4f}s "
+                  f"({p['timed_per_forward_ms']:.2f} ms/fwd)  "
+                  f"ovh {p['overhead_percent']:.2f}%")
+        s = result["summary"]
+        print(f"    summary: overhead {s['overhead_percent']['mean']:.2f}% "
+              f"± {s['overhead_percent']['stdev']:.2f}% "
+              f"(min {s['overhead_percent']['min']:.2f}%, "
+              f"max {s['overhead_percent']['max']:.2f}%)")
         results.append(result)
 
     print_table(results)
@@ -142,6 +191,7 @@ def main():
                 "requests_per_batch": REQUESTS_PER_BATCH,
                 "batch_size": BATCH_SIZE,
                 "seed": SEED,
+                "repetitions": args.repetitions,
             },
             "results": results,
         }

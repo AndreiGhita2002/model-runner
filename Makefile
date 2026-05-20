@@ -110,8 +110,10 @@ bench-test: install
 # Measure TimedModule wrapping overhead vs raw forward passes
 TIMED_OVERHEAD_OUTPUT ?=
 TIMED_OVERHEAD_DEPTH ?= 3
+TIMED_OVERHEAD_REPS ?= 5
 timed-overhead: install
 	uv run python -m tests.timed_module_overhead --depth $(TIMED_OVERHEAD_DEPTH) \
+		--repetitions $(TIMED_OVERHEAD_REPS) \
 		$(if $(TIMED_OVERHEAD_OUTPUT),-o $(TIMED_OVERHEAD_OUTPUT))
 
 clean:
