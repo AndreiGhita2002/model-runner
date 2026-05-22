@@ -55,9 +55,9 @@ EXPERIMENT_DIRS = [
 RUN_INFO = {
     "A": {"label": "GPipe (no interf)",             "color": "#2196f3", "display": "A"},
     "B": {"label": "Shisha (no interf)",            "color": "#4caf50", "display": "B"},
-    "C": {"label": "Benchmark A: GPipe",            "color": "#f44336", "display": "A"},
-    "D": {"label": "Benchmark B: ExhaustiveShisha", "color": "#ff9800", "display": "B"},
-    "E": {"label": "Benchmark C: ReactiveShisha",   "color": "#9c27b0", "display": "C"},
+    "C": {"label": "GPipe",                 "color": "#f44336", "display": "A"},
+    "D": {"label": "Shisha",                "color": "#ff9800", "display": "B"},
+    "E": {"label": "ReactivePipe Optimiser","color": "#9c27b0", "display": "C"},
 }
 
 MODEL_ORDER = [
@@ -101,6 +101,41 @@ def _capture(plot_fn, *args, **kwargs):
         plt.show = real_show
 
 
+# Paper figures: matplotlib titles live in the LaTeX caption, not on the graph;
+# tick / axis / legend text is bumped up so the figures stay legible when shrunk
+# to double-column width.
+FONT_SCALE = 1.5
+
+
+def _finalize_paper_figure(fig, scale: float = FONT_SCALE) -> None:
+    """Strip subplot/figure titles and uniformly scale every text element.
+
+    Applied to every figure exported by this script so the change is local —
+    ``notebook_utils.py`` is left alone (the interactive notebook still wants
+    titles and the default sizing).
+    """
+    if fig._suptitle is not None:
+        fig.suptitle("")
+
+    def _scale(text_obj):
+        text_obj.set_fontsize(text_obj.get_fontsize() * scale)
+
+    for ax in fig.axes:
+        ax.set_title("")
+        _scale(ax.xaxis.label)
+        _scale(ax.yaxis.label)
+        for tick in ax.get_xticklabels() + ax.get_yticklabels():
+            _scale(tick)
+        for txt in ax.texts:
+            _scale(txt)
+        leg = ax.get_legend()
+        if leg is not None:
+            for t in leg.get_texts():
+                _scale(t)
+            if leg.get_title() is not None:
+                _scale(leg.get_title())
+
+
 def _save(fig, path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fmt = path.suffix.lstrip(".").lower() or "pdf"
@@ -119,6 +154,7 @@ def _export(path: Path, plot_fn, *args, **kwargs) -> None:
         print(f"  skipping existing {path.name}")
         return
     fig = _capture(plot_fn, *args, **kwargs)
+    _finalize_paper_figure(fig)
     _save(fig, path)
 
 
@@ -152,7 +188,7 @@ def main() -> None:
     _export(out / f"batch_times_{FEATURED_MODEL}.png",
             plot_experiment_batch_times, featured_run, RUN_INFO,
             [FEATURED_MODEL], show_optimum=False, show_caption=False,
-            shade_interference=False)
+            shade_interference=False, interference_label_position="top")
 
     e_data = featured_run["E"]
     e_filtered = {**e_data,
@@ -191,7 +227,8 @@ def _export_appendix(runs: list, all_models: list[str]) -> None:
     _export(out / "batch_times_all_models.png",
             plot_experiment_batch_times, featured_run, RUN_INFO, all_models,
             show_optimum=False, show_caption=False,
-            shade_interference=False, ncols=2)
+            shade_interference=False, ncols=2,
+            interference_label_position="top")
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 [project]
-name = "model-runner"
+name = "reactive-pipe"
 version = "0.1.0"
-description = "Runs models. WIP"
+description = "Inference pipeline that rebalances itself based on changes in performance."
 readme = "README.md"
 requires-python = ">=3.12"
 

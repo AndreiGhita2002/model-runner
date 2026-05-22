@@ -255,29 +255,36 @@ def interf_color(label: str, all_periods: list) -> str:
 
 
 def draw_interference_bg(ax, periods: list, alpha: float = 0.4,
-                          shade: bool = True):
+                          shade: bool = True, label_position: str = "bottom"):
     """Draw shaded interference regions and labels on an axis.
 
     ``shade=False`` skips the grayscale ``axvspan`` backgrounds and draws only
     the step labels — useful for paper-style figures where the plot should
     stay on a transparent background.
 
-    Labels sit just below the x-axis line at the same vertical level as the
-    tick labels, centred between the surrounding boundaries — i.e. interleaved
-    between the numeric tick labels on the x-axis.
+    ``label_position="bottom"`` (default) places step labels just below the
+    x-axis line, interleaved with the numeric tick labels. ``"top"`` places
+    them just above the plot area, useful when bigger fonts make the bottom
+    layout collide with tick labels.
     """
     from matplotlib.transforms import offset_copy
-    # Same pad as default xtick labels (~4pt) so the interference labels line
-    # up vertically with the numeric ticks and read as part of the axis.
-    label_trans = offset_copy(ax.get_xaxis_transform(),
-                               fig=ax.figure, y=-4, units="points")
+    if label_position == "top":
+        label_trans = offset_copy(ax.get_xaxis_transform(),
+                                   fig=ax.figure, y=4, units="points")
+        y_anchor, va = 1.0, "bottom"
+    else:
+        # Same pad as default xtick labels (~4pt) so the interference labels
+        # line up vertically with the numeric ticks and read as part of axis.
+        label_trans = offset_copy(ax.get_xaxis_transform(),
+                                   fig=ax.figure, y=-4, units="points")
+        y_anchor, va = 0.0, "top"
     for t_start, t_end, label in periods:
         if shade:
             color = interf_color(label, periods)
             ax.axvspan(t_start, t_end, color=color, alpha=alpha, zorder=0)
-        ax.text((t_start + t_end) / 2, 0.0, label,
+        ax.text((t_start + t_end) / 2, y_anchor, label,
                 transform=label_trans,
-                ha="center", va="top", fontsize=8, color="black")
+                ha="center", va=va, fontsize=8, color="black")
 
 
 def draw_interference_boundaries_by_index(ax, regions, timed_batches,
@@ -781,7 +788,7 @@ def plot_experiment_rps_per_stage(runs: dict, run_info: dict, all_models: list,
         ax.set_xticklabels(stage_labels, rotation=30, ha="right", fontsize=7)
         ax.set_ylabel("Requests per second" if idx % ncols_eff == 0 else "")
         ax.set_title(model)
-        ax.legend(fontsize="x-small", loc="lower right")
+        ax.legend(fontsize="x-small", loc="upper right")
 
     for k in range(n_models, nrows_eff * ncols_eff):
         axes[k // ncols_eff][k % ncols_eff].set_visible(False)
@@ -880,7 +887,7 @@ def plot_experiment_rps_per_stage_avg(runs_list: list, run_info: dict, all_model
         ax.set_xticklabels(stage_labels, rotation=30, ha="right", fontsize=7)
         ax.set_ylabel("Requests per second" if idx == 0 else "")
         ax.set_title(model)
-        ax.legend(fontsize="x-small", loc="lower right")
+        ax.legend(fontsize="x-small", loc="upper right")
 
     if show_caption:
         fig.suptitle(f"Average RPS per interference stage (n={len(runs_list)}, error bars = ±std)", fontsize=14)
@@ -941,7 +948,8 @@ def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
                                 run_ids: list = None,
                                 show_caption: bool = True,
                                 shade_interference: bool = True,
-                                ncols: int = None):
+                                ncols: int = None,
+                                interference_label_position: str = "bottom"):
     """Time series of batch times vs wall-clock, with interference shading.
 
     ``run_ids`` selects which run letters to plot (default: C/D/E). Runs
@@ -979,7 +987,8 @@ def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
         shifted_periods = [(ts + step_dur, te + step_dur, lbl)
                            for ts, te, lbl in periods]
         draw_interference_bg(ax, shifted_periods, alpha=0.6,
-                             shade=shade_interference)
+                             shade=shade_interference,
+                             label_position=interference_label_position)
         if shifted_periods:
             # Tick at experiment start (0) + every interference step boundary.
             boundaries = [0, shifted_periods[0][0]] + [p[1] for p in shifted_periods]
@@ -1044,8 +1053,13 @@ def plot_experiment_batch_times(runs: dict, run_info: dict, all_models: list,
                                linestyle="--", alpha=0.5,
                                label=f"{_full_label(run_info, 'A')} avg")
 
+        # Dotted line at every interference-step boundary (idle→first interf
+        # and each interf→interf transition). Only the first carries the legend
+        # label so the legend has a single "Interference change" entry.
         ax.axvline(step_dur, color="black", linestyle=":", alpha=0.4,
-                   label="Interference start")
+                   label="Interference change")
+        for p in shifted_periods[1:]:
+            ax.axvline(p[0], color="black", linestyle=":", alpha=0.4)
         ax.set_title(model)
         ax.set_xlabel("Time since experiment start (s)")
         ax.set_ylabel("Forward time (s)" if idx % ncols_eff == 0 else "")
